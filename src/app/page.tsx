@@ -572,39 +572,6 @@ export default function CinemaStreamingPage() {
     }
   };
 
-  // Toggle pause generation handler (Zero credit mode)
-  const handleTogglePauseGeneration = async () => {
-    try {
-      const res = await fetch('/api/cinema/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'toggle_pause_generation' })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCinemaState((prev) => prev ? { ...prev, isGenerationPaused: data.isGenerationPaused } : prev);
-      }
-    } catch (err) {
-      console.error("Error toggling pause generation:", err);
-    }
-  };
-
-  // Keyboard shortcut listener: Alt+P to toggle pause generation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input or textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      if ((e.altKey || e.shiftKey) && (e.key === 'p' || e.key === 'P')) {
-        e.preventDefault();
-        handleTogglePauseGeneration();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   if (!cinemaState || !cinemaState.movie) {
     return (
       <div className="w-screen h-screen bg-[#050608] flex flex-col items-center justify-center text-white space-y-4">
@@ -648,7 +615,6 @@ export default function CinemaStreamingPage() {
                 activeAd={cinemaState.activeAd}
                 isPaused={cinemaState.isPaused}
                 isGenerationPaused={cinemaState.isGenerationPaused}
-                onTogglePauseGeneration={handleTogglePauseGeneration}
                 subtitlesEnabled={subtitlesEnabled}
                 subtitleLanguage={subtitleLanguage}
                 onToggleSubtitles={handleToggleSubtitles}
