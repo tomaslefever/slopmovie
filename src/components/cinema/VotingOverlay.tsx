@@ -50,19 +50,33 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   }, [phaseEndsAt, timeRemaining]);
 
   const [localSeconds, setLocalSeconds] = useState<number>(calculateRemaining);
+  const [hasCompletedCountdown, setHasCompletedCountdown] = useState(false);
+
+  // Reset completion lock when phase changes or a new voting round starts
+  useEffect(() => {
+    setHasCompletedCountdown(false);
+  }, [phase, phaseEndsAt]);
 
   useEffect(() => {
-    setLocalSeconds(calculateRemaining());
+    const rem = calculateRemaining();
+    setLocalSeconds(rem);
+    if (rem <= 0 && phase === 'VOTING') {
+      setHasCompletedCountdown(true);
+    }
     if (!isVisible || phase !== 'VOTING') return;
 
     const timer = setInterval(() => {
-      setLocalSeconds(calculateRemaining());
+      const current = calculateRemaining();
+      setLocalSeconds(current);
+      if (current <= 0) {
+        setHasCompletedCountdown(true);
+      }
     }, 200);
 
     return () => clearInterval(timer);
   }, [isVisible, phase, calculateRemaining]);
 
-  const isVotingEnded = phase === 'GENERATING' || (phase === 'VOTING' && localSeconds <= 0);
+  const isVotingEnded = phase === 'GENERATING' || hasCompletedCountdown || (phase === 'VOTING' && localSeconds <= 0);
   const totalVotes = votesA + votesB;
   const percentA = totalVotes > 0 ? Math.round((votesA / totalVotes) * 100) : 50;
   const percentB = totalVotes > 0 ? Math.round((votesB / totalVotes) * 100) : 50;

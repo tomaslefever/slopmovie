@@ -913,8 +913,8 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
         phaseStartedAt: phaseStartedAtIso,
         phaseEndsAt: phaseEndsAtIso,
         phaseDuration: phaseDuration,
-        workerId: payload.workerId || null,
-        workerHeartbeat: payload.workerHeartbeat || nowIso,
+        workerId: payload.workerId !== undefined ? payload.workerId : (currentBible.liveState?.workerId || null),
+        workerHeartbeat: payload.workerHeartbeat !== undefined ? payload.workerHeartbeat : (currentBible.liveState?.workerHeartbeat || nowIso),
         updatedAt: nowIso
       }
     };

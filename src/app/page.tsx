@@ -347,62 +347,7 @@ export default function CinemaStreamingPage() {
       })
       .subscribe();
 
-    // POSTGRES CDC REALTIME SUBSCRIPTIONS
-    const moviesChannel = supabase
-      .channel('schema_movies_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'movies' },
-        (payload) => {
-          if (payload.new && (payload.new as any).bible?.liveState) {
-            const live = (payload.new as any).bible.liveState;
-            setCinemaState((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                phase: live.phase ?? prev.phase,
-                timeRemaining: live.timeRemaining ?? prev.timeRemaining,
-                votesA: live.votesA ?? prev.votesA,
-                votesB: live.votesB ?? prev.votesB,
-                totalAudience: live.totalAudience ?? prev.totalAudience,
-                isPaused: live.isPaused ?? prev.isPaused,
-                isGenerationPaused: live.isGenerationPaused ?? prev.isGenerationPaused
-              };
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    const cinemaStateChannel = supabase
-      .channel('schema_cinema_state_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'cinema_state' },
-        (payload) => {
-          if (payload.new) {
-            const row = payload.new as any;
-            setCinemaState((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                phase: row.phase ?? prev.phase,
-                timeRemaining: row.time_remaining ?? prev.timeRemaining,
-                phaseDuration: row.phase_duration ?? prev.phaseDuration,
-                phaseStartedAt: row.phase_started_at ?? prev.phaseStartedAt,
-                phaseEndsAt: row.phase_ends_at ?? prev.phaseEndsAt,
-                votesA: row.votes_a ?? prev.votesA,
-                votesB: row.votes_b ?? prev.votesB,
-                totalAudience: row.total_audience ?? prev.totalAudience,
-                isPaused: row.is_paused ?? prev.isPaused,
-                isGenerationPaused: row.is_generation_paused ?? prev.isGenerationPaused
-              };
-            });
-          }
-        }
-      )
-      .subscribe();
-
+    // TOP VOTED COMMENTS REALTIME SUBSCRIPTION
     const topCommentsChannel = supabase
       .channel('schema_top_comments_changes')
       .on(
@@ -416,8 +361,6 @@ export default function CinemaStreamingPage() {
 
     return () => {
       supabase.removeChannel(channel);
-      supabase.removeChannel(moviesChannel);
-      supabase.removeChannel(cinemaStateChannel);
       supabase.removeChannel(topCommentsChannel);
     };
   }, [supabaseReady]);

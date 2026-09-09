@@ -416,9 +416,11 @@ class CinemaOrchestrator {
       return;
     }
 
-    if (this.timeRemaining > 1) {
-      this.timeRemaining -= 1;
+    // Calculate remaining seconds strictly from phaseEndsAt timestamp
+    const remaining = Math.max(0, Math.ceil((this.phaseEndsAt - Date.now()) / 1000));
+    this.timeRemaining = remaining;
 
+    if (remaining > 0) {
       // Random audience fluctuation
       if (Math.random() > 0.7) {
         this.totalAudience += Math.random() > 0.4 ? 1 : -1;
@@ -430,10 +432,16 @@ class CinemaOrchestrator {
         this.injectSimulatedAudienceActivity();
       }
 
-      // Persist state to Supabase every tick so clients read the exact database state
-      await this.persistCurrentStateToSupabase(workerId);
+      // Fast, lightweight broadcast tick without heavy database/CDC spam
+      broadcastCinemaEvent('time_tick', {
+        timeRemaining: this.timeRemaining,
+        phase: this.phase,
+        votesA: this.votesA,
+        votesB: this.votesB,
+        totalAudience: this.totalAudience
+      });
     } else {
-      // Transition phase
+      // Duration expired -> Transition to next phase and persist ONCE to database
       await this.handlePhaseTransition(workerId);
     }
   }

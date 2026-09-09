@@ -117,7 +117,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
         // Handled by muted autoplay
       });
     }
-  }, [currentVideoSrc, activeStep.stepNumber, phase, isMuted]);
+  }, [currentVideoSrc, activeStep.stepNumber]);
 
   // Enforce scene repeating without sound during VOTING phase, and completely pause/mute during COMMERCIAL_BREAK
   useEffect(() => {
