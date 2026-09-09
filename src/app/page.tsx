@@ -63,7 +63,7 @@ export default function CinemaStreamingPage() {
             }
           }
           if (data.chatMessages) {
-            setChatMessages(data.chatMessages);
+            setChatMessages(data.chatMessages.filter((m: ChatMessage) => !m.isSystem && !m.votedOption));
           }
           // Dynamically initialize Supabase browser client if credentials returned at runtime
           if (data.supabaseConfig?.url && data.supabaseConfig?.anonKey) {
@@ -447,7 +447,7 @@ export default function CinemaStreamingPage() {
         }
       })
       .on('broadcast', { event: 'chat_message' }, (payload: { payload: ChatMessage }) => {
-        if (payload.payload) {
+        if (payload.payload && !payload.payload.isSystem && !payload.payload.votedOption) {
           setChatMessages((prev) => {
             if (prev.some((m) => m.id === payload.payload.id)) return prev;
             return [...prev.slice(-99), payload.payload];

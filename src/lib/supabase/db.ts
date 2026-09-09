@@ -630,6 +630,7 @@ export async function loadRecentChatMessagesFromDb(movieId: string, limit = 50):
       .from('chat_messages')
       .select('*')
       .eq('movie_id', movieId)
+      .eq('is_system', false)
       .order('created_at', { ascending: true })
       .limit(limit);
 

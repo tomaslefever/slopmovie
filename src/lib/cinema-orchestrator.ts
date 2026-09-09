@@ -428,11 +428,6 @@ class CinemaOrchestrator {
         if (this.totalAudience < 30) this.totalAudience = 45;
       }
 
-      // Generate simulated audience chats occasionally
-      if (Math.random() > 0.85) {
-        this.injectSimulatedAudienceActivity();
-      }
-
       // Fast, lightweight broadcast tick without heavy database/CDC spam
       broadcastCinemaEvent('time_tick', {
         timeRemaining: this.timeRemaining,
@@ -877,17 +872,6 @@ class CinemaOrchestrator {
       timeRemaining: this.timeRemaining,
       totalAudience: this.totalAudience
     });
-
-    if (userName) {
-      this.addChatMessage({
-        id: `vote_${Date.now()}_${Math.random()}`,
-        userId,
-        userName,
-        text: `Votó por la Opción ${optionId}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        votedOption: optionId
-      });
-    }
 
     return { success: true, votesA: this.votesA, votesB: this.votesB };
   }

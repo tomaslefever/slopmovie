@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '@/types/cinema';
-import { Send, Users, Sparkles, MessageSquare, ChevronRight, ChevronLeft, AtSign, Check, Edit2, ThumbsUp, Flame, Trophy } from 'lucide-react';
+import { Send, Users, MessageSquare, ChevronRight, ChevronLeft, AtSign, Check, Edit2, ThumbsUp, Flame, Trophy } from 'lucide-react';
 import { audioCues } from '@/lib/audio-cues';
 
 interface AudienceChatProps {
@@ -262,40 +262,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
             )}
           </div>
         ) : (
-          messages.map((msg) => {
-            if (msg.isSystem) {
-              return (
-                <div 
-                  key={msg.id}
-                  className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-xs text-cyan-300 font-mono shadow-inner"
-                >
-                  <div className="flex items-center space-x-1 mb-1 text-[10px] text-cyan-400 font-bold tracking-widest uppercase">
-                    <Sparkles className="w-3 h-3" />
-                    <span>{msg.userName} • {msg.timestamp}</span>
-                  </div>
-                  <p className="leading-relaxed">{msg.text}</p>
-                </div>
-              );
-            }
-
-            if (msg.votedOption) {
-              return (
-                <div 
-                  key={msg.id}
-                  className="flex items-center justify-between p-2 rounded-lg bg-neutral-900/50 border border-white/5 text-xs"
-                >
-                  <span className="font-semibold text-neutral-300">{msg.userName}</span>
-                  <span className={`px-2 py-0.5 rounded font-mono text-[11px] font-bold ${
-                    msg.votedOption === 'A' 
-                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
-                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  }`}>
-                    Voted Option {msg.votedOption}
-                  </span>
-                </div>
-              );
-            }
-
+          messages.filter(msg => !msg.isSystem && !msg.votedOption).map((msg) => {
             const isOwnMessage = Boolean(nickname && msg.userName.toLowerCase() === nickname.toLowerCase());
 
             return (

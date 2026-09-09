@@ -30,10 +30,13 @@ export async function GET(request: Request) {
     }
   }
 
-  const messages = cinemaEngine.chatMessages.slice(-50).map(m => ({
-    ...m,
-    hasUserVoted: userId ? userVotedIds.includes(m.id) : false
-  }));
+  const messages = cinemaEngine.chatMessages
+    .filter(m => !m.isSystem && !m.votedOption)
+    .slice(-50)
+    .map(m => ({
+      ...m,
+      hasUserVoted: userId ? userVotedIds.includes(m.id) : false
+    }));
 
   return NextResponse.json({
     messages,
