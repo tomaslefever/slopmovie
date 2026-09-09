@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Film, LayoutGrid, Radio, Sliders } from 'lucide-react';
+import { Film, LayoutGrid, Radio } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
 
@@ -54,17 +54,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Right Controls */}
       <div className="flex items-center space-x-3">
-        {/* Admin Console Link */}
-        <Link
-          href="/admin"
-          onClick={() => audioCues.playClick()}
-          className="px-3 py-1.5 rounded-xl border border-amber-400/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-mono text-xs font-semibold flex items-center space-x-1.5 transition-all hover:scale-105 active:scale-95 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-          title="Director & Immersive Ads Admin Console"
-        >
-          <Sliders className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden sm:inline">Director / Ads</span>
-        </Link>
-
         {/* Gallery Toggle */}
         <button
           onClick={() => { audioCues.playClick(); onToggleGallery(); }}

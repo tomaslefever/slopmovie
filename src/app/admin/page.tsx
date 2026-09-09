@@ -542,9 +542,9 @@ export default function AdminDashboardPage() {
 
   // AUTHENTICATED ADMIN CONSOLE
   return (
-    <div className="min-h-screen bg-[#06070a] text-neutral-100 flex flex-col font-sans select-none">
+    <div className="h-screen bg-[#06070a] text-neutral-100 flex flex-col font-sans select-none overflow-y-auto overflow-x-hidden">
       {/* Top Admin Header */}
-      <header className="h-14 bg-black/80 border-b border-white/10 px-6 flex items-center justify-between backdrop-blur-xl sticky top-0 z-50">
+      <header className="h-14 bg-black/80 border-b border-white/10 px-6 flex items-center justify-between backdrop-blur-xl sticky top-0 z-50 flex-shrink-0">
         <div className="flex items-center space-x-4">
           <Link
             href="/"
@@ -939,7 +939,7 @@ export default function AdminDashboardPage() {
 
         {/* TAB 2: MOVIE CONTROL & BLOCKBUSTER ROTATION */}
         {activeTab === 'movie' && (
-          <div className="space-y-6">
+          <div className="space-y-6 pb-24">
             {/* Live Playback & AI Generation Controller Card */}
             <div className={`p-6 rounded-2xl border transition-all ${
               cinemaState?.isPaused 
@@ -1037,38 +1037,43 @@ export default function AdminDashboardPage() {
             {/* Step Selection & Manual Replay Control */}
             {cinemaState?.movie && (
               <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 space-y-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
-                  <div>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center space-x-2">
-                      <History className="w-5 h-5 text-amber-400" />
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
+                      <History className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono truncate">
                         Selector Manual de Step & Control de Replay
                       </h3>
                     </div>
-                    <p className="text-xs text-neutral-400 mt-1">
+                    <p className="text-xs text-neutral-400 mt-1 max-w-xl">
                       Elige cualquier escena ya transmitida para saltar y retransmitirla en vivo instantáneamente a todos los espectadores.
                     </p>
                   </div>
 
-                  {/* Quick Select & Jump Form */}
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <select
-                      value={selectedStepNumber}
-                      onChange={e => setSelectedStepNumber(e.target.value ? Number(e.target.value) : '')}
-                      className="px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white text-xs font-mono focus:border-amber-400 focus:outline-none"
-                    >
-                      <option value="">Seleccionar Step...</option>
-                      {(cinemaState.movie.steps || []).map((s: any) => (
-                        <option key={s.stepNumber} value={s.stepNumber}>
-                          Step {s.stepNumber}: {s.title}
-                        </option>
-                      ))}
-                    </select>
+                  {/* Quick Select & Jump Form - Constrained width to never break the header */}
+                  <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto">
+                    <div className="w-full sm:w-56 md:w-64 max-w-[280px]">
+                      <select
+                        value={selectedStepNumber}
+                        onChange={e => setSelectedStepNumber(e.target.value ? Number(e.target.value) : '')}
+                        className="w-full px-3 py-2 rounded-xl bg-black/80 border border-white/15 text-white text-xs font-mono focus:border-amber-400 focus:outline-none truncate cursor-pointer"
+                      >
+                        <option value="">Seleccionar Step...</option>
+                        {(cinemaState.movie.steps || []).map((s: any) => {
+                          const shortTitle = s.title ? (s.title.length > 20 ? `${s.title.slice(0, 20)}...` : s.title) : '';
+                          return (
+                            <option key={s.stepNumber} value={s.stepNumber}>
+                              Step {s.stepNumber}{shortTitle ? ` - ${shortTitle}` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
 
                     <button
                       onClick={() => selectedStepNumber && handleJumpToStep(Number(selectedStepNumber))}
                       disabled={isJumpingStep || !selectedStepNumber}
-                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.25)] flex-shrink-0 active:scale-95"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Replay Step</span>
@@ -1083,7 +1088,7 @@ export default function AdminDashboardPage() {
                     <span className="text-neutral-500 text-[11px]">Haz clic en &quot;Replay&quot; en cualquier tarjeta para cambiar de escena</span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar bg-black/20 p-2 rounded-xl border border-white/5">
                     {(cinemaState.movie.steps || []).map((step: any) => {
                       const isCurrentActive = cinemaState.movie.currentStep === step.stepNumber;
                       return (

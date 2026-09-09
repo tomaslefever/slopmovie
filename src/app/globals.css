@@ -16,7 +16,7 @@ body {
   background: #050608;
   color: #ededed;
   font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 /* Sleek custom scrollbars */
