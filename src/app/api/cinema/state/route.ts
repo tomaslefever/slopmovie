@@ -159,6 +159,15 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { action, userId, userName, optionId, prompt } = body;
 
+    if (action === 'complete_stage') {
+      const { stage, stepNumber } = body;
+      const result = await cinemaEngine.completeStage(stage, stepNumber ? Number(stepNumber) : undefined);
+      return NextResponse.json({
+        success: result.success,
+        state: result.state
+      });
+    }
+
     if (action === 'vote') {
       if (!optionId || !['A', 'B'].includes(optionId)) {
         return NextResponse.json({ error: 'Opción de voto inválida' }, { status: 400 });

@@ -21,6 +21,19 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   const [hasInteracted, setHasInteracted] = useState<boolean>(false);
   const [adSeconds, setAdSeconds] = useState(ad.duration || 15);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hasCompletedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    hasCompletedRef.current = false;
+  }, [ad.id]);
+
+  const triggerCompleted = () => {
+    if (!hasCompletedRef.current) {
+      hasCompletedRef.current = true;
+      console.log('[ImmersiveAdPlayer] Ad completed. Notifying completion.');
+      onAdCompleted?.();
+    }
+  };
 
   useEffect(() => {
     setAdSeconds(ad.duration || 15);
@@ -30,6 +43,9 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
       const elapsed = Math.floor((performance.now() - start) / 1000);
       const remaining = Math.max(0, total - elapsed);
       setAdSeconds(prev => Math.min(prev, remaining));
+      if (remaining <= 0) {
+        triggerCompleted();
+      }
     }, 250);
 
     return () => clearInterval(timer);
@@ -87,9 +103,10 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
           ref={videoRef}
           src={activeVideoSrc}
           autoPlay
-          loop
+          loop={false}
           muted={isMuted}
           playsInline
+          onEnded={triggerCompleted}
           className="w-full h-full object-cover object-center filter brightness-[0.85] contrast-[1.1]"
         />
       ) : ad.imageUrl ? (

@@ -11,8 +11,6 @@ interface VotingOverlayProps {
   isVisible: boolean;
   phase?: PlaybackPhase;
   timeRemaining: number;
-  phaseDuration?: number;
-  phaseEndsAt?: string | number;
   options: [DecisionOption, DecisionOption];
   votesA: number;
   votesB: number;
@@ -20,14 +18,13 @@ interface VotingOverlayProps {
   selectedOption?: 'A' | 'B' | null;
   wasRandomPick?: boolean;
   onVote: (optionId: 'A' | 'B') => void;
+  onVotingEnded?: () => void;
 }
 
 export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   isVisible,
   phase = 'VOTING',
   timeRemaining,
-  phaseDuration = 10,
-  phaseEndsAt,
   options,
   votesA,
   votesB,
@@ -36,47 +33,9 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   wasRandomPick = false,
   onVote
 }) => {
-  const totalDuration = phaseDuration || 10;
-
-  const calculateRemaining = useCallback(() => {
-    if (phaseEndsAt) {
-      const endMs = typeof phaseEndsAt === 'number' ? phaseEndsAt : new Date(phaseEndsAt).getTime();
-      if (!isNaN(endMs)) {
-        const diffSec = Math.ceil((endMs - Date.now()) / 1000);
-        return Math.max(0, diffSec);
-      }
-    }
-    return Math.max(0, timeRemaining);
-  }, [phaseEndsAt, timeRemaining]);
-
-  const [localSeconds, setLocalSeconds] = useState<number>(calculateRemaining);
-  const [hasCompletedCountdown, setHasCompletedCountdown] = useState(false);
-
-  // Reset completion lock when phase changes or a new voting round starts
-  useEffect(() => {
-    setHasCompletedCountdown(false);
-  }, [phase, phaseEndsAt]);
-
-  useEffect(() => {
-    const rem = calculateRemaining();
-    setLocalSeconds(rem);
-    if (rem <= 0 && phase === 'VOTING') {
-      setHasCompletedCountdown(true);
-    }
-    if (!isVisible || phase !== 'VOTING') return;
-
-    const timer = setInterval(() => {
-      const current = calculateRemaining();
-      setLocalSeconds(current);
-      if (current <= 0) {
-        setHasCompletedCountdown(true);
-      }
-    }, 200);
-
-    return () => clearInterval(timer);
-  }, [isVisible, phase, calculateRemaining]);
-
-  const isVotingEnded = phase === 'GENERATING' || hasCompletedCountdown || (phase === 'VOTING' && localSeconds <= 0);
+  // Exact 10s countdown from client timeRemaining prop without any database lookups
+  const currentSeconds = Math.max(0, Math.min(10, timeRemaining));
+  const isVotingEnded = phase === 'GENERATING' || currentSeconds <= 0;
   const totalVotes = votesA + votesB;
   const percentA = totalVotes > 0 ? Math.round((votesA / totalVotes) * 100) : 50;
   const percentB = totalVotes > 0 ? Math.round((votesB / totalVotes) * 100) : 50;
@@ -112,8 +71,6 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   useEffect(() => {
     if (!isVisible || isVotingEnded) return;
 
-    audioCues.playVotingAlert();
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '1' || e.key === 'a' || e.key === 'A') {
         handleCastVote('A');
@@ -126,25 +83,37 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isVisible, isVotingEnded, handleCastVote]);
 
-  // Cinematic tension music lifecycle during voting
+  // Play alert chime ONCE when voting opens
+  const hasAlertPlayedRef = useRef(false);
   useEffect(() => {
     if (isVisible && phase === 'VOTING' && !isVotingEnded) {
-      audioCues.startTensionMusic();
+      if (!hasAlertPlayedRef.current) {
+        hasAlertPlayedRef.current = true;
+        audioCues.playVotingAlert();
+      }
     } else {
+      hasAlertPlayedRef.current = false;
+    }
+  }, [isVisible, phase, isVotingEnded]);
+
+  // Cinematic tension music lifecycle during voting: exactly one instance per round
+  const hasMusicStartedRef = useRef(false);
+  useEffect(() => {
+    if (isVisible && phase === 'VOTING' && !isVotingEnded) {
+      if (!hasMusicStartedRef.current) {
+        hasMusicStartedRef.current = true;
+        audioCues.startTensionMusic();
+      }
+    } else {
+      hasMusicStartedRef.current = false;
       audioCues.stopTensionMusic();
     }
 
     return () => {
+      hasMusicStartedRef.current = false;
       audioCues.stopTensionMusic();
     };
   }, [isVisible, phase, isVotingEnded]);
-
-  // Update tension intensity as timer counts down
-  useEffect(() => {
-    if (isVisible && phase === 'VOTING' && !isVotingEnded) {
-      audioCues.updateTensionTimer(timeRemaining);
-    }
-  }, [isVisible, phase, isVotingEnded, timeRemaining]);
 
   // Celebrate winner when voting closes
   const hasCelebratedRef = useRef(false);
@@ -202,19 +171,19 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                       cx="48"
                       cy="48"
                       r="40"
-                      stroke={localSeconds <= 3 ? "#ef4444" : "#00f0ff"}
+                      stroke={currentSeconds <= 3 ? "#ef4444" : "#00f0ff"}
                       strokeWidth="5"
                       fill="transparent"
                       strokeDasharray="251.2"
-                      strokeDashoffset={251.2 * (1 - Math.min(1, Math.max(0, localSeconds / totalDuration)))}
+                      strokeDashoffset={251.2 * (1 - Math.min(1, Math.max(0, currentSeconds / 10)))}
                       className="drop-shadow-[0_0_12px_rgba(0,240,255,0.8)] transition-[stroke-dashoffset] duration-200"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className={`text-3xl font-black font-mono tracking-tighter ${
-                      localSeconds <= 3 ? "text-red-500 animate-pulse" : "text-white"
+                      currentSeconds <= 3 ? "text-red-500 animate-pulse" : "text-white"
                     }`}>
-                      {localSeconds}
+                      {currentSeconds}
                     </span>
                     <span className="text-[10px] text-neutral-400 font-mono uppercase tracking-widest">
                       SEC

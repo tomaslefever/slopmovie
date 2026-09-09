@@ -23,6 +23,8 @@ interface CinemaPlayerProps {
   subtitleLanguage?: 'en' | 'es';
   onToggleSubtitles?: (enabled: boolean) => void;
   onChangeSubtitleLanguage?: (lang: 'en' | 'es') => void;
+  onPlaybackEnded?: () => void;
+  onAdCompleted?: () => void;
 }
 
 const CINEMA_FALLBACK_VIDEOS = [
@@ -47,7 +49,9 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   subtitlesEnabled: initialSubtitlesEnabled = true,
   subtitleLanguage: initialSubtitleLanguage = 'en',
   onToggleSubtitles,
-  onChangeSubtitleLanguage
+  onChangeSubtitleLanguage,
+  onPlaybackEnded,
+  onAdCompleted
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -170,6 +174,15 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
     }
   }, [isPaused, phase]);
 
+  const hasEndedRef = useRef<boolean>(false);
+
+  const handleEnded = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
+    }
+  };
+
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       setVideoCurrentTime(videoRef.current.currentTime);
@@ -199,7 +212,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
     }
   };
 
-  // Calculate percentage of the 15s clip played
+  // Progress of the fixed 15-second scene window
   const progressPercent = phase === 'PLAYING' 
     ? Math.max(0, Math.min(100, ((15 - timeRemaining) / 15) * 100))
     : 100;
@@ -235,16 +248,11 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
         poster={activeStep.thumbnailUrl}
         autoPlay
         playsInline
-        loop
+        loop={true}
         muted={phase === 'VOTING' || phase === 'COMMERCIAL_BREAK' ? true : isMuted}
         onTimeUpdate={handleTimeUpdate}
         onError={handleVideoError}
-        onEnded={() => {
-          if (videoRef.current) {
-            videoRef.current.currentTime = 0;
-            videoRef.current.play().catch(() => {});
-          }
-        }}
+        onEnded={handleEnded}
         onCanPlay={() => setIsVideoLoading(false)}
         onWaiting={() => setIsVideoLoading(true)}
         className={`w-full h-full object-cover object-center transition-opacity duration-300 ${
@@ -264,8 +272,24 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
       )}
 
       {/* Commercial Break Holographic Interstitial */}
-      {phase === 'COMMERCIAL_BREAK' && activeAd && (
-        <ImmersiveAdPlayer ad={activeAd} timeRemaining={timeRemaining} />
+      {phase === 'COMMERCIAL_BREAK' && (
+        <ImmersiveAdPlayer 
+          ad={activeAd || {
+            id: 'ad_interstitial_default',
+            brandName: 'Kinetic Cinema',
+            title: 'Intermission Sponsor Showcase',
+            tagline: 'High-Fidelity Neural Cinema',
+            type: 'commercial_break',
+            imageUrl: 'https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=800&auto=format&fit=crop&q=80',
+            ctaText: 'Explore Collection',
+            duration: 15,
+            isActive: true,
+            impressions: 0,
+            clicks: 0
+          }} 
+          timeRemaining={timeRemaining} 
+          onAdCompleted={onAdCompleted} 
+        />
       )}
 
       {/* Top Cinema HUD */}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CinemaState, ChatMessage, PlaybackPhase, MovieStep } from '@/types/cinema';
 import { CinemaPlayer } from '@/components/cinema/CinemaPlayer';
 import { VotingOverlay } from '@/components/cinema/VotingOverlay';
@@ -79,79 +79,255 @@ export default function CinemaStreamingPage() {
     fetchInitialState();
   }, []);
 
-  // Fallback Polling Heartbeat (safety sync only; Realtime handles live ticks)
-  useEffect(() => {
-    // If Realtime is active, poll rarely (20s) as backup; if disconnected, poll every 5s
-    const intervalMs = supabaseReady ? 20000 : 5000;
+  // Stage completion handler: requests to Supabase/API happen ONLY when an actual stage finishes in the client.
+  // This eliminates arbitrary periodic polling and prevents scene cutting/overlap.
+  const isCompletingStageRef = useRef<boolean>(false);
 
-    const heartbeat = setInterval(async () => {
-      try {
-        const res = await fetch('/api/cinema/state');
-        if (res.ok) {
-          const data = await res.json();
-          if (!userId && data.userId) {
-            setUserId(data.userId);
-            fetchChatAndTopVoted();
-          }
-          if (!nickname && data.viewerPreferences?.nickname) {
-            setNickname(data.viewerPreferences.nickname);
-          }
+  const handleStageComplete = async (completedPhase: PlaybackPhase) => {
+    if (!cinemaState || isCompletingStageRef.current) return;
+    if (cinemaState.phase !== completedPhase) return;
+
+    isCompletingStageRef.current = true;
+    const currentStepNum = cinemaState.movie?.currentStep;
+
+    console.log(`[CinemaPage] Stage finished on client: ${completedPhase} (Step ${currentStepNum}). Requesting transition from Supabase...`);
+
+    // 1. Optimistic UI transition: advance locally for seamless, hitch-free continuity
+    if (completedPhase === 'PLAYING') {
+      setUserVoted(null);
+      const stepCount = cinemaState?.movie?.steps?.length || cinemaState?.movie?.currentStep || 0;
+      const adsConfig = cinemaState?.adsConfig;
+      const isAdDue = Boolean(
+        adsConfig?.autoAdsEnabled &&
+        stepCount > 0 &&
+        stepCount % (adsConfig.adIntervalSteps || 5) === 0 &&
+        stepCount !== adsConfig.lastAdStep
+      );
+
+      if (isAdDue) {
+        setCinemaState((prev) => prev ? {
+          ...prev,
+          phase: 'COMMERCIAL_BREAK',
+          timeRemaining: 15
+        } : null);
+      } else {
+        setCinemaState((prev) => prev ? {
+          ...prev,
+          phase: 'VOTING',
+          timeRemaining: 10,
+          votesA: 0,
+          votesB: 0
+        } : null);
+      }
+    } else if (completedPhase === 'COMMERCIAL_BREAK') {
+      setUserVoted(null);
+      setCinemaState((prev) => prev ? {
+        ...prev,
+        phase: 'VOTING',
+        timeRemaining: 10,
+        votesA: 0,
+        votesB: 0
+      } : null);
+    } else if (completedPhase === 'VOTING') {
+      setCinemaState((prev) => prev ? {
+        ...prev,
+        phase: 'GENERATING',
+        timeRemaining: 4
+      } : null);
+    }
+
+    // 2. Report stage completion to Supabase and retrieve updated state
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'complete_stage',
+          stage: completedPhase,
+          stepNumber: currentStepNum,
+          userId
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.state) {
           setCinemaState((prev) => {
-            if (!prev) return data;
-            // When step advances, reset vote state
-            if (data.activeStep?.stepNumber !== prev.activeStep?.stepNumber) {
-              setUserVoted(data.hasUserVoted || null);
-            }
-
-            const isSameStep = prev.activeStep?.stepNumber === data.activeStep?.stepNumber;
-            const isSamePhase = prev.phase === data.phase;
-
+            if (!prev) return data.state;
+            const isSameStep = prev.activeStep?.stepNumber === data.state.activeStep?.stepNumber;
             return {
               ...prev,
-              ...data,
-              movie: data.movie,
-              // Maintain activeStep object reference if step number & video haven't changed
-              activeStep: (isSameStep && prev.activeStep?.videoUrl === data.activeStep?.videoUrl)
+              ...data.state,
+              movie: data.state.movie ?? prev.movie,
+              activeStep: (isSameStep && prev.activeStep?.videoUrl === data.state.activeStep?.videoUrl)
                 ? prev.activeStep
-                : data.activeStep,
-              phase: data.phase,
-              // Do not jump backward in time during the same phase
-              timeRemaining: (isSamePhase && prev.timeRemaining < data.timeRemaining && prev.timeRemaining > 0)
-                ? prev.timeRemaining
-                : data.timeRemaining,
-              phaseDuration: data.phaseDuration,
-              phaseStartedAt: data.phaseStartedAt,
-              phaseEndsAt: data.phaseEndsAt,
-              votesA: data.votesA,
-              votesB: data.votesB,
-              totalAudience: data.totalAudience,
-              isPaused: data.isPaused,
-              isGenerationPaused: data.isGenerationPaused,
-              apiStatus: data.apiStatus ?? prev.apiStatus
+                : data.state.activeStep,
+              phase: data.state.phase ?? prev.phase,
+              timeRemaining: (prev.phase === data.state.phase) ? prev.timeRemaining : (data.state.timeRemaining ?? prev.timeRemaining),
+              votesA: data.state.votesA ?? prev.votesA,
+              votesB: data.state.votesB ?? prev.votesB,
+              totalAudience: data.state.totalAudience ?? prev.totalAudience,
+              isPaused: data.state.isPaused ?? prev.isPaused,
+              isGenerationPaused: data.state.isGenerationPaused ?? prev.isGenerationPaused,
+              apiStatus: data.state.apiStatus ?? prev.apiStatus
             };
           });
+        }
+      }
+    } catch (err) {
+      console.error(`Error completing stage ${completedPhase}:`, err);
+    } finally {
+      setTimeout(() => {
+        isCompletingStageRef.current = false;
+      }, 800);
+    }
+  };
 
-          if (data.chatMessages && Array.isArray(data.chatMessages)) {
-            setChatMessages((prev) => {
-              const existingIds = new Set(prev.map(m => m.id));
-              const newMsgs = data.chatMessages.filter((m: ChatMessage) => !existingIds.has(m.id));
-              if (newMsgs.length === 0) return prev;
-              return [...prev, ...newMsgs].slice(-99);
+  // 1. Fixed 15-second timeout for PLAYING stage.
+  // Triggers when a scene begins (or step changes), counts down 15s locally, and requests transition to VOTING.
+  // This guarantees clips shorter than 15s don't advance early.
+  useEffect(() => {
+    if (!cinemaState || cinemaState.phase !== 'PLAYING' || cinemaState.isPaused) return;
+
+    const stepNum = cinemaState.movie?.currentStep;
+    console.log(`[CinemaPage] Scene started (Step ${stepNum}). Running 15s playback timeout...`);
+
+    const startTime = Date.now();
+    const durationSec = 15;
+
+    // Reset local timeRemaining to 15s
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: 15 } : prev);
+
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const remaining = Math.max(0, durationSec - elapsed);
+
+      setCinemaState(prev => {
+        if (!prev || prev.phase !== 'PLAYING') return prev;
+        return { ...prev, timeRemaining: remaining };
+      });
+
+      if (remaining <= 0) {
+        clearInterval(timer);
+        console.log(`[CinemaPage] 15s playback window elapsed for Step ${stepNum}. Transitioning to VOTING...`);
+        handleStageComplete('PLAYING');
+      }
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [cinemaState?.phase, cinemaState?.movie?.currentStep, cinemaState?.isPaused]);
+
+  // 2. Fixed 10-second timeout for VOTING stage.
+  // Triggers when VOTING starts, counts down 10s locally, and requests transition to GENERATING.
+  useEffect(() => {
+    if (!cinemaState || cinemaState.phase !== 'VOTING' || cinemaState.isPaused) return;
+
+    console.log('[CinemaPage] Voting started. Running 10s voting timeout...');
+
+    const startTime = Date.now();
+    const durationSec = 10;
+
+    // Reset local timeRemaining to 10s
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: 10 } : prev);
+
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const remaining = Math.max(0, durationSec - elapsed);
+
+      setCinemaState(prev => {
+        if (!prev || prev.phase !== 'VOTING') return prev;
+        return { ...prev, timeRemaining: remaining };
+      });
+
+      if (remaining <= 0) {
+        clearInterval(timer);
+        console.log('[CinemaPage] 10s voting window elapsed. Transitioning to GENERATING...');
+        handleStageComplete('VOTING');
+      }
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [cinemaState?.phase, cinemaState?.isPaused]);
+
+  // 3. Fixed 15-second timeout for COMMERCIAL_BREAK stage.
+  // Triggers when COMMERCIAL_BREAK starts, counts down 15s locally, and requests transition to VOTING.
+  useEffect(() => {
+    if (!cinemaState || cinemaState.phase !== 'COMMERCIAL_BREAK' || cinemaState.isPaused) return;
+
+    console.log('[CinemaPage] Commercial break started. Running 15s commercial timeout...');
+
+    const startTime = Date.now();
+    const durationSec = 15;
+
+    // Reset local timeRemaining to 15s
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: 15 } : prev);
+
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const remaining = Math.max(0, durationSec - elapsed);
+
+      setCinemaState(prev => {
+        if (!prev || prev.phase !== 'COMMERCIAL_BREAK') return prev;
+        return { ...prev, timeRemaining: remaining };
+      });
+
+      if (remaining <= 0) {
+        clearInterval(timer);
+        console.log('[CinemaPage] 15s commercial break elapsed. Transitioning to VOTING...');
+        handleStageComplete('COMMERCIAL_BREAK');
+      }
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [cinemaState?.phase, cinemaState?.isPaused]);
+
+  // 4. Dedicated polling ONLY while in GENERATING state until the next scene is synthesized and ready.
+  // Stops immediately as soon as phase transitions to PLAYING.
+  useEffect(() => {
+    if (cinemaState?.phase !== 'GENERATING') return;
+
+    let isSubscribed = true;
+    console.log('[CinemaPage] Phase is GENERATING: polling until new scene is synthesized...');
+
+    const pollUntilReady = async () => {
+      try {
+        const res = await fetch('/api/cinema/state');
+        if (res.ok && isSubscribed) {
+          const data = await res.json();
+          // As soon as generation completes and phase is no longer GENERATING (e.g. PLAYING)
+          if (data.phase && data.phase !== 'GENERATING') {
+            console.log(`[CinemaPage] Scene ready! New phase: ${data.phase}, Step: ${data.activeStep?.stepNumber}. Stopping GENERATING polling.`);
+            setCinemaState((prev) => {
+              if (!prev) return data;
+              return {
+                ...prev,
+                ...data,
+                movie: data.movie ?? prev.movie,
+                activeStep: data.activeStep ?? prev.activeStep,
+                phase: data.phase,
+                timeRemaining: 15,
+                votesA: 0,
+                votesB: 0,
+                hasUserVoted: null
+              };
             });
-          }
-
-          if (!supabaseReady && data.supabaseConfig?.url && data.supabaseConfig?.anonKey) {
-            initSupabaseBrowserClient(data.supabaseConfig.url, data.supabaseConfig.anonKey);
-            setSupabaseReady(true);
+            setUserVoted(null);
           }
         }
-      } catch {
-        // Ignored on transient network blip
+      } catch (err) {
+        console.warn('[CinemaPage] Error polling during GENERATING:', err);
       }
-    }, intervalMs);
+    };
 
-    return () => clearInterval(heartbeat);
-  }, [userId, supabaseReady]);
+    const interval = setInterval(pollUntilReady, 2000);
+    const initialCheck = setTimeout(pollUntilReady, 1200);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+      clearTimeout(initialCheck);
+    };
+  }, [cinemaState?.phase]);
 
   // SUPABASE REALTIME SUBSCRIPTION
   useEffect(() => {
@@ -173,14 +349,17 @@ export default function CinemaStreamingPage() {
               apiStatus: snapshot.apiStatus || defaultApiStatus
             } as CinemaState : null;
           }
+
+          // Do not cut video playback if client is currently in PLAYING
+          const isPlaying = prev.phase === 'PLAYING';
           return {
             ...prev,
             ...snapshot,
             apiStatus: snapshot.apiStatus ?? prev.apiStatus ?? defaultApiStatus,
             movie: snapshot.movie ?? prev.movie,
-            activeStep: snapshot.activeStep ?? prev.activeStep,
-            phase: snapshot.phase ?? prev.phase,
-            timeRemaining: snapshot.timeRemaining ?? prev.timeRemaining,
+            activeStep: (isPlaying && prev.activeStep) ? prev.activeStep : (snapshot.activeStep ?? prev.activeStep),
+            phase: (isPlaying && snapshot.phase !== 'PLAYING') ? prev.phase : (snapshot.phase ?? prev.phase),
+            timeRemaining: isPlaying ? prev.timeRemaining : (snapshot.timeRemaining ?? prev.timeRemaining),
             votesA: snapshot.votesA ?? prev.votesA,
             votesB: snapshot.votesB ?? prev.votesB,
             totalAudience: snapshot.totalAudience ?? prev.totalAudience,
@@ -195,20 +374,13 @@ export default function CinemaStreamingPage() {
       .on('broadcast', { event: 'time_tick' }, (payload: { payload: { timeRemaining?: number; phase?: PlaybackPhase; votesA?: number; votesB?: number; totalAudience?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean } }) => {
         setCinemaState((prev) => {
           if (!prev) return prev;
-          const updatedStep = payload.payload.selectedOption ? {
-            ...prev.activeStep,
-            selectedOption: payload.payload.selectedOption,
-            wasRandomPick: payload.payload.wasRandomPick ?? prev.activeStep.wasRandomPick
-          } : prev.activeStep;
-
+          // In client-driven mode, scene video & voting timers run on the client.
+          // time_tick only updates live audience and votes counters without disrupting playback.
           return {
             ...prev,
-            timeRemaining: payload.payload.timeRemaining ?? prev.timeRemaining,
-            phase: payload.payload.phase ?? prev.phase,
             votesA: payload.payload.votesA ?? prev.votesA,
             votesB: payload.payload.votesB ?? prev.votesB,
-            totalAudience: payload.payload.totalAudience ?? prev.totalAudience,
-            activeStep: updatedStep
+            totalAudience: payload.payload.totalAudience ?? prev.totalAudience
           };
         });
       })
@@ -585,6 +757,7 @@ export default function CinemaStreamingPage() {
                 subtitleLanguage={subtitleLanguage}
                 onToggleSubtitles={handleToggleSubtitles}
                 onChangeSubtitleLanguage={handleChangeSubtitleLanguage}
+                onAdCompleted={() => handleStageComplete('COMMERCIAL_BREAK')}
                 inSceneAd={
                   cinemaState.activeAd?.type === 'in_scene_overlay'
                     ? cinemaState.activeAd
@@ -610,8 +783,6 @@ export default function CinemaStreamingPage() {
                 isVisible={cinemaState.phase === 'VOTING' || cinemaState.phase === 'GENERATING'}
                 phase={cinemaState.phase}
                 timeRemaining={cinemaState.timeRemaining}
-                phaseDuration={cinemaState.phaseDuration}
-                phaseEndsAt={cinemaState.phaseEndsAt}
                 options={cinemaState.activeStep.options}
                 votesA={cinemaState.votesA}
                 votesB={cinemaState.votesB}

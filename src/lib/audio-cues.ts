@@ -60,6 +60,7 @@ class AudioCueManager {
    */
   public startTensionMusic() {
     if (this.isTensionPlaying) return;
+    this.stopTensionMusic();
     const ctx = this.getContext();
     if (!ctx) return;
 
@@ -179,73 +180,40 @@ class AudioCueManager {
   }
 
   /**
-   * Update tension soundtrack intensity as voting countdown drops
+   * Update tension soundtrack intensity as voting countdown drops.
+   * Kept safe as a no-op to prevent scheduling duplicate out-of-sync ticks.
    */
-  public updateTensionTimer(timeRemaining: number) {
-    if (!this.isTensionPlaying || !this.ctx || !this.tensionGain) return;
-
-    // In the final 3 critical seconds, schedule a secondary syncopated tick at 500ms ("tick-tock")
-    if (timeRemaining <= 3 && timeRemaining > 0) {
-      setTimeout(() => {
-        if (!this.isTensionPlaying || this.isMuted) return;
-        const currentCtx = this.getContext();
-        if (!currentCtx || !this.tensionGain) return;
-
-        try {
-          const t = currentCtx.currentTime;
-          const urgencyOsc = currentCtx.createOscillator();
-          const urgencyGain = currentCtx.createGain();
-          urgencyOsc.type = 'triangle';
-          urgencyOsc.frequency.setValueAtTime(1600, t);
-          urgencyOsc.frequency.exponentialRampToValueAtTime(3200, t + 0.035);
-
-          urgencyGain.gain.setValueAtTime(0.065, t);
-          urgencyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
-
-          urgencyOsc.connect(urgencyGain);
-          urgencyGain.connect(this.tensionGain);
-
-          urgencyOsc.start(t);
-          urgencyOsc.stop(t + 0.05);
-        } catch {}
-      }, 500);
-    }
+  public updateTensionTimer(_timeRemaining: number) {
+    // No-op: eliminates conflicting syncopated timeouts
   }
 
   /**
-   * Stop tension music with smooth fade-out
+   * Stop tension music immediately with total cleanup of intervals and audio nodes
    */
   public stopTensionMusic() {
-    if (!this.isTensionPlaying) return;
-    this.isTensionPlaying = false;
-
     if (this.tensionInterval) {
       clearInterval(this.tensionInterval);
       this.tensionInterval = null;
     }
 
-    if (this.tensionGain && this.ctx) {
-      const now = this.ctx.currentTime;
-      this.tensionGain.gain.cancelScheduledValues(now);
-      this.tensionGain.gain.setValueAtTime(this.tensionGain.gain.value, now);
-      this.tensionGain.gain.linearRampToValueAtTime(0.0001, now + 0.4);
+    this.isTensionPlaying = false;
 
-      const nodesToClean = [...this.tensionNodes];
-      const gainToClean = this.tensionGain;
-      this.tensionNodes = [];
+    // Immediately stop and disconnect all tension oscillators
+    this.tensionNodes.forEach(node => {
+      try { node.stop(); } catch {}
+    });
+    this.tensionNodes = [];
+
+    if (this.tensionGain) {
+      try {
+        if (this.ctx) {
+          const now = this.ctx.currentTime;
+          this.tensionGain.gain.cancelScheduledValues(now);
+          this.tensionGain.gain.setValueAtTime(0.0001, now);
+        }
+        this.tensionGain.disconnect();
+      } catch {}
       this.tensionGain = null;
-
-      setTimeout(() => {
-        nodesToClean.forEach(node => {
-          try { node.stop(); } catch {}
-        });
-        try { gainToClean.disconnect(); } catch {}
-      }, 450);
-    } else {
-      this.tensionNodes.forEach(node => {
-        try { node.stop(); } catch {}
-      });
-      this.tensionNodes = [];
     }
   }
 

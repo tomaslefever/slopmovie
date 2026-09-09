@@ -113,6 +113,7 @@ class CinemaOrchestrator {
   public isGenerationPaused: boolean = false;
   private timerInterval: NodeJS.Timeout | null = null;
   public userVotes: Map<string, 'A' | 'B'> = new Map();
+  private isAdvancing: boolean = false;
 
   public setPhase(newPhase: PlaybackPhase, durationSeconds: number) {
     this.phase = newPhase;
@@ -441,8 +442,57 @@ class CinemaOrchestrator {
         totalAudience: this.totalAudience
       });
     } else {
-      // Duration expired -> Transition to next phase and persist ONCE to database
+      // Duration expired.
+      // In client-driven mode, the client's end-of-stage event triggers the transition.
+      // The background worker acts only as a safety watchdog if no clients are connected after a grace period.
+      const gracePeriodExpired = Date.now() > (this.phaseEndsAt + 15000);
+      if (gracePeriodExpired && !this.isAdvancing) {
+        console.log(`[CinemaEngine] Watchdog timer: stage ${this.phase} grace period expired. Advancing...`);
+        await this.handlePhaseTransition(workerId);
+      }
+    }
+  }
+
+  /**
+   * Explicitly complete a cinema stage driven by client playback/voting completion.
+   * Eliminates arbitrary periodic polling and prevents scene cutting/repetition.
+   */
+  public async completeStage(
+    requestedStage?: PlaybackPhase,
+    stepNumber?: number,
+    workerId?: string
+  ): Promise<{ success: boolean; state: ReturnType<CinemaOrchestrator['getState']> }> {
+    if (!this.movie) {
+      await this.initializeMovie();
+      if (!this.movie) return { success: false, state: this.getState() };
+    }
+
+    if (this.isAdvancing) {
+      return { success: true, state: this.getState() };
+    }
+
+    // If client specified the stage that ended, ensure it matches current phase
+    if (requestedStage && this.phase !== requestedStage) {
+      console.log(`[CinemaEngine] completeStage: current phase (${this.phase}) already moved past (${requestedStage}). Returning live state.`);
+      return { success: true, state: this.getState() };
+    }
+
+    // If client specified the step number, ensure it matches currentStep during PLAYING
+    if (typeof stepNumber === 'number' && this.movie.currentStep !== stepNumber && this.phase === 'PLAYING') {
+      console.log(`[CinemaEngine] completeStage: current step (${this.movie.currentStep}) does not match requested (${stepNumber}). Returning live state.`);
+      return { success: true, state: this.getState() };
+    }
+
+    this.isAdvancing = true;
+    try {
+      console.log(`[CinemaEngine] 🎬 Stage completion received from client for '${this.phase}' (Step ${this.movie.currentStep}). Transitioning...`);
       await this.handlePhaseTransition(workerId);
+      return { success: true, state: this.getState() };
+    } catch (err) {
+      console.error('[CinemaEngine] Error advancing cinema stage:', err);
+      return { success: false, state: this.getState() };
+    } finally {
+      this.isAdvancing = false;
     }
   }
 
