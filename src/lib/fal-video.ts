@@ -79,45 +79,51 @@ export async function generateVideoWithFal({
         credentials: falKey
       });
 
-      // Target official endpoint: minimax/h3-max/text-to-video with 480p and 16:9
+      // Target official endpoint: minimax/h3-max/text-to-video with 480P, 16:9, and exact 15-second duration
       const inputPayload: any = {
         prompt: fullPrompt,
-        resolution: "480p",
+        duration: 15, // Requisito: generación exacta de 15 segundos
+        resolution: "480P",
         aspect_ratio: "16:9",
         prompt_expansion_mode: "balanced"
       };
 
-      // Pass previous video as reference if available
+      // Pass previous video as reference if available (multiple gateway aliases)
       if (previousVideoUrl) {
         inputPayload.previous_video_url = previousVideoUrl;
         inputPayload.reference_video_url = previousVideoUrl;
+        inputPayload.video_url = previousVideoUrl;
       }
 
-      // Pass prop reference images if available
+      // Pass prop reference images stored in Supabase Storage (multiple gateway aliases)
       if (propReferenceImages.length > 0) {
         inputPayload.reference_images = propReferenceImages;
+        inputPayload.reference_image_urls = propReferenceImages;
         inputPayload.image_urls = propReferenceImages;
+        inputPayload.image_url = propReferenceImages[0];
       }
 
+      console.log(`[fal.ai/Kie] Generating 15s video for Step ${stepNumber} with payload:`, JSON.stringify(inputPayload, null, 2));
       const response: any = await fal.subscribe("minimax/h3-max/text-to-video", {
         input: inputPayload,
         logs: true
       });
 
       if (response.data && response.data.video && response.data.video.url) {
+        console.log(`[fal.ai] Successfully generated video for Step ${stepNumber}:`, response.data.video.url);
         return {
           videoUrl: response.data.video.url,
           thumbnailUrl: response.data.thumbnail?.url || "",
           isRealAiGenerated: true,
           modelUsed: "minimax/h3-max/text-to-video",
-          resolution: "480p",
+          resolution: "480P",
           aspectRatio: "16:9",
           previousVideoReference: previousVideoUrl,
           propImagesReferences: propReferenceImages
         };
       }
-    } catch (error) {
-      console.warn("fal.ai minimax/h3-max generation error, falling back to cinematic stream:", error);
+    } catch (error: any) {
+      console.error("[fal.ai] minimax/h3-max generation error:", error?.message || error, "Body:", JSON.stringify(error?.body || {}));
     }
   }
 

@@ -5,12 +5,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('userId') || 'guest';
 
-  // If no movie is initialized yet, try restoring from Supabase or spin up a new movie
+  // If no movie is initialized yet, spin up or restore the movie
   if (!cinemaEngine.movie) {
-    const restored = await cinemaEngine.restoreFromDatabase();
-    if (!restored) {
-      await cinemaEngine.initializeMovie();
-    }
+    await cinemaEngine.initializeMovie();
   }
 
   const state = cinemaEngine.getState(userId);
@@ -44,6 +41,78 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         movie: newMovie
+      });
+    }
+
+    if (action === 'next_movie') {
+      const newMovie = await cinemaEngine.startNextBlockbusterMovie(prompt);
+      return NextResponse.json({
+        success: true,
+        movie: newMovie
+      });
+    }
+
+    if (action === 'force_reset') {
+      // Clears in-memory state + archives Supabase movie + generates fresh AI content.
+      // Use this after adding API keys to escape mockup mode.
+      const newMovie = await cinemaEngine.forceReset(prompt);
+      return NextResponse.json({
+        success: true,
+        movie: newMovie
+      });
+    }
+
+    if (action === 'toggle_pause') {
+      const success = cinemaEngine.togglePause();
+      return NextResponse.json({
+        success,
+        isPaused: cinemaEngine.isPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'pause') {
+      const success = cinemaEngine.pause();
+      return NextResponse.json({
+        success,
+        isPaused: cinemaEngine.isPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'resume') {
+      const success = cinemaEngine.resume();
+      return NextResponse.json({
+        success,
+        isPaused: cinemaEngine.isPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'toggle_pause_generation') {
+      const success = cinemaEngine.togglePauseGeneration();
+      return NextResponse.json({
+        success,
+        isGenerationPaused: cinemaEngine.isGenerationPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'pause_generation') {
+      const success = cinemaEngine.pauseGeneration();
+      return NextResponse.json({
+        success,
+        isGenerationPaused: cinemaEngine.isGenerationPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'resume_generation') {
+      const success = cinemaEngine.resumeGeneration();
+      return NextResponse.json({
+        success,
+        isGenerationPaused: cinemaEngine.isGenerationPaused,
+        state: cinemaEngine.getState()
       });
     }
 

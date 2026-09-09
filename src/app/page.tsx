@@ -1,63 +1,253 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CinemaState, ChatMessage } from '@/types/cinema';
+import { CinemaState, ChatMessage, PlaybackPhase, MovieStep } from '@/types/cinema';
 import { CinemaPlayer } from '@/components/cinema/CinemaPlayer';
 import { VotingOverlay } from '@/components/cinema/VotingOverlay';
 import { AudienceChat } from '@/components/cinema/AudienceChat';
-import { CharacterBibleModal } from '@/components/cinema/CharacterBibleModal';
-import { DecisionTreeModal } from '@/components/cinema/DecisionTreeModal';
-import { NewMovieDialog } from '@/components/cinema/NewMovieDialog';
 import { GalleryView } from '@/components/gallery/GalleryView';
 import { Navbar } from '@/components/layout/Navbar';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function CinemaStreamingPage() {
   const [cinemaState, setCinemaState] = useState<CinemaState | null>(null);
+  const [userVoted, setUserVoted] = useState<'A' | 'B' | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [userId, setUserId] = useState<string>('');
+  const [userId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    try {
+      let storedId = localStorage.getItem('kinetic_user_id');
+      if (!storedId) {
+        storedId = `user_${Math.floor(1000 + Math.random() * 9000)}`;
+        localStorage.setItem('kinetic_user_id', storedId);
+      }
+      return storedId;
+    } catch {
+      return '';
+    }
+  });
   const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
   const [isGalleryOpen, setIsGalleryOpen] = useState<boolean>(false);
-  const [isBibleOpen, setIsBibleOpen] = useState<boolean>(false);
-  const [isDecisionTreeOpen, setIsDecisionTreeOpen] = useState<boolean>(false);
-  const [isNewMovieOpen, setIsNewMovieOpen] = useState<boolean>(false);
 
-  // Initialize or retrieve persistent user ID in browser
-  useEffect(() => {
-    let storedId = localStorage.getItem('kinetic_user_id');
-    if (!storedId) {
-      storedId = `user_${Math.floor(1000 + Math.random() * 9000)}`;
-      localStorage.setItem('kinetic_user_id', storedId);
-    }
-    setUserId(storedId);
-  }, []);
-
-  // Poll state every 1 second
+  // Initial state hydration on mount (streaming via Supabase Realtime replaces polling)
   useEffect(() => {
     if (!userId) return;
 
-    const fetchState = async () => {
+    const fetchInitialState = async () => {
       try {
         const res = await fetch(`/api/cinema/state?userId=${userId}`);
         if (res.ok) {
           const data = await res.json();
           setCinemaState(data);
+          if (data.hasUserVoted) {
+            setUserVoted(data.hasUserVoted);
+          }
           if (data.chatMessages) {
             setChatMessages(data.chatMessages);
           }
         }
       } catch (err) {
-        console.error("Error fetching cinema state:", err);
+        console.error("Error fetching initial cinema state:", err);
       }
     };
 
-    fetchState();
-    const interval = setInterval(fetchState, 1000);
-    return () => clearInterval(interval);
+    fetchInitialState();
   }, [userId]);
+
+  // SUPABASE REALTIME SUBSCRIPTION
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const channel = supabase.channel('cinema_live_sync', {
+      config: { broadcast: { self: false } }
+    });
+
+    channel
+      .on('broadcast', { event: 'state_snapshot' }, (payload: { payload: Partial<CinemaState> }) => {
+        setCinemaState((prev) => {
+          if (!prev) return (payload.payload as CinemaState) || null;
+          const snapshot = payload.payload;
+          return {
+            ...prev,
+            ...snapshot,
+            movie: snapshot.movie ?? prev.movie,
+            activeStep: snapshot.activeStep ?? prev.activeStep,
+            phase: snapshot.phase ?? prev.phase,
+            timeRemaining: snapshot.timeRemaining ?? prev.timeRemaining,
+            votesA: snapshot.votesA ?? prev.votesA,
+            votesB: snapshot.votesB ?? prev.votesB,
+            totalAudience: snapshot.totalAudience ?? prev.totalAudience,
+            activeAd: snapshot.activeAd !== undefined ? snapshot.activeAd : prev.activeAd,
+            adsConfig: snapshot.adsConfig ?? prev.adsConfig,
+            isLive: snapshot.isLive ?? prev.isLive,
+            isPaused: snapshot.isPaused !== undefined ? snapshot.isPaused : prev.isPaused,
+            isGenerationPaused: snapshot.isGenerationPaused !== undefined ? snapshot.isGenerationPaused : prev.isGenerationPaused
+          };
+        });
+      })
+      .on('broadcast', { event: 'time_tick' }, (payload: { payload: { timeRemaining?: number; phase?: PlaybackPhase; votesA?: number; votesB?: number; totalAudience?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean } }) => {
+        setCinemaState((prev) => {
+          if (!prev) return prev;
+          const updatedStep = payload.payload.selectedOption ? {
+            ...prev.activeStep,
+            selectedOption: payload.payload.selectedOption,
+            wasRandomPick: payload.payload.wasRandomPick ?? prev.activeStep.wasRandomPick
+          } : prev.activeStep;
+
+          return {
+            ...prev,
+            timeRemaining: payload.payload.timeRemaining ?? prev.timeRemaining,
+            phase: payload.payload.phase ?? prev.phase,
+            votesA: payload.payload.votesA ?? prev.votesA,
+            votesB: payload.payload.votesB ?? prev.votesB,
+            totalAudience: payload.payload.totalAudience ?? prev.totalAudience,
+            activeStep: updatedStep
+          };
+        });
+      })
+      .on('broadcast', { event: 'phase_change' }, (payload: { payload: { phase: PlaybackPhase; timeRemaining?: number; votesA?: number; votesB?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean } }) => {
+        if (payload.payload.phase === 'VOTING') {
+          setUserVoted(null);
+        }
+        setCinemaState((prev) => {
+          if (!prev) return prev;
+          const updatedStep = payload.payload.selectedOption ? {
+            ...prev.activeStep,
+            selectedOption: payload.payload.selectedOption,
+            wasRandomPick: payload.payload.wasRandomPick ?? prev.activeStep.wasRandomPick
+          } : prev.activeStep;
+
+          return {
+            ...prev,
+            phase: payload.payload.phase,
+            timeRemaining: payload.payload.timeRemaining ?? prev.timeRemaining,
+            votesA: payload.payload.votesA ?? prev.votesA,
+            votesB: payload.payload.votesB ?? prev.votesB,
+            activeStep: updatedStep
+          };
+        });
+      })
+      .on('broadcast', { event: 'vote_update' }, (payload: { payload: { votesA: number; votesB: number; totalVotes?: number; timeRemaining?: number; totalAudience?: number } }) => {
+        setCinemaState((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            votesA: payload.payload.votesA,
+            votesB: payload.payload.votesB,
+            timeRemaining: payload.payload.timeRemaining ?? prev.timeRemaining,
+            totalAudience: payload.payload.totalAudience ?? prev.totalAudience
+          };
+        });
+      })
+      .on('broadcast', { event: 'new_step' }, (payload: { payload: { step: MovieStep; currentStep: number } }) => {
+        setUserVoted(null);
+        if (payload.payload.step) {
+          setCinemaState((prev) => {
+            if (!prev) return prev;
+            const updatedMovie = {
+              ...prev.movie,
+              currentStep: payload.payload.currentStep,
+              steps: [...prev.movie.steps, payload.payload.step]
+            };
+            return {
+              ...prev,
+              movie: updatedMovie,
+              activeStep: payload.payload.step,
+              phase: 'PLAYING',
+              timeRemaining: 15,
+              votesA: 0,
+              votesB: 0,
+              hasUserVoted: null
+            };
+          });
+        }
+      })
+      .on('broadcast', { event: 'chat_message' }, (payload: { payload: ChatMessage }) => {
+        if (payload.payload) {
+          setChatMessages((prev) => {
+            if (prev.some((m) => m.id === payload.payload.id)) return prev;
+            return [...prev.slice(-99), payload.payload];
+          });
+        }
+      })
+      .on('broadcast', { event: 'ad_break_started' }, (payload: any) => {
+        setCinemaState((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            phase: 'COMMERCIAL_BREAK',
+            activeAd: payload.payload.ad,
+            timeRemaining: payload.payload.timeRemaining || 10
+          };
+        });
+      })
+      .on('broadcast', { event: 'ad_video_generated' }, (payload: any) => {
+        setCinemaState((prev) => {
+          if (!prev || !prev.activeAd || prev.activeAd.id !== payload.payload.adId) return prev;
+          return {
+            ...prev,
+            activeAd: {
+              ...prev.activeAd,
+              generatedAdVideoUrl: payload.payload.generatedAdVideoUrl
+            }
+          };
+        });
+      })
+      .on('broadcast', { event: 'ad_break_ended' }, (payload: any) => {
+        setCinemaState((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            phase: payload.payload.phase || 'PLAYING',
+            activeAd: null,
+            timeRemaining: payload.payload.timeRemaining || 15
+          };
+        });
+      })
+      .on('broadcast', { event: 'cinema_paused' }, () => {
+        setCinemaState(prev => prev ? { ...prev, isPaused: true } : prev);
+      })
+      .on('broadcast', { event: 'cinema_resumed' }, () => {
+        setCinemaState(prev => prev ? { ...prev, isPaused: false } : prev);
+      })
+      .on('broadcast', { event: 'generation_paused' }, () => {
+        setCinemaState(prev => prev ? { ...prev, isGenerationPaused: true } : prev);
+      })
+      .on('broadcast', { event: 'generation_resumed' }, () => {
+        setCinemaState(prev => prev ? { ...prev, isGenerationPaused: false } : prev);
+      })
+      .on('broadcast', { event: 'new_movie_started' }, (payload: any) => {
+        setUserVoted(null);
+        if (payload.payload?.movie) {
+          setCinemaState((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              movie: payload.payload.movie,
+              activeStep: payload.payload.movie.steps[0],
+              phase: 'PLAYING',
+              timeRemaining: 15,
+              votesA: 0,
+              votesB: 0,
+              hasUserVoted: null
+            };
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Cast vote handler
   const handleVote = async (optionId: 'A' | 'B') => {
-    if (!cinemaState) return;
+    if (!cinemaState || userVoted) return;
+
+    // Optimistically update local user vote state immediately
+    setUserVoted(optionId);
 
     try {
       const res = await fetch('/api/cinema/state', {
@@ -67,7 +257,7 @@ export default function CinemaStreamingPage() {
           action: 'vote',
           optionId,
           userId,
-          userName: `Espectador_${userId.slice(-4)}`
+          userName: `Viewer_${userId.slice(-4)}`
         })
       });
 
@@ -78,8 +268,7 @@ export default function CinemaStreamingPage() {
           return {
             ...prev,
             votesA: data.votesA,
-            votesB: data.votesB,
-            hasUserVoted: optionId
+            votesB: data.votesB
           };
         });
       }
@@ -96,7 +285,7 @@ export default function CinemaStreamingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          userName: `Espectador_${userId.slice(-4)}`,
+          userName: `Viewer_${userId.slice(-4)}`,
           text
         })
       });
@@ -105,37 +294,12 @@ export default function CinemaStreamingPage() {
     }
   };
 
-  // Start new movie handler
-  const handleStartNewMovie = async (prompt?: string) => {
-    try {
-      const res = await fetch('/api/cinema/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'init',
-          prompt
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        // Trigger fresh state poll immediately
-        const stateRes = await fetch(`/api/cinema/state?userId=${userId}`);
-        const stateData = await stateRes.json();
-        setCinemaState(stateData);
-        setIsGalleryOpen(false);
-      }
-    } catch (err) {
-      console.error("Error starting new movie:", err);
-    }
-  };
-
   if (!cinemaState || !cinemaState.movie) {
     return (
       <div className="w-screen h-screen bg-[#050608] flex flex-col items-center justify-center text-white space-y-4">
         <div className="w-12 h-12 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin" />
         <h2 className="text-sm font-mono tracking-widest text-neutral-400 uppercase">
-          Sintonizando Transmisión de Cine Interactivo...
+          Tuning into Live Interactive Cinema Stream...
         </h2>
       </div>
     );
@@ -147,17 +311,18 @@ export default function CinemaStreamingPage() {
       <Navbar
         movieTitle={cinemaState.movie.title}
         isMockMode={cinemaState.apiStatus.isMockMode}
-        onOpenBible={() => setIsBibleOpen(true)}
-        onOpenDecisionTree={() => setIsDecisionTreeOpen(true)}
-        onOpenNewMovie={() => setIsNewMovieOpen(true)}
         onToggleGallery={() => setIsGalleryOpen(!isGalleryOpen)}
         isGalleryOpen={isGalleryOpen}
+        currentStep={cinemaState.movie.currentStep}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 flex overflow-hidden relative">
         {isGalleryOpen ? (
-          <GalleryView onBackToLive={() => setIsGalleryOpen(false)} />
+          <GalleryView 
+            onBackToLive={() => setIsGalleryOpen(false)} 
+            activeMovie={cinemaState.movie} 
+          />
         ) : (
           <>
             {/* Screen Video Stage */}
@@ -169,16 +334,40 @@ export default function CinemaStreamingPage() {
                 phase={cinemaState.phase}
                 timeRemaining={cinemaState.timeRemaining}
                 totalSteps={cinemaState.movie.totalSteps}
+                activeAd={cinemaState.activeAd}
+                isPaused={cinemaState.isPaused}
+                isGenerationPaused={cinemaState.isGenerationPaused}
+                inSceneAd={
+                  cinemaState.activeAd?.type === 'in_scene_overlay'
+                    ? cinemaState.activeAd
+                    : (cinemaState.movie.currentStep % 2 === 0 ? {
+                        id: "ad_suntory_reserve",
+                        brandName: "Suntory Orbital",
+                        title: "Zero-Gravity Single Malt",
+                        tagline: "Distilled aboard the Lunar Spire",
+                        type: "in_scene_overlay",
+                        imageUrl: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=800&auto=format&fit=crop&q=80",
+                        ctaText: "Inspect Vintage",
+                        ctaUrl: "https://example.com/suntory",
+                        duration: 15,
+                        isActive: true,
+                        impressions: 0,
+                        clicks: 0
+                      } : null)
+                }
               />
 
-              {/* 10s Voting Overlay */}
+              {/* Voting & Decision Overlay (stays centered until next clip starts) */}
               <VotingOverlay
-                isVisible={cinemaState.phase === 'VOTING'}
+                isVisible={cinemaState.phase === 'VOTING' || cinemaState.phase === 'GENERATING'}
+                phase={cinemaState.phase}
                 timeRemaining={cinemaState.timeRemaining}
                 options={cinemaState.activeStep.options}
                 votesA={cinemaState.votesA}
                 votesB={cinemaState.votesB}
-                userVoted={cinemaState.hasUserVoted || null}
+                userVoted={userVoted}
+                selectedOption={cinemaState.activeStep.selectedOption}
+                wasRandomPick={cinemaState.activeStep.wasRandomPick}
                 onVote={handleVote}
               />
             </div>
@@ -194,28 +383,6 @@ export default function CinemaStreamingPage() {
           </>
         )}
       </main>
-
-      {/* Modals */}
-      <CharacterBibleModal
-        bible={cinemaState.movie.bible}
-        masterArcThread={cinemaState.movie.masterArcThread}
-        initialPlot={cinemaState.movie.initialPlot}
-        isOpen={isBibleOpen}
-        onClose={() => setIsBibleOpen(false)}
-      />
-
-      <DecisionTreeModal
-        steps={cinemaState.movie.steps}
-        currentStep={cinemaState.movie.currentStep}
-        isOpen={isDecisionTreeOpen}
-        onClose={() => setIsDecisionTreeOpen(false)}
-      />
-
-      <NewMovieDialog
-        isOpen={isNewMovieOpen}
-        onClose={() => setIsNewMovieOpen(false)}
-        onStartNewMovie={handleStartNewMovie}
-      />
     </div>
   );
 }

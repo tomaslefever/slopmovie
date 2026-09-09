@@ -1,5 +1,5 @@
 -- ==============================================================================
--- KINETIC CINEMA // Supabase Production Database Migration
+-- KINETIC CINEMA // Supabase Production Database Schema & Realtime Replication
 -- Project Ref: bqaivpmgfntphfggbitz
 -- Compatible with Supabase Postgres 15+ / PostgREST / Realtime
 -- ==============================================================================

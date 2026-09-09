@@ -1,8 +1,40 @@
+import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd } from '@/types/cinema';
 import { getSupabaseServerClient } from './server';
-import { Movie, MovieStep, ChatMessage } from '@/types/cinema';
 
 export function isSupabaseConfigured(): boolean {
   return getSupabaseServerClient() !== null;
+}
+
+let hasShownSchemaHelp = false;
+function logSupabaseError(action: string, error: any) {
+  if (error?.message?.includes('schema cache') || error?.message?.includes('does not exist')) {
+    if (!hasShownSchemaHelp) {
+      hasShownSchemaHelp = true;
+      console.warn("\n⚠️ [Supabase] Las tablas aún no están creadas en tu proyecto de Supabase.");
+      console.warn("👉 Ejecuta el archivo 'supabase/schema.sql' en tu Supabase SQL Editor para habilitar la persistencia de películas, props y chat.\n");
+    }
+  } else {
+    console.error(`[Supabase] Error ${action}:`, error?.message || error);
+  }
+}
+
+/**
+ * Broadcast an event over Supabase Realtime channel
+ */
+export async function broadcastCinemaEvent(event: string, payload: any): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  try {
+    const channel = supabase.channel('cinema_live_sync');
+    await channel.send({
+      type: 'broadcast',
+      event,
+      payload
+    });
+  } catch (err) {
+    // Non-blocking realtime broadcast
+  }
 }
 
 /**
@@ -25,15 +57,55 @@ export async function persistMovie(movie: Movie): Promise<void> {
       total_steps: movie.totalSteps || 100,
       bible: movie.bible,
       total_votes_cast: movie.totalVotesCast || 0,
+      final_summary: movie.finalSummary || null,
+      final_synopsis: movie.finalSynopsis || null,
       created_at: movie.createdAt,
       completed_at: movie.completedAt || null,
     }, { onConflict: 'id' });
 
     if (error) {
-      console.error('[Supabase] Error persisting movie:', error.message);
+      logSupabaseError('persistMovie', error);
+    } else {
+      // Also persist all initial props into the props table
+      if (movie.bible?.props) {
+        for (const prop of movie.bible.props) {
+          await persistProp(movie.id, prop);
+        }
+      }
     }
   } catch (err) {
     console.error('[Supabase] Exception in persistMovie:', err);
+  }
+}
+
+/**
+ * Persist an individual prop (including those generated on the fly)
+ */
+export async function persistProp(movieId: string, prop: Prop): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase.from('props').upsert({
+      id: prop.id,
+      movie_id: movieId,
+      name: prop.name,
+      description: prop.description || '',
+      visual_appearance: prop.visualAppearance,
+      narrative_significance: prop.narrativeSignificance || '',
+      image_url: prop.imageUrl || null,
+      step_introduced: prop.stepIntroduced || 1,
+      owner_character_id: prop.ownerCharacterId || null,
+      owner_character_name: prop.ownerCharacterName || null,
+      icon: prop.icon || 'box',
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+
+    if (error) {
+      logSupabaseError('persistProp', error);
+    }
+  } catch (err) {
+    console.error('[Supabase] Exception in persistProp:', err);
   }
 }
 
@@ -63,16 +135,22 @@ export async function persistMovieStep(movieId: string, step: MovieStep): Promis
       was_random_pick: step.wasRandomPick || false,
       active_characters: step.activeCharacters || [],
       active_props: step.activeProps || [],
-      new_prop: step.newProp || null,
       new_character: step.newCharacter || null,
+      new_prop: step.newProp || null,
       reference_video_url: step.referenceVideoUrl || null,
       prop_reference_images: step.propReferenceImages || [],
+      subtitles: step.subtitles || [],
       environment: step.environment || '',
       created_at: step.createdAt || new Date().toISOString(),
     }, { onConflict: 'movie_id,step_number' });
 
     if (error) {
-      console.error('[Supabase] Error persisting movie step:', error.message);
+      logSupabaseError('persistMovieStep', error);
+    }
+
+    // Persist new prop into props table if one was introduced in this step
+    if (step.newProp) {
+      await persistProp(movieId, step.newProp);
     }
   } catch (err) {
     console.error('[Supabase] Exception in persistMovieStep:', err);
@@ -100,41 +178,10 @@ export async function persistChatMessage(movieId: string, msg: ChatMessage): Pro
     }, { onConflict: 'id' });
 
     if (error) {
-      console.error('[Supabase] Error persisting chat message:', error.message);
+      logSupabaseError('persistChatMessage', error);
     }
   } catch (err) {
     console.error('[Supabase] Exception in persistChatMessage:', err);
-  }
-}
-
-/**
- * Persist individual audience vote
- */
-export async function persistAudienceVote(
-  movieId: string,
-  stepNumber: number,
-  userId: string,
-  option: 'A' | 'B',
-  userName?: string
-): Promise<void> {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) return;
-
-  try {
-    const { error } = await supabase.from('audience_votes').upsert({
-      movie_id: movieId,
-      step_number: stepNumber,
-      user_id: userId,
-      user_name: userName || null,
-      selected_option: option,
-      created_at: new Date().toISOString(),
-    }, { onConflict: 'movie_id,step_number,user_id' });
-
-    if (error) {
-      console.error('[Supabase] Error persisting audience vote:', error.message);
-    }
-  } catch (err) {
-    console.error('[Supabase] Exception in persistAudienceVote:', err);
   }
 }
 
@@ -190,16 +237,19 @@ export async function loadCompletedMoviesFromDb(): Promise<Movie[]> {
           wasRandomPick: s.was_random_pick,
           activeCharacters: s.active_characters,
           activeProps: s.active_props,
-          newProp: s.new_prop,
           newCharacter: s.new_character,
+          newProp: s.new_prop,
           referenceVideoUrl: s.reference_video_url,
           propReferenceImages: s.prop_reference_images,
+          subtitles: s.subtitles || [],
           environment: s.environment,
           createdAt: s.created_at,
         })),
         createdAt: m.created_at,
         completedAt: m.completed_at,
         totalVotesCast: m.total_votes_cast,
+        finalSummary: m.final_summary,
+        finalSynopsis: m.final_synopsis,
       });
     }
 
@@ -262,16 +312,19 @@ export async function loadActiveMovieFromDb(): Promise<Movie | null> {
         wasRandomPick: s.was_random_pick,
         activeCharacters: s.active_characters,
         activeProps: s.active_props,
-        newProp: s.new_prop,
         newCharacter: s.new_character,
+        newProp: s.new_prop,
         referenceVideoUrl: s.reference_video_url,
         propReferenceImages: s.prop_reference_images,
+        subtitles: s.subtitles || [],
         environment: s.environment,
         createdAt: s.created_at,
       })),
       createdAt: m.created_at,
       completedAt: m.completed_at,
       totalVotesCast: m.total_votes_cast,
+      finalSummary: m.final_summary,
+      finalSynopsis: m.final_synopsis,
     };
   } catch (err) {
     console.error('[Supabase] Exception in loadActiveMovieFromDb:', err);
@@ -309,5 +362,157 @@ export async function loadRecentChatMessagesFromDb(movieId: string, limit = 50):
   } catch (err) {
     console.error('[Supabase] Exception in loadRecentChatMessagesFromDb:', err);
     return [];
+  }
+}
+
+/**
+ * Load active or all immersive ads from database
+ */
+export async function loadImmersiveAdsFromDb(): Promise<ImmersiveAd[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  try {
+    const { data: ads, error } = await supabase
+      .from('immersive_ads')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !ads) {
+      if (error) logSupabaseError('loadImmersiveAdsFromDb', error);
+      return [];
+    }
+
+    return ads.map(ad => ({
+      id: ad.id,
+      brandName: ad.brand_name,
+      title: ad.title,
+      tagline: ad.tagline || '',
+      description: ad.description || '',
+      type: ad.type as 'commercial_break' | 'in_scene_overlay',
+      videoUrl: ad.video_url || undefined,
+      imageUrl: ad.image_url || undefined,
+      ctaText: ad.cta_text,
+      ctaUrl: ad.cta_url || undefined,
+      perkReward: ad.perk_reward || undefined,
+      duration: ad.duration || 10,
+      isActive: ad.is_active ?? true,
+      frequencySteps: ad.frequency_steps || 5,
+      stepTrigger: ad.step_trigger || undefined,
+      impressions: ad.impressions || 0,
+      clicks: ad.clicks || 0,
+      createdAt: ad.created_at,
+      cinematicPrompt: ad.cinematic_prompt || undefined,
+      generatedAdVideoUrl: ad.generated_ad_video_url || undefined,
+    }));
+  } catch (err) {
+    console.error('[Supabase] Exception in loadImmersiveAdsFromDb:', err);
+    return [];
+  }
+}
+
+/**
+ * Persist or update an immersive ad in Supabase
+ */
+export async function persistImmersiveAd(ad: ImmersiveAd): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('immersive_ads').upsert({
+      id: ad.id,
+      brand_name: ad.brandName,
+      title: ad.title,
+      tagline: ad.tagline || '',
+      description: ad.description || '',
+      type: ad.type,
+      video_url: ad.videoUrl || null,
+      image_url: ad.imageUrl || null,
+      cta_text: ad.ctaText,
+      cta_url: ad.ctaUrl || null,
+      perk_reward: ad.perkReward || null,
+      duration: ad.duration,
+      is_active: ad.isActive,
+      frequency_steps: ad.frequencySteps || 5,
+      step_trigger: ad.stepTrigger || null,
+      impressions: ad.impressions || 0,
+      clicks: ad.clicks || 0,
+      cinematic_prompt: ad.cinematicPrompt || null,
+      generated_ad_video_url: ad.generatedAdVideoUrl || null,
+    }, { onConflict: 'id' });
+
+    if (error) {
+      logSupabaseError('persistImmersiveAd', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Exception in persistImmersiveAd:', err);
+    return false;
+  }
+}
+
+/**
+ * Increment impressions or clicks for an immersive ad
+ */
+export async function recordAdMetric(adId: string, metric: 'impression' | 'click'): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  try {
+    const column = metric === 'impression' ? 'impressions' : 'clicks';
+    // Fetch current count and update safely
+    const { data } = await supabase
+      .from('immersive_ads')
+      .select(column)
+      .eq('id', adId)
+      .single();
+
+    const currentVal = (data as any)?.[column] || 0;
+    await supabase
+      .from('immersive_ads')
+      .update({ [column]: currentVal + 1 })
+      .eq('id', adId);
+  } catch (err) {
+    // Non-blocking metric recording
+  }
+}
+
+/**
+ * Delete an immersive ad from Supabase
+ */
+export async function deleteImmersiveAdFromDb(adId: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('immersive_ads').delete().eq('id', adId);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+
+/**
+ * Mark all currently streaming movies as 'completed' so they are
+ * not restored on the next initializeMovie() call. Used when doing
+ * a force-reset to switch from mockup mode to real AI generation.
+ */
+export async function archiveAllStreamingMovies(): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from('movies')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('status', 'streaming');
+
+    if (error) {
+      logSupabaseError('archiveAllStreamingMovies', error);
+    }
+  } catch (err) {
+    console.error('[Supabase] Exception in archiveAllStreamingMovies:', err);
   }
 }
