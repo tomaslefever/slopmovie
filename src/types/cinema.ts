@@ -181,6 +181,7 @@ export interface CinemaState {
   isPaused?: boolean;
   isGenerationPaused?: boolean;
   videoModel?: string;
+  videoResolution?: string | null;
   activeAd?: ImmersiveAd | null;
   adsConfig?: AdsConfig;
   apiStatus?: {

@@ -1,7 +1,7 @@
 import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig } from '@/types/cinema';
 import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek } from './deepseek';
-import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoModel } from './fal-video';
-import type { VideoModelId } from './fal-video';
+import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoModel, isKnownVideoResolution } from './fal-video';
+import type { VideoModelId, VideoResolution } from './fal-video';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -113,6 +113,7 @@ class CinemaOrchestrator {
   public isPaused: boolean = false;
   public isGenerationPaused: boolean = false;
   public videoModel: VideoModelId = DEFAULT_VIDEO_MODEL;
+  public videoResolution: VideoResolution | null = null;
   private timerInterval: NodeJS.Timeout | null = null;
   public userVotes: Map<string, 'A' | 'B'> = new Map();
   private isAdvancing: boolean = false;
@@ -260,6 +261,11 @@ class CinemaOrchestrator {
             this.videoModel = (savedMovie.bible as any).videoModel;
           }
 
+          // Restore director-selected video resolution
+          if (isKnownVideoResolution((savedMovie.bible as any)?.videoResolution)) {
+            this.videoResolution = (savedMovie.bible as any).videoResolution;
+          }
+
           // Movie restored from Supabase
           return this.movie;
         }
@@ -310,7 +316,8 @@ class CinemaOrchestrator {
         stepNumber: 1,
         propReferenceImages: initialPropImages,
         voiceDirection: generated.firstStep.voiceDirection,
-        model: this.videoModel
+        model: this.videoModel,
+        resolution: this.videoResolution || undefined
       });
       initialVideoUrl = videoResult.videoUrl;
       initialThumbnailUrl = videoResult.thumbnailUrl;
@@ -341,7 +348,8 @@ class CinemaOrchestrator {
       bible: {
         ...generated.bible,
         isGenerationPaused: this.isGenerationPaused,
-        videoModel: this.videoModel
+        videoModel: this.videoModel,
+        videoResolution: this.videoResolution
       } as any,
       steps: [firstStepWithVideo],
       createdAt: new Date().toISOString(),
@@ -403,6 +411,7 @@ class CinemaOrchestrator {
         if (liveState.adsConfig) this.adsConfig = liveState.adsConfig;
         if (liveState.activeAd) this.activeAd = liveState.activeAd;
         if (isKnownVideoModel(liveState.videoModel)) this.videoModel = liveState.videoModel;
+        if (isKnownVideoResolution(liveState.videoResolution)) this.videoResolution = liveState.videoResolution;
         if (liveState.currentStep && this.movie) {
           this.movie.currentStep = liveState.currentStep;
         }
@@ -806,7 +815,8 @@ class CinemaOrchestrator {
           previousVideoUrl: storyReferenceUrl,
           propReferenceImages: activePropImages,
           voiceDirection: nextStepRaw.voiceDirection,
-          model: this.videoModel
+          model: this.videoModel,
+          resolution: this.videoResolution || undefined
         });
 
         // Consume and reset preAdVideoUrl — it must never persist past this step
@@ -1117,7 +1127,8 @@ class CinemaOrchestrator {
         cameraMotion: "Smooth dolly or static hold, matching the previous scene's camera language",
         stepNumber: this.movie?.steps.length ?? 0,
         previousVideoUrl: this.preAdVideoUrl || undefined,
-        model: this.videoModel
+        model: this.videoModel,
+        resolution: this.videoResolution || undefined
       }).then(async (adVideo) => {
         if (!this.activeAd || this.activeAd.id !== adToPlay.id) return; // Phase already changed
 
@@ -1304,6 +1315,7 @@ class CinemaOrchestrator {
       isPaused: this.isPaused,
       isGenerationPaused: this.isGenerationPaused,
       videoModel: this.videoModel,
+      videoResolution: this.videoResolution,
       activeAd: this.activeAd,
       adsConfig: this.adsConfig,
       apiStatus: {
@@ -1420,6 +1432,42 @@ class CinemaOrchestrator {
     if (isKnownVideoModel(model)) {
       this.videoModel = model;
     }
+  }
+
+  /**
+   * Silently adopt a persisted video resolution read from the database (no broadcast/persist).
+   */
+  public adoptVideoResolution(resolution: string | null | undefined): void {
+    if (resolution === null || resolution === undefined || resolution === '') {
+      this.videoResolution = null;
+    } else if (isKnownVideoResolution(resolution)) {
+      this.videoResolution = resolution;
+    }
+  }
+
+  /**
+   * Director selects the output resolution for video generation.
+   * Empty string / null resets to the active model's default resolution.
+   * Persisted in the movie bible so it survives restarts and movie rotations.
+   */
+  public setVideoResolution(resolution: string | null): boolean {
+    if (!resolution) {
+      this.videoResolution = null;
+    } else if (!isKnownVideoResolution(resolution)) {
+      return false;
+    } else {
+      this.videoResolution = resolution;
+    }
+
+    if (this.movie) {
+      (this.movie.bible as any).videoResolution = this.videoResolution;
+      persistMovie(this.movie);
+    }
+    const label = this.videoResolution ? this.videoResolution : 'Auto (por defecto del modelo)';
+    this.addSystemMessage(`🎞️ Director set video resolution to ${label}.`);
+    broadcastCinemaEvent('video_resolution_changed', { videoResolution: this.videoResolution });
+    this.broadcastStateSnapshot();
+    return true;
   }
 
   /**
@@ -1611,6 +1659,7 @@ class CinemaOrchestrator {
         isPaused: this.isPaused,
         isGenerationPaused: this.isGenerationPaused,
         videoModel: this.videoModel,
+        videoResolution: this.videoResolution,
         activeAd: this.activeAd,
         adsConfig: this.adsConfig,
         selectedOption: currentStepObj?.selectedOption,
@@ -1645,7 +1694,8 @@ class CinemaOrchestrator {
       isLive: state.isLive,
       isPaused: state.isPaused,
       isGenerationPaused: state.isGenerationPaused,
-      videoModel: state.videoModel
+      videoModel: state.videoModel,
+      videoResolution: state.videoResolution
     });
   }
 }

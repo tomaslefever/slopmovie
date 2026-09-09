@@ -40,6 +40,14 @@ export type VideoModelId = 'minimax/h3-max/reference-to-video' | 'minimax/h3-max
 
 export const DEFAULT_VIDEO_MODEL: VideoModelId = 'minimax/h3-max/reference-to-video';
 
+// Resoluciones soportadas por la familia MiniMax H3-Max en fal.ai
+export const VIDEO_RESOLUTIONS = ['480P', '720P', '768P', '1080P'] as const;
+export type VideoResolution = (typeof VIDEO_RESOLUTIONS)[number];
+
+export function isKnownVideoResolution(resolution: string | undefined | null): resolution is VideoResolution {
+  return (VIDEO_RESOLUTIONS as readonly string[]).includes(resolution || '');
+}
+
 export interface VideoModelOption {
   id: VideoModelId;
   label: string;
@@ -53,7 +61,7 @@ export const VIDEO_MODEL_OPTIONS: VideoModelOption[] = [
   {
     id: 'minimax/h3-max/reference-to-video',
     label: 'MiniMax H3-Max — Reference-to-Video',
-    description: 'Video con referencias (video previo, imágenes de props y audio). 768P adaptativo.',
+    description: 'Video con referencias (video previo, imágenes de props y audio). 768P adaptativo por defecto.',
     supportsReferences: true,
     resolution: '768P',
     aspectRatio: 'adaptive'
@@ -61,7 +69,7 @@ export const VIDEO_MODEL_OPTIONS: VideoModelOption[] = [
   {
     id: 'minimax/h3-max-turbo',
     label: 'MiniMax H3-Max Turbo — Text-to-Video',
-    description: 'Solo texto a video. Sin referencias. 480P 16:9.',
+    description: 'Solo texto a video. Sin referencias. 480P 16:9 por defecto.',
     supportsReferences: false,
     resolution: '480P',
     aspectRatio: '16:9'
@@ -81,6 +89,7 @@ export interface VideoGenerationParams {
   propReferenceImages?: string[];
   voiceDirection?: string;
   model?: VideoModelId;
+  resolution?: VideoResolution;
 }
 
 export interface VideoGenerationResult {
@@ -102,11 +111,14 @@ export async function generateVideoWithFal({
   previousVideoUrl,
   propReferenceImages = [],
   voiceDirection = "",
-  model = DEFAULT_VIDEO_MODEL
+  model = DEFAULT_VIDEO_MODEL,
+  resolution
 }: VideoGenerationParams): Promise<VideoGenerationResult> {
   const videoModel: VideoModelId = isKnownVideoModel(model) ? model : DEFAULT_VIDEO_MODEL;
   const modelOption = VIDEO_MODEL_OPTIONS.find(m => m.id === videoModel)!;
   const isTurbo = videoModel === 'minimax/h3-max-turbo';
+  // Resolución elegida por el Director; si no hay una válida se usa la del modelo
+  const effectiveResolution: string = isKnownVideoResolution(resolution) ? resolution : modelOption.resolution;
 
   // Credit protection guard: if video generation is paused, immediately return mock video without calling fal.ai
   if (isFalGenerationPaused()) {
@@ -118,7 +130,7 @@ export async function generateVideoWithFal({
       thumbnailUrl: mock.poster,
       isRealAiGenerated: false,
       modelUsed: `${videoModel} (Simulador - Modo Pausa)`,
-      resolution: modelOption.resolution,
+      resolution: effectiveResolution,
       aspectRatio: modelOption.aspectRatio,
       previousVideoReference: previousVideoUrl,
       propImagesReferences: propReferenceImages
@@ -153,7 +165,7 @@ export async function generateVideoWithFal({
         ? {
             prompt: fullPrompt,
             duration: duration || 15,
-            resolution: "480P",
+            resolution: effectiveResolution,
             enable_safety_checker: true,
             prompt_expansion_mode: "balanced",
             aspect_ratio: "16:9"
@@ -161,7 +173,7 @@ export async function generateVideoWithFal({
         : {
             prompt: fullPrompt,
             duration: duration || 15,
-            resolution: "768P",
+            resolution: effectiveResolution,
             enable_safety_checker: true,
             prompt_expansion_mode: "balanced",
             aspect_ratio: "adaptive",
@@ -188,7 +200,7 @@ export async function generateVideoWithFal({
             thumbnailUrl: response.data.thumbnail?.url || response.data.thumbnail_url || "",
             isRealAiGenerated: true,
             modelUsed: videoModel,
-            resolution: modelOption.resolution,
+            resolution: effectiveResolution,
             aspectRatio: modelOption.aspectRatio,
             previousVideoReference: previousVideoUrl,
             propImagesReferences: propReferenceImages
@@ -227,7 +239,7 @@ export async function generateVideoWithFal({
     thumbnailUrl: mock.poster,
     isRealAiGenerated: false,
     modelUsed: `${videoModel} (Simulador)`,
-    resolution: modelOption.resolution,
+    resolution: effectiveResolution,
     aspectRatio: modelOption.aspectRatio,
     previousVideoReference: previousVideoUrl,
     propImagesReferences: propReferenceImages

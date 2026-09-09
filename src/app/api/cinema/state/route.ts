@@ -26,6 +26,7 @@ export async function GET(request: Request) {
 
   // Adopt the director-selected video model persisted in the DB
   cinemaEngine.adoptVideoModel(liveState?.videoModel);
+  cinemaEngine.adoptVideoResolution(liveState?.videoResolution);
 
   // If no movie exists in DB yet, initialize one
   if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) {
@@ -128,6 +129,7 @@ export async function GET(request: Request) {
     isPaused: liveState?.isPaused ?? false,
     isGenerationPaused: liveState?.isGenerationPaused ?? false,
     videoModel: cinemaEngine.videoModel,
+    videoResolution: cinemaEngine.videoResolution,
     activeAd: liveState?.activeAd || null,
     adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
     apiStatus: {
@@ -299,6 +301,16 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success,
         videoModel: cinemaEngine.videoModel,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'set_video_resolution') {
+      const { resolution } = body;
+      const success = cinemaEngine.setVideoResolution(resolution ?? null);
+      return NextResponse.json({
+        success,
+        videoResolution: cinemaEngine.videoResolution,
         state: cinemaEngine.getState()
       });
     }

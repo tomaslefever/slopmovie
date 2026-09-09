@@ -29,8 +29,16 @@ import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
 
 const VIDEO_MODEL_CHOICES = [
-  { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (768P · con referencias)' },
-  { id: 'minimax/h3-max-turbo', label: 'MiniMax H3-Max Turbo — Text-to-Video (480P 16:9 · sin referencias)' }
+  { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (con referencias)' },
+  { id: 'minimax/h3-max-turbo', label: 'MiniMax H3-Max Turbo — Text-to-Video (16:9 · sin referencias)' }
+];
+
+const VIDEO_RESOLUTION_CHOICES = [
+  { id: '', label: 'Auto (por defecto del modelo)' },
+  { id: '480P', label: '480P' },
+  { id: '720P', label: '720P' },
+  { id: '768P', label: '768P' },
+  { id: '1080P', label: '1080P' }
 ];
 
 export default function AdminDashboardPage() {
@@ -59,6 +67,7 @@ export default function AdminDashboardPage() {
   const [selectedStepNumber, setSelectedStepNumber] = useState<number | ''>('');
   const [isJumpingStep, setIsJumpingStep] = useState(false);
   const [videoModel, setVideoModel] = useState<string>('minimax/h3-max/reference-to-video');
+  const [videoResolution, setVideoResolution] = useState<string>('');
 
   // New Ad Form State
   const [newBrandName, setNewBrandName] = useState('');
@@ -119,6 +128,7 @@ export default function AdminDashboardPage() {
         if (stateData.videoModel) {
           setVideoModel(stateData.videoModel);
         }
+        setVideoResolution(stateData.videoResolution || '');
         setSelectedMovieId(prev => prev || stateData.movie?.id || (stateData.allMovies?.[0]?.id ?? ''));
         if (stateData.supabaseConfig?.url && stateData.supabaseConfig?.anonKey) {
           initSupabaseBrowserClient(stateData.supabaseConfig.url, stateData.supabaseConfig.anonKey);
@@ -163,6 +173,9 @@ export default function AdminDashboardPage() {
               }));
               if (payload.payload.videoModel) {
                 setVideoModel(payload.payload.videoModel);
+              }
+              if (payload.payload.videoResolution !== undefined) {
+                setVideoResolution(payload.payload.videoResolution || '');
               }
             }
           })
@@ -463,6 +476,32 @@ export default function AdminDashboardPage() {
       }
     } catch {
       showFeedback('Error de red al cambiar el modelo de video');
+    }
+  };
+
+  // Change output resolution for video generation (fal.ai)
+  const handleSetVideoResolution = async (resolution: string) => {
+    audioCues.playClick();
+    setVideoResolution(resolution);
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_video_resolution', resolution: resolution || null })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          showFeedback(`🎞️ Resolución de video: ${data.videoResolution || 'Auto (modelo)'}`);
+          fetchData();
+        } else {
+          showFeedback('Resolución de video no válida');
+        }
+      } else {
+        showFeedback('Error al cambiar la resolución de video');
+      }
+    } catch {
+      showFeedback('Error de red al cambiar la resolución de video');
     }
   };
 
@@ -1126,29 +1165,52 @@ export default function AdminDashboardPage() {
                   </h3>
                 </div>
                 <p className="text-xs text-neutral-400 max-w-xl">
-                  Selecciona el modelo de fal.ai que generará las escenas y los comerciales. H3-Max Turbo solo soporta texto a video: se descartan las referencias (escena previa, imágenes de props y audio).
+                  Selecciona el modelo de fal.ai que generará las escenas y los comerciales, y la resolución de salida. H3-Max Turbo solo soporta texto a video: se descartan las referencias (escena previa, imágenes de props y audio).
                 </p>
               </div>
 
-              <div className="flex flex-col gap-1 w-full sm:w-96 flex-shrink-0">
-                <label className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" />
-                  Modelo activo:
-                </label>
-                <select
-                  value={videoModel}
-                  onChange={e => handleSetVideoModel(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-black/90 border border-amber-500/30 text-white text-xs font-mono focus:border-amber-400 focus:outline-none cursor-pointer"
-                >
-                  {VIDEO_MODEL_CHOICES.map(m => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
-                </select>
-                <span className="text-[10px] font-mono text-neutral-500">
-                  {videoModel === 'minimax/h3-max-turbo'
-                    ? 'Text-to-Video: continuidad visual solo vía prompt, sin clips/imágenes de referencia.'
-                    : 'Reference-to-Video: mantiene continuidad con el clip previo y las imágenes de props.'}
-                </span>
+              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto flex-shrink-0">
+                <div className="flex flex-col gap-1 w-full sm:w-72">
+                  <label className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Modelo activo:
+                  </label>
+                  <select
+                    value={videoModel}
+                    onChange={e => handleSetVideoModel(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-black/90 border border-amber-500/30 text-white text-xs font-mono focus:border-amber-400 focus:outline-none cursor-pointer"
+                  >
+                    {VIDEO_MODEL_CHOICES.map(m => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] font-mono text-neutral-500">
+                    {videoModel === 'minimax/h3-max-turbo'
+                      ? 'Text-to-Video: continuidad visual solo vía prompt, sin clips/imágenes de referencia.'
+                      : 'Reference-to-Video: mantiene continuidad con el clip previo y las imágenes de props.'}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1 w-full sm:w-56">
+                  <label className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold flex items-center gap-1">
+                    <Sliders className="w-3 h-3" />
+                    Resolución de salida:
+                  </label>
+                  <select
+                    value={videoResolution}
+                    onChange={e => handleSetVideoResolution(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-black/90 border border-cyan-500/30 text-white text-xs font-mono focus:border-cyan-400 focus:outline-none cursor-pointer"
+                  >
+                    {VIDEO_RESOLUTION_CHOICES.map(r => (
+                      <option key={r.id || 'auto'} value={r.id}>{r.label}</option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] font-mono text-neutral-500">
+                    {videoResolution
+                      ? `Forzada a ${videoResolution} para el modelo activo.`
+                      : 'Usa la resolución por defecto del modelo (H3-Max: 768P · Turbo: 480P).'}
+                  </span>
+                </div>
               </div>
             </div>
 
