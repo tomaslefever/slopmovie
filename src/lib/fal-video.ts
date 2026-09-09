@@ -33,6 +33,7 @@ export interface VideoGenerationParams {
   prompt: string;
   cameraMotion: string;
   stepNumber: number;
+  duration?: number;
   previousVideoUrl?: string;
   propReferenceImages?: string[];
   voiceDirection?: string;
@@ -53,6 +54,7 @@ export async function generateVideoWithFal({
   prompt,
   cameraMotion,
   stepNumber,
+  duration = 15,
   previousVideoUrl,
   propReferenceImages = [],
   voiceDirection = ""
@@ -79,51 +81,46 @@ export async function generateVideoWithFal({
         credentials: falKey
       });
 
-      // Target official endpoint: minimax/h3-max/text-to-video with 480P, 16:9, and exact 15-second duration
-      const inputPayload: any = {
+      // Target official endpoint: minimax/h3-max/reference-to-video
+      const inputPayload = {
         prompt: fullPrompt,
-        duration: 15, // Requisito: generación exacta de 15 segundos
-        resolution: "480P",
-        aspect_ratio: "16:9",
-        prompt_expansion_mode: "balanced"
+        duration: duration || 15,
+        resolution: "768P",
+        enable_safety_checker: true,
+        prompt_expansion_mode: "balanced",
+        aspect_ratio: "adaptive",
+        reference_image_urls: propReferenceImages.length > 0 ? propReferenceImages : [],
+        reference_audio_urls: [],
+        reference_video_urls: previousVideoUrl ? [previousVideoUrl] : []
       };
 
-      // Pass previous video as reference if available (multiple gateway aliases)
-      if (previousVideoUrl) {
-        inputPayload.previous_video_url = previousVideoUrl;
-        inputPayload.reference_video_url = previousVideoUrl;
-        inputPayload.video_url = previousVideoUrl;
-      }
-
-      // Pass prop reference images stored in Supabase Storage (multiple gateway aliases)
-      if (propReferenceImages.length > 0) {
-        inputPayload.reference_images = propReferenceImages;
-        inputPayload.reference_image_urls = propReferenceImages;
-        inputPayload.image_urls = propReferenceImages;
-        inputPayload.image_url = propReferenceImages[0];
-      }
-
-      console.log(`[fal.ai/Kie] Generating 15s video for Step ${stepNumber} with payload:`, JSON.stringify(inputPayload, null, 2));
-      const response: any = await fal.subscribe("minimax/h3-max/text-to-video", {
+      console.log(`[fal.ai/Kie] Generating video for Step ${stepNumber} using minimax/h3-max/reference-to-video with payload:`, JSON.stringify(inputPayload, null, 2));
+      const response: any = await fal.subscribe("minimax/h3-max/reference-to-video", {
         input: inputPayload,
         logs: true
       });
 
-      if (response.data && response.data.video && response.data.video.url) {
-        console.log(`[fal.ai] Successfully generated video for Step ${stepNumber}:`, response.data.video.url);
-        return {
-          videoUrl: response.data.video.url,
-          thumbnailUrl: response.data.thumbnail?.url || "",
-          isRealAiGenerated: true,
-          modelUsed: "minimax/h3-max/text-to-video",
-          resolution: "480P",
-          aspectRatio: "16:9",
-          previousVideoReference: previousVideoUrl,
-          propImagesReferences: propReferenceImages
-        };
+      if (response.data) {
+        const videoUrl = response.data.video?.url 
+          || response.data.video_url 
+          || (typeof response.data.video === 'string' ? response.data.video : null);
+
+        if (videoUrl) {
+          console.log(`[fal.ai] Successfully generated video for Step ${stepNumber}:`, videoUrl);
+          return {
+            videoUrl,
+            thumbnailUrl: response.data.thumbnail?.url || response.data.thumbnail_url || "",
+            isRealAiGenerated: true,
+            modelUsed: "minimax/h3-max/reference-to-video",
+            resolution: "768P",
+            aspectRatio: "adaptive",
+            previousVideoReference: previousVideoUrl,
+            propImagesReferences: propReferenceImages
+          };
+        }
       }
     } catch (error: any) {
-      console.error("[fal.ai] minimax/h3-max generation error:", error?.message || error, "Body:", JSON.stringify(error?.body || {}));
+      console.error("[fal.ai] minimax/h3-max/reference-to-video generation error:", error?.message || error, "Body:", JSON.stringify(error?.body || {}));
     }
   }
 
@@ -135,9 +132,9 @@ export async function generateVideoWithFal({
     videoUrl: mock.url,
     thumbnailUrl: mock.poster,
     isRealAiGenerated: false,
-    modelUsed: "minimax/h3-max/text-to-video (Simulador)",
-    resolution: "480p",
-    aspectRatio: "16:9",
+    modelUsed: "minimax/h3-max/reference-to-video (Simulador)",
+    resolution: "768P",
+    aspectRatio: "adaptive",
     previousVideoReference: previousVideoUrl,
     propImagesReferences: propReferenceImages
   };

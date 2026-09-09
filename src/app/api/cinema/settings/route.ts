@@ -10,7 +10,7 @@ export async function GET() {
     isMockMode: !hasDeepseek || !hasFal,
     models: {
       llm: hasDeepseek ? 'deepseek-chat (Oficial)' : 'deepseek-chat (Simulador Procedural Cinematográfico)',
-      video: hasFal ? 'minimax/h3-max/text-to-video (480p 16:9 Oficial fal.ai)' : 'minimax/h3-max/text-to-video (Simulador 480p 16:9)'
+      video: hasFal ? 'minimax/h3-max/reference-to-video (768P Oficial fal.ai)' : 'minimax/h3-max/reference-to-video (Simulador 768P)'
     }
   });
 }
