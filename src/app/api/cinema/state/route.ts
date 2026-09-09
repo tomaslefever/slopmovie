@@ -13,7 +13,11 @@ export async function GET(request: Request) {
   const state = cinemaEngine.getState(userId);
   return NextResponse.json({
     ...state,
-    chatMessages: cinemaEngine.chatMessages.slice(-50)
+    chatMessages: cinemaEngine.chatMessages.slice(-50),
+    supabaseConfig: {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL || null,
+      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || null
+    }
   });
 }
 

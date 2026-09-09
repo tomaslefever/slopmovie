@@ -19,6 +19,7 @@ interface CinemaPlayerProps {
   inSceneAd?: ImmersiveAd | null;
   isPaused?: boolean;
   isGenerationPaused?: boolean;
+  onTogglePauseGeneration?: () => void;
 }
 
 export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
@@ -31,7 +32,8 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   activeAd,
   inSceneAd,
   isPaused = false,
-  isGenerationPaused = false
+  isGenerationPaused = false,
+  onTogglePauseGeneration
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -241,14 +243,29 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
             </div>
           )}
 
-          {/* AI Generation Paused / Archive Replay Badge */}
-          {isGenerationPaused && (
-            <div className="flex items-center space-x-2 bg-purple-950/80 border border-purple-500/40 px-3 py-1 rounded-full backdrop-blur-md shadow-[0_0_12px_rgba(168,85,247,0.3)] animate-pulse">
+          {/* AI Generation Paused / Archive Replay Badge & Controls */}
+          {isGenerationPaused ? (
+            <button
+              onClick={() => onTogglePauseGeneration?.()}
+              className="flex items-center space-x-2 bg-purple-950/90 hover:bg-purple-900 border border-purple-500/50 px-3 py-1 rounded-full backdrop-blur-md shadow-[0_0_15px_rgba(168,85,247,0.4)] animate-pulse transition-all hover:scale-105 active:scale-95 cursor-pointer"
+              title="Generación IA pausada (Modo repetición de archivo para proteger créditos). Haz clic para reanudar."
+            >
               <Shuffle className="w-3 h-3 text-purple-400" />
               <span className="text-[11px] font-bold text-purple-300 uppercase tracking-widest font-mono">
                 REPLAY LOOP // AI PAUSED
               </span>
-            </div>
+            </button>
+          ) : (
+            onTogglePauseGeneration && (
+              <button
+                onClick={() => onTogglePauseGeneration()}
+                className="hidden sm:flex items-center space-x-1.5 bg-neutral-900/70 hover:bg-purple-950/60 border border-white/10 hover:border-purple-500/40 px-3 py-1 rounded-full backdrop-blur-md text-[11px] font-mono text-neutral-400 hover:text-purple-300 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                title="Pausar generación de video IA (Modo ahorro de créditos)"
+              >
+                <Shuffle className="w-3 h-3 text-purple-400/80" />
+                <span>PAUSE AI GEN</span>
+              </button>
+            )
           )}
 
           {/* Step Badge */}

@@ -7,12 +7,13 @@ import { VotingOverlay } from '@/components/cinema/VotingOverlay';
 import { AudienceChat } from '@/components/cinema/AudienceChat';
 import { GalleryView } from '@/components/gallery/GalleryView';
 import { Navbar } from '@/components/layout/Navbar';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function CinemaStreamingPage() {
   const [cinemaState, setCinemaState] = useState<CinemaState | null>(null);
   const [userVoted, setUserVoted] = useState<'A' | 'B' | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [supabaseReady, setSupabaseReady] = useState(false);
   const [userId] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
     try {
@@ -29,7 +30,7 @@ export default function CinemaStreamingPage() {
   const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
   const [isGalleryOpen, setIsGalleryOpen] = useState<boolean>(false);
 
-  // Initial state hydration on mount (streaming via Supabase Realtime replaces polling)
+  // Initial state hydration on mount
   useEffect(() => {
     if (!userId) return;
 
@@ -45,6 +46,11 @@ export default function CinemaStreamingPage() {
           if (data.chatMessages) {
             setChatMessages(data.chatMessages);
           }
+          // Dynamically initialize Supabase browser client if credentials returned at runtime
+          if (data.supabaseConfig?.url && data.supabaseConfig?.anonKey) {
+            initSupabaseBrowserClient(data.supabaseConfig.url, data.supabaseConfig.anonKey);
+            setSupabaseReady(true);
+          }
         }
       } catch (err) {
         console.error("Error fetching initial cinema state:", err);
@@ -53,6 +59,73 @@ export default function CinemaStreamingPage() {
 
     fetchInitialState();
   }, [userId]);
+
+  // Resilient Polling Heartbeat (guarantees continuous live advancement even if Realtime drops or is unbuilt)
+  useEffect(() => {
+    if (!userId) return;
+
+    const heartbeat = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/cinema/state?userId=${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCinemaState((prev) => {
+            if (!prev) return data;
+            // When step advances, reset vote state
+            if (data.activeStep?.stepNumber !== prev.activeStep?.stepNumber) {
+              setUserVoted(data.hasUserVoted || null);
+            }
+            return {
+              ...prev,
+              ...data,
+              movie: data.movie,
+              activeStep: data.activeStep,
+              phase: data.phase,
+              timeRemaining: data.timeRemaining,
+              votesA: data.votesA,
+              votesB: data.votesB,
+              totalAudience: data.totalAudience,
+              isPaused: data.isPaused,
+              isGenerationPaused: data.isGenerationPaused
+            };
+          });
+
+          if (data.chatMessages && Array.isArray(data.chatMessages)) {
+            setChatMessages((prev) => {
+              const existingIds = new Set(prev.map(m => m.id));
+              const newMsgs = data.chatMessages.filter((m: ChatMessage) => !existingIds.has(m.id));
+              if (newMsgs.length === 0) return prev;
+              return [...prev, ...newMsgs].slice(-99);
+            });
+          }
+
+          if (!supabaseReady && data.supabaseConfig?.url && data.supabaseConfig?.anonKey) {
+            initSupabaseBrowserClient(data.supabaseConfig.url, data.supabaseConfig.anonKey);
+            setSupabaseReady(true);
+          }
+        }
+      } catch {
+        // Ignored on transient network blip
+      }
+    }, 2500);
+
+    return () => clearInterval(heartbeat);
+  }, [userId, supabaseReady]);
+
+  // Smooth local countdown ticker
+  useEffect(() => {
+    const ticker = setInterval(() => {
+      setCinemaState((prev) => {
+        if (!prev || prev.isPaused || prev.timeRemaining <= 1) return prev;
+        return {
+          ...prev,
+          timeRemaining: prev.timeRemaining - 1
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(ticker);
+  }, []);
 
   // SUPABASE REALTIME SUBSCRIPTION
   useEffect(() => {
@@ -240,7 +313,7 @@ export default function CinemaStreamingPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [supabaseReady]);
 
   // Cast vote handler
   const handleVote = async (optionId: 'A' | 'B') => {
@@ -294,6 +367,39 @@ export default function CinemaStreamingPage() {
     }
   };
 
+  // Toggle pause generation handler (Zero credit mode)
+  const handleTogglePauseGeneration = async () => {
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_pause_generation' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCinemaState((prev) => prev ? { ...prev, isGenerationPaused: data.isGenerationPaused } : prev);
+      }
+    } catch (err) {
+      console.error("Error toggling pause generation:", err);
+    }
+  };
+
+  // Keyboard shortcut listener: Alt+P to toggle pause generation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if ((e.altKey || e.shiftKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        handleTogglePauseGeneration();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   if (!cinemaState || !cinemaState.movie) {
     return (
       <div className="w-screen h-screen bg-[#050608] flex flex-col items-center justify-center text-white space-y-4">
@@ -337,6 +443,7 @@ export default function CinemaStreamingPage() {
                 activeAd={cinemaState.activeAd}
                 isPaused={cinemaState.isPaused}
                 isGenerationPaused={cinemaState.isGenerationPaused}
+                onTogglePauseGeneration={handleTogglePauseGeneration}
                 inSceneAd={
                   cinemaState.activeAd?.type === 'in_scene_overlay'
                     ? cinemaState.activeAd

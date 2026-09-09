@@ -1,6 +1,13 @@
 import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig } from '@/types/cinema';
 import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek } from './deepseek';
-import { generateVideoWithFal } from './fal-video';
+import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS } from './fal-video';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __cinemaOrchestratorInstance: CinemaOrchestrator | undefined;
+  // eslint-disable-next-line no-var
+  var __isCinemaGenerationPaused: boolean | undefined;
+}
 import { 
   persistMovie, 
   persistMovieStep, 
@@ -113,6 +120,13 @@ class CinemaOrchestrator {
   private preAdVideoUrl: string | null = null;
 
   private constructor() {
+    if (process.env.PAUSE_VIDEO_GENERATION === 'true') {
+      this.isGenerationPaused = true;
+      if (typeof globalThis !== 'undefined') {
+        (globalThis as any).__isCinemaGenerationPaused = true;
+      }
+    }
+
     this.chatMessages.push({
       id: "sys_init",
       userId: "system",
@@ -142,14 +156,20 @@ class CinemaOrchestrator {
   }
 
   public static getInstance(): CinemaOrchestrator {
+    if (typeof globalThis !== 'undefined' && (globalThis as any).__cinemaOrchestratorInstance) {
+      return (globalThis as any).__cinemaOrchestratorInstance;
+    }
     if (!CinemaOrchestrator.instance) {
       CinemaOrchestrator.instance = new CinemaOrchestrator();
+    }
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).__cinemaOrchestratorInstance = CinemaOrchestrator.instance;
     }
     return CinemaOrchestrator.instance;
   }
 
   public async initializeMovie(customPrompt?: string): Promise<Movie> {
-    // Try to restore existing streaming movie from Supabase if available
+    // Try to restore existing streaming or paused movie from Supabase if available
     if (isSupabaseConfigured() && !customPrompt) {
       try {
         const savedMovie = await loadActiveMovieFromDb();
@@ -162,7 +182,21 @@ class CinemaOrchestrator {
           this.userVotes.clear();
           const dbChats = await loadRecentChatMessagesFromDb(savedMovie.id);
           if (dbChats.length > 0) this.chatMessages = dbChats;
-          this.startEngineLoop();
+
+          // Restore paused and generation paused states accurately
+          if (savedMovie.status === 'paused') {
+            this.isPaused = true;
+          }
+          if ((savedMovie.bible as any)?.isGenerationPaused || process.env.PAUSE_VIDEO_GENERATION === 'true') {
+            this.isGenerationPaused = true;
+            if (typeof globalThis !== 'undefined') {
+              (globalThis as any).__isCinemaGenerationPaused = true;
+            }
+          }
+
+          if (!this.isPaused) {
+            this.startEngineLoop();
+          }
           return this.movie;
         }
       } catch (err) {
@@ -176,9 +210,11 @@ class CinemaOrchestrator {
     // Ensure all props in the story bible have authentic reference assets stored in Supabase Storage
     for (const prop of generated.bible.props) {
       try {
-        console.log(`[Cinema] Generating and storing reference asset for prop "${prop.name}" in Supabase Storage...`);
-        prop.imageUrl = await generateAndStorePropReferenceImage(prop);
-        await persistProp(movieId, prop);
+        if (!this.isGenerationPaused) {
+          console.log(`[Cinema] Generating and storing reference asset for prop "${prop.name}" in Supabase Storage...`);
+          prop.imageUrl = await generateAndStorePropReferenceImage(prop);
+          await persistProp(movieId, prop);
+        }
       } catch (err) {
         console.warn(`[Cinema] Error storing prop image in Supabase Storage:`, err);
       }
@@ -199,19 +235,31 @@ class CinemaOrchestrator {
 
     console.log(`[Cinema] Step 1 active prop reference images (Supabase Storage):`, initialPropImages);
 
-    // Generate initial video for Step 1 with Minimax H3-Max in 480p 16:9 (15 seconds)
-    const videoResult = await generateVideoWithFal({
-      prompt: generated.firstStep.visualPrompt,
-      cameraMotion: generated.firstStep.cameraMotionPrompt,
-      stepNumber: 1,
-      propReferenceImages: initialPropImages,
-      voiceDirection: generated.firstStep.voiceDirection
-    });
+    // Generate initial video for Step 1 with Minimax H3-Max (or simulated clip if generation is paused)
+    let initialVideoUrl: string;
+    let initialThumbnailUrl: string | undefined;
+
+    if (!this.isGenerationPaused) {
+      const videoResult = await generateVideoWithFal({
+        prompt: generated.firstStep.visualPrompt,
+        cameraMotion: generated.firstStep.cameraMotionPrompt,
+        stepNumber: 1,
+        propReferenceImages: initialPropImages,
+        voiceDirection: generated.firstStep.voiceDirection
+      });
+      initialVideoUrl = videoResult.videoUrl;
+      initialThumbnailUrl = videoResult.thumbnailUrl;
+    } else {
+      console.log('[Cinema] 🛡️ Generación PAUSADA: Usando video simulado para el paso 1 sin llamar a fal.ai.');
+      const mock = CINEMATIC_MOCK_VIDEOS[0];
+      initialVideoUrl = mock.url;
+      initialThumbnailUrl = mock.poster;
+    }
 
     const firstStepWithVideo: MovieStep = {
       ...generated.firstStep,
-      videoUrl: videoResult.videoUrl,
-      thumbnailUrl: videoResult.thumbnailUrl,
+      videoUrl: initialVideoUrl,
+      thumbnailUrl: initialThumbnailUrl,
       propReferenceImages: initialPropImages
     };
 
@@ -225,7 +273,10 @@ class CinemaOrchestrator {
       status: 'streaming',
       currentStep: 1,
       totalSteps: 100,
-      bible: generated.bible,
+      bible: {
+        ...generated.bible,
+        isGenerationPaused: this.isGenerationPaused
+      } as any,
       steps: [firstStepWithVideo],
       createdAt: new Date().toISOString(),
       totalVotesCast: 0
@@ -248,7 +299,11 @@ class CinemaOrchestrator {
   }
 
   public startEngineLoop() {
-    if (this.isRunning && this.timerInterval) return;
+    if (this.isPaused) return;
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
     this.isRunning = true;
 
     this.timerInterval = setInterval(async () => {
@@ -435,48 +490,79 @@ class CinemaOrchestrator {
         return;
       }
 
-      // CHECK IF AI GENERATION IS PAUSED: REPLAY RANDOM PREVIOUSLY GENERATED VIDEO
+      // CHECK IF AI GENERATION IS PAUSED: REPLAY RANDOM PREVIOUSLY GENERATED VIDEO (ZERO FAL.AI CALLS)
       if (this.isGenerationPaused) {
         const previousSteps = [
           ...this.movie.steps,
           ...this.completedMovies.flatMap(m => m.steps)
         ].filter(s => s.videoUrl);
 
+        let chosenVideoUrl: string;
+        let chosenThumbnailUrl: string | undefined;
+        let chosenTitle = `Scene Continuation`;
+        let chosenSynopsis = `The narrative advances seamlessly using archived visual cinematography.`;
+        let chosenOptions = currentStep.options;
+
         if (previousSteps.length > 0) {
           const randomStep = previousSteps[Math.floor(Math.random() * previousSteps.length)];
-          const replayStepNumber = this.movie.steps.length + 1;
-          const replayStep: MovieStep = {
-            ...randomStep,
-            stepNumber: replayStepNumber,
-            title: `[Archive Replay] ${randomStep.title}`,
-            synopsis: `[Replay Mode] ${randomStep.synopsis}`,
-            options: [
-              { ...randomStep.options[0], votes: 0 },
-              { ...randomStep.options[1], votes: 0 }
-            ],
-            createdAt: new Date().toISOString()
-          };
-
-          this.movie.steps.push(replayStep);
-          this.movie.currentStep = replayStepNumber;
-
-          this.addSystemMessage(`🎲 [ARCHIVE REPLAY] AI generation paused. Replaying archive clip #${randomStep.stepNumber}: "${randomStep.title}"`);
-
-          broadcastCinemaEvent('new_step', {
-            step: replayStep,
-            currentStep: replayStepNumber
-          });
-
-          // Reset voting
-          this.votesA = 0;
-          this.votesB = 0;
-          this.userVotes.clear();
-
-          this.phase = 'PLAYING';
-          this.timeRemaining = 15;
-          await this.broadcastStateSnapshot();
-          return;
+          chosenVideoUrl = randomStep.videoUrl;
+          chosenThumbnailUrl = randomStep.thumbnailUrl;
+          chosenTitle = `[Archive Replay] ${randomStep.title}`;
+          chosenSynopsis = `[Replay Mode] ${randomStep.synopsis}`;
+          chosenOptions = [
+            { ...randomStep.options[0], votes: 0 },
+            { ...randomStep.options[1], votes: 0 }
+          ];
+        } else {
+          const mockIndex = (this.movie.steps.length) % CINEMATIC_MOCK_VIDEOS.length;
+          const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
+          chosenVideoUrl = mock.url;
+          chosenThumbnailUrl = mock.poster;
+          chosenTitle = `[Simulated Scene] ${mock.name}`;
+          chosenSynopsis = `Simulated scene continuous playback while AI generation is paused.`;
         }
+
+        const replayStepNumber = this.movie.steps.length + 1;
+        const replayStep: MovieStep = {
+          stepNumber: replayStepNumber,
+          title: chosenTitle,
+          synopsis: chosenSynopsis,
+          dialogueSnippet: "Continuing scene sequence...",
+          visualPrompt: "Archived cinematic clip playback.",
+          cameraMotionPrompt: "Smooth cinematic hold.",
+          videoUrl: chosenVideoUrl,
+          thumbnailUrl: chosenThumbnailUrl,
+          duration: 15,
+          votingWindowSeconds: 10,
+          options: [
+            { ...chosenOptions[0], votes: 0 },
+            { ...chosenOptions[1], votes: 0 }
+          ],
+          activeCharacters: currentStep.activeCharacters || [],
+          activeProps: currentStep.activeProps || [],
+          environment: currentStep.environment || '',
+          createdAt: new Date().toISOString()
+        };
+
+        this.movie.steps.push(replayStep);
+        this.movie.currentStep = replayStepNumber;
+
+        this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generación IA pausada. Reproduciendo clip #${replayStepNumber}: "${replayStep.title}" (sin gasto de créditos).`);
+
+        broadcastCinemaEvent('new_step', {
+          step: replayStep,
+          currentStep: replayStepNumber
+        });
+
+        // Reset voting
+        this.votesA = 0;
+        this.votesB = 0;
+        this.userVotes.clear();
+
+        this.phase = 'PLAYING';
+        this.timeRemaining = 15;
+        await this.broadcastStateSnapshot();
+        return;
       }
 
       // Generate step n + 1 with DeepSeek and fal.ai MiniMax H3-Max in 480p 16:9
@@ -732,10 +818,10 @@ class CinemaOrchestrator {
     });
     await this.broadcastStateSnapshot();
 
-    // ── Step 3: Generate immersive ad clip with fal.ai in the background ──────
+    // ── Step 3: Generate immersive ad clip with fal.ai in the background (ONLY IF GENERATION IS NOT PAUSED) ──
     // Prompt must explicitly instruct the model to continue the scene and integrate the ad naturally
-    if (this.preAdVideoUrl || adToPlay.cinematicPrompt) {
-      let rawPrompt = adToPlay.cinematicPrompt
+    if (!this.isGenerationPaused && (this.preAdVideoUrl || adToPlay.cinematicPrompt)) {
+      const rawPrompt = adToPlay.cinematicPrompt
         || `A character naturally interacts with or observes "${adToPlay.brandName}". ${adToPlay.tagline || ''}. Maintain identical cinematic lighting, colors, lens flare, and environment as the previous shot.`;
 
       const promptPrefix = "Continúa la escena e integra este anuncio de forma natural en la historia: ";
@@ -937,6 +1023,11 @@ class CinemaOrchestrator {
   public pause(): boolean {
     if (this.isPaused) return false;
     this.isPaused = true;
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+    this.isRunning = false;
     if (this.movie) {
       this.movie.status = 'paused';
       persistMovie(this.movie);
@@ -962,6 +1053,7 @@ class CinemaOrchestrator {
       persistMovie(this.movie);
     }
     this.addSystemMessage('▶️ Cinema stream and AI generation RESUMED. Action continuing!');
+    this.startEngineLoop();
     broadcastCinemaEvent('cinema_resumed', {
       isPaused: false,
       phase: this.phase,
@@ -986,7 +1078,14 @@ class CinemaOrchestrator {
   public pauseGeneration(): boolean {
     if (this.isGenerationPaused) return false;
     this.isGenerationPaused = true;
-    this.addSystemMessage('⏸️ AI scene generation PAUSED. Switching to random archive replay mode.');
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).__isCinemaGenerationPaused = true;
+    }
+    if (this.movie) {
+      (this.movie.bible as any).isGenerationPaused = true;
+      persistMovie(this.movie);
+    }
+    this.addSystemMessage('⏸️ AI scene generation PAUSED. Switching to random archive replay mode (zero video credits spent).');
     broadcastCinemaEvent('generation_paused', {
       isGenerationPaused: true
     });
@@ -1000,6 +1099,13 @@ class CinemaOrchestrator {
   public resumeGeneration(): boolean {
     if (!this.isGenerationPaused) return false;
     this.isGenerationPaused = false;
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).__isCinemaGenerationPaused = false;
+    }
+    if (this.movie) {
+      (this.movie.bible as any).isGenerationPaused = false;
+      persistMovie(this.movie);
+    }
     this.addSystemMessage('▶️ AI scene generation RESUMED. Next scenes will be synthesized with DeepSeek & fal.ai.');
     broadcastCinemaEvent('generation_resumed', {
       isGenerationPaused: false

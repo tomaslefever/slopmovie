@@ -1,7 +1,7 @@
 import { fal } from "@fal-ai/client";
 
 // High-fidelity cinematic preview clips for mock/demo mode
-const CINEMATIC_MOCK_VIDEOS = [
+export const CINEMATIC_MOCK_VIDEOS = [
   {
     url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
     poster: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80",
@@ -28,6 +28,12 @@ const CINEMATIC_MOCK_VIDEOS = [
     name: "The Neon Spire Infiltration"
   }
 ];
+
+export function isFalGenerationPaused(): boolean {
+  if (process.env.PAUSE_VIDEO_GENERATION === 'true') return true;
+  if (typeof globalThis !== 'undefined' && Boolean((globalThis as any).__isCinemaGenerationPaused)) return true;
+  return false;
+}
 
 export interface VideoGenerationParams {
   prompt: string;
@@ -59,6 +65,23 @@ export async function generateVideoWithFal({
   propReferenceImages = [],
   voiceDirection = ""
 }: VideoGenerationParams): Promise<VideoGenerationResult> {
+  // Credit protection guard: if video generation is paused, immediately return mock video without calling fal.ai
+  if (isFalGenerationPaused()) {
+    console.log(`[fal.ai] 🛡️ Generación de video PAUSADA (protección de créditos activa). Retornando clip simulado para el paso ${stepNumber}.`);
+    const mockIndex = (stepNumber - 1) % CINEMATIC_MOCK_VIDEOS.length;
+    const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
+    return {
+      videoUrl: mock.url,
+      thumbnailUrl: mock.poster,
+      isRealAiGenerated: false,
+      modelUsed: "minimax/h3-max/reference-to-video (Simulador - Modo Pausa)",
+      resolution: "768P",
+      aspectRatio: "adaptive",
+      previousVideoReference: previousVideoUrl,
+      propImagesReferences: propReferenceImages
+    };
+  }
+
   const falKey = process.env.FAL_KEY;
 
   // Build enhanced prompt embedding continuity anchors and audio voice directions
@@ -121,6 +144,24 @@ export async function generateVideoWithFal({
       }
     } catch (error: any) {
       console.error("[fal.ai] minimax/h3-max/reference-to-video generation error:", error?.message || error, "Body:", JSON.stringify(error?.body || {}));
+      const errorStr = `${error?.message || ''} ${JSON.stringify(error?.body || '')}`.toLowerCase();
+      if (
+        error?.status === 402 || 
+        errorStr.includes('payment') || 
+        errorStr.includes('credit') || 
+        errorStr.includes('balance') || 
+        errorStr.includes('quota') ||
+        errorStr.includes('insufficient') ||
+        errorStr.includes('funds')
+      ) {
+        console.warn("[fal.ai] ⚠️ SALDO O CRÉDITOS AGOTADOS en fal.ai: Activando pausa automática de generación para proteger la cuenta.");
+        if (typeof globalThis !== 'undefined') {
+          (globalThis as any).__isCinemaGenerationPaused = true;
+          if ((globalThis as any).__cinemaOrchestratorInstance) {
+            (globalThis as any).__cinemaOrchestratorInstance.pauseGeneration();
+          }
+        }
+      }
     }
   }
 

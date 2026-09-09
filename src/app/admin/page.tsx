@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
 import { ImmersiveAd, AdsConfig, Movie } from '@/types/cinema';
 import { 
   Film, 
@@ -99,6 +99,9 @@ export default function AdminDashboardPage() {
       if (stateRes.ok) {
         const stateData = await stateRes.json();
         setCinemaState(stateData);
+        if (stateData.supabaseConfig?.url && stateData.supabaseConfig?.anonKey) {
+          initSupabaseBrowserClient(stateData.supabaseConfig.url, stateData.supabaseConfig.anonKey);
+        }
       }
     } catch (err) {
       console.error('Error fetching admin data:', err);
@@ -109,6 +112,44 @@ export default function AdminDashboardPage() {
     if (session) {
       fetchData();
       const interval = setInterval(fetchData, 3000);
+
+      const supabase = getSupabaseBrowserClient();
+      if (supabase) {
+        const channel = supabase.channel('cinema_admin_sync', {
+          config: { broadcast: { self: true } }
+        });
+
+        channel
+          .on('broadcast', { event: 'generation_paused' }, () => {
+            setCinemaState((prev: any) => prev ? { ...prev, isGenerationPaused: true } : prev);
+          })
+          .on('broadcast', { event: 'generation_resumed' }, () => {
+            setCinemaState((prev: any) => prev ? { ...prev, isGenerationPaused: false } : prev);
+          })
+          .on('broadcast', { event: 'cinema_paused' }, () => {
+            setCinemaState((prev: any) => prev ? { ...prev, isPaused: true } : prev);
+          })
+          .on('broadcast', { event: 'cinema_resumed' }, () => {
+            setCinemaState((prev: any) => prev ? { ...prev, isPaused: false } : prev);
+          })
+          .on('broadcast', { event: 'state_snapshot' }, (payload: any) => {
+            if (payload.payload) {
+              setCinemaState((prev: any) => ({
+                ...prev,
+                ...payload.payload,
+                isPaused: payload.payload.isPaused !== undefined ? payload.payload.isPaused : prev?.isPaused,
+                isGenerationPaused: payload.payload.isGenerationPaused !== undefined ? payload.payload.isGenerationPaused : prev?.isGenerationPaused
+              }));
+            }
+          })
+          .subscribe();
+
+        return () => {
+          clearInterval(interval);
+          supabase.removeChannel(channel);
+        };
+      }
+
       return () => clearInterval(interval);
     }
   }, [session]);

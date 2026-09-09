@@ -271,7 +271,7 @@ export async function loadActiveMovieFromDb(): Promise<Movie | null> {
     const { data: movies, error } = await supabase
       .from('movies')
       .select('*')
-      .eq('status', 'streaming')
+      .in('status', ['streaming', 'paused'])
       .order('created_at', { ascending: false })
       .limit(1);
 

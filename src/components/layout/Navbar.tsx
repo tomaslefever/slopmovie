@@ -7,7 +7,7 @@ import { audioCues } from '@/lib/audio-cues';
 
 interface NavbarProps {
   movieTitle: string;
-  isMockMode: boolean;
+  isMockMode?: boolean;
   onToggleGallery: () => void;
   isGalleryOpen: boolean;
   currentStep?: number;
@@ -15,7 +15,6 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   movieTitle,
-  isMockMode,
   onToggleGallery,
   isGalleryOpen,
   currentStep = 1

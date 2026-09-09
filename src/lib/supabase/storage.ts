@@ -101,8 +101,12 @@ export async function generateAndStorePropReferenceImage(prop: {
   const falKey = process.env.FAL_KEY;
   const storagePath = `props/${prop.id}.jpg`;
 
-  // If FAL_KEY is available, synthesize a specialized reference image with Flux Schnell
-  if (falKey) {
+  const isPaused = 
+    process.env.PAUSE_VIDEO_GENERATION === 'true' || 
+    (typeof globalThis !== 'undefined' && Boolean((globalThis as any).__isCinemaGenerationPaused));
+
+  // If FAL_KEY is available and generation is NOT paused, synthesize a specialized reference image with Flux Schnell
+  if (falKey && !isPaused) {
     try {
       fal.config({ credentials: falKey });
 
