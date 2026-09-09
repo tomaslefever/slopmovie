@@ -1,6 +1,7 @@
 import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig } from '@/types/cinema';
 import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek } from './deepseek';
-import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS } from './fal-video';
+import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoModel } from './fal-video';
+import type { VideoModelId } from './fal-video';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -111,6 +112,7 @@ class CinemaOrchestrator {
   public isRunning: boolean = false;
   public isPaused: boolean = false;
   public isGenerationPaused: boolean = false;
+  public videoModel: VideoModelId = DEFAULT_VIDEO_MODEL;
   private timerInterval: NodeJS.Timeout | null = null;
   public userVotes: Map<string, 'A' | 'B'> = new Map();
   private isAdvancing: boolean = false;
@@ -253,6 +255,11 @@ class CinemaOrchestrator {
             }
           }
 
+          // Restore director-selected generative video model
+          if (isKnownVideoModel((savedMovie.bible as any)?.videoModel)) {
+            this.videoModel = (savedMovie.bible as any).videoModel;
+          }
+
           // Movie restored from Supabase
           return this.movie;
         }
@@ -302,7 +309,8 @@ class CinemaOrchestrator {
         cameraMotion: generated.firstStep.cameraMotionPrompt,
         stepNumber: 1,
         propReferenceImages: initialPropImages,
-        voiceDirection: generated.firstStep.voiceDirection
+        voiceDirection: generated.firstStep.voiceDirection,
+        model: this.videoModel
       });
       initialVideoUrl = videoResult.videoUrl;
       initialThumbnailUrl = videoResult.thumbnailUrl;
@@ -332,7 +340,8 @@ class CinemaOrchestrator {
       totalSteps: 100,
       bible: {
         ...generated.bible,
-        isGenerationPaused: this.isGenerationPaused
+        isGenerationPaused: this.isGenerationPaused,
+        videoModel: this.videoModel
       } as any,
       steps: [firstStepWithVideo],
       createdAt: new Date().toISOString(),
@@ -393,6 +402,7 @@ class CinemaOrchestrator {
         this.isGenerationPaused = liveState.isGenerationPaused ?? false;
         if (liveState.adsConfig) this.adsConfig = liveState.adsConfig;
         if (liveState.activeAd) this.activeAd = liveState.activeAd;
+        if (isKnownVideoModel(liveState.videoModel)) this.videoModel = liveState.videoModel;
         if (liveState.currentStep && this.movie) {
           this.movie.currentStep = liveState.currentStep;
         }
@@ -795,7 +805,8 @@ class CinemaOrchestrator {
           stepNumber: nextStepRaw.stepNumber,
           previousVideoUrl: storyReferenceUrl,
           propReferenceImages: activePropImages,
-          voiceDirection: nextStepRaw.voiceDirection
+          voiceDirection: nextStepRaw.voiceDirection,
+          model: this.videoModel
         });
 
         // Consume and reset preAdVideoUrl — it must never persist past this step
@@ -1106,6 +1117,7 @@ class CinemaOrchestrator {
         cameraMotion: "Smooth dolly or static hold, matching the previous scene's camera language",
         stepNumber: this.movie?.steps.length ?? 0,
         previousVideoUrl: this.preAdVideoUrl || undefined,
+        model: this.videoModel
       }).then(async (adVideo) => {
         if (!this.activeAd || this.activeAd.id !== adToPlay.id) return; // Phase already changed
 
@@ -1291,6 +1303,7 @@ class CinemaOrchestrator {
       isLive: !this.isPaused,
       isPaused: this.isPaused,
       isGenerationPaused: this.isGenerationPaused,
+      videoModel: this.videoModel,
       activeAd: this.activeAd,
       adsConfig: this.adsConfig,
       apiStatus: {
@@ -1398,6 +1411,34 @@ class CinemaOrchestrator {
    */
   public togglePauseGeneration(): boolean {
     return this.isGenerationPaused ? this.resumeGeneration() : this.pauseGeneration();
+  }
+
+  /**
+   * Silently adopt a persisted video model read from the database (no broadcast/persist).
+   */
+  public adoptVideoModel(model: string | null | undefined): void {
+    if (isKnownVideoModel(model)) {
+      this.videoModel = model;
+    }
+  }
+
+  /**
+   * Director selects which generative video model fal.ai should use.
+   * Persisted in the movie bible so it survives restarts and movie rotations.
+   */
+  public setVideoModel(model: string): boolean {
+    if (!isKnownVideoModel(model)) return false;
+    if (this.videoModel === model) return true;
+
+    this.videoModel = model;
+    if (this.movie) {
+      (this.movie.bible as any).videoModel = model;
+      persistMovie(this.movie);
+    }
+    this.addSystemMessage(`🎞️ Director switched generative video model to ${model}.`);
+    broadcastCinemaEvent('video_model_changed', { videoModel: model });
+    this.broadcastStateSnapshot();
+    return true;
   }
 
   /**
@@ -1569,6 +1610,7 @@ class CinemaOrchestrator {
         isLive: !this.isPaused,
         isPaused: this.isPaused,
         isGenerationPaused: this.isGenerationPaused,
+        videoModel: this.videoModel,
         activeAd: this.activeAd,
         adsConfig: this.adsConfig,
         selectedOption: currentStepObj?.selectedOption,
@@ -1602,7 +1644,8 @@ class CinemaOrchestrator {
       adsConfig: state.adsConfig,
       isLive: state.isLive,
       isPaused: state.isPaused,
-      isGenerationPaused: state.isGenerationPaused
+      isGenerationPaused: state.isGenerationPaused,
+      videoModel: state.videoModel
     });
   }
 }

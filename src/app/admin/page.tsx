@@ -28,6 +28,11 @@ import {
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
 
+const VIDEO_MODEL_CHOICES = [
+  { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (768P · con referencias)' },
+  { id: 'minimax/h3-max-turbo', label: 'MiniMax H3-Max Turbo — Text-to-Video (480P 16:9 · sin referencias)' }
+];
+
 export default function AdminDashboardPage() {
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -53,6 +58,7 @@ export default function AdminDashboardPage() {
   const [isTogglingPause, setIsTogglingPause] = useState(false);
   const [selectedStepNumber, setSelectedStepNumber] = useState<number | ''>('');
   const [isJumpingStep, setIsJumpingStep] = useState(false);
+  const [videoModel, setVideoModel] = useState<string>('minimax/h3-max/reference-to-video');
 
   // New Ad Form State
   const [newBrandName, setNewBrandName] = useState('');
@@ -110,6 +116,9 @@ export default function AdminDashboardPage() {
         if (stateData.allMovies && Array.isArray(stateData.allMovies)) {
           setAllMovies(stateData.allMovies);
         }
+        if (stateData.videoModel) {
+          setVideoModel(stateData.videoModel);
+        }
         setSelectedMovieId(prev => prev || stateData.movie?.id || (stateData.allMovies?.[0]?.id ?? ''));
         if (stateData.supabaseConfig?.url && stateData.supabaseConfig?.anonKey) {
           initSupabaseBrowserClient(stateData.supabaseConfig.url, stateData.supabaseConfig.anonKey);
@@ -152,6 +161,9 @@ export default function AdminDashboardPage() {
                 isPaused: payload.payload.isPaused !== undefined ? payload.payload.isPaused : prev?.isPaused,
                 isGenerationPaused: payload.payload.isGenerationPaused !== undefined ? payload.payload.isGenerationPaused : prev?.isGenerationPaused
               }));
+              if (payload.payload.videoModel) {
+                setVideoModel(payload.payload.videoModel);
+              }
             }
           })
           .subscribe();
@@ -425,6 +437,32 @@ export default function AdminDashboardPage() {
       showFeedback('Network error toggling generation pause');
     } finally {
       setIsTogglingGenPause(false);
+    }
+  };
+
+  // Change generative video model (fal.ai)
+  const handleSetVideoModel = async (model: string) => {
+    audioCues.playClick();
+    setVideoModel(model);
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_video_model', model })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          showFeedback(`🎞️ Modelo generativo de video: ${data.videoModel}`);
+          fetchData();
+        } else {
+          showFeedback('Modelo de video no válido');
+        }
+      } else {
+        showFeedback('Error al cambiar el modelo de video');
+      }
+    } catch {
+      showFeedback('Error de red al cambiar el modelo de video');
     }
   };
 
@@ -1076,6 +1114,42 @@ export default function AdminDashboardPage() {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Generative Video Model Selector (Director Only) */}
+            <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
+                    Generative Video Model
+                  </h3>
+                </div>
+                <p className="text-xs text-neutral-400 max-w-xl">
+                  Selecciona el modelo de fal.ai que generará las escenas y los comerciales. H3-Max Turbo solo soporta texto a video: se descartan las referencias (escena previa, imágenes de props y audio).
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1 w-full sm:w-96 flex-shrink-0">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  Modelo activo:
+                </label>
+                <select
+                  value={videoModel}
+                  onChange={e => handleSetVideoModel(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-black/90 border border-amber-500/30 text-white text-xs font-mono focus:border-amber-400 focus:outline-none cursor-pointer"
+                >
+                  {VIDEO_MODEL_CHOICES.map(m => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+                <span className="text-[10px] font-mono text-neutral-500">
+                  {videoModel === 'minimax/h3-max-turbo'
+                    ? 'Text-to-Video: continuidad visual solo vía prompt, sin clips/imágenes de referencia.'
+                    : 'Reference-to-Video: mantiene continuidad con el clip previo y las imágenes de props.'}
+                </span>
+              </div>
             </div>
 
             {/* Movie & Scene Selection Broadcast Control (ADMIN ONLY) */}

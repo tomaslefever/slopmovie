@@ -180,6 +180,7 @@ export interface CinemaState {
   isLive: boolean;
   isPaused?: boolean;
   isGenerationPaused?: boolean;
+  videoModel?: string;
   activeAd?: ImmersiveAd | null;
   adsConfig?: AdsConfig;
   apiStatus?: {

@@ -816,6 +816,7 @@ export interface LiveCinemaStateRecord {
   isLive: boolean;
   isPaused: boolean;
   isGenerationPaused: boolean;
+  videoModel?: string | null;
   activeAd?: ImmersiveAd | null;
   adsConfig?: AdsConfig;
   selectedOption?: 'A' | 'B';
@@ -908,6 +909,7 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
         isLive: payload.isLive,
         isPaused: payload.isPaused,
         isGenerationPaused: payload.isGenerationPaused,
+        videoModel: payload.videoModel ?? null,
         activeAd: payload.activeAd || null,
         adsConfig: payload.adsConfig || null,
         selectedOption: payload.selectedOption || null,
@@ -961,6 +963,7 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
         isLive: data.is_live,
         isPaused: data.is_paused,
         isGenerationPaused: data.is_generation_paused,
+        videoModel: data.video_model ?? null,
         adsConfig: data.ads_config,
         selectedOption: data.selected_option,
         wasRandomPick: data.was_random_pick,

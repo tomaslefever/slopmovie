@@ -24,6 +24,9 @@ export async function GET(request: Request) {
   let liveState = await loadLiveCinemaStateFromDb();
   let activeMovie = await loadActiveMovieFromDb(liveState?.movieId);
 
+  // Adopt the director-selected video model persisted in the DB
+  cinemaEngine.adoptVideoModel(liveState?.videoModel);
+
   // If no movie exists in DB yet, initialize one
   if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) {
     activeMovie = await cinemaEngine.initializeMovie();
@@ -124,6 +127,7 @@ export async function GET(request: Request) {
     isLive: liveState?.isLive !== false,
     isPaused: liveState?.isPaused ?? false,
     isGenerationPaused: liveState?.isGenerationPaused ?? false,
+    videoModel: cinemaEngine.videoModel,
     activeAd: liveState?.activeAd || null,
     adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
     apiStatus: {
@@ -285,6 +289,16 @@ export async function POST(request: Request) {
         success,
         movie: cinemaEngine.movie,
         currentStep: cinemaEngine.movie?.currentStep,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'set_video_model') {
+      const { model } = body;
+      const success = cinemaEngine.setVideoModel(model);
+      return NextResponse.json({
+        success,
+        videoModel: cinemaEngine.videoModel,
         state: cinemaEngine.getState()
       });
     }
