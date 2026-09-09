@@ -170,8 +170,8 @@ export interface CinemaState {
   phase: PlaybackPhase;
   timeRemaining: number; // in seconds
   phaseDuration?: number; // Initial duration in seconds of current phase
-  phaseStartedAt?: number; // Epoch ms when current phase started
-  phaseEndsAt?: number; // Epoch ms when current phase will end
+  phaseStartedAt?: string | number; // Epoch ms or ISO string when current phase started
+  phaseEndsAt?: string | number; // Epoch ms or ISO string when current phase will end
   totalAudience: number;
   votesA: number;
   votesB: number;

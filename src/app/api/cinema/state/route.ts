@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server';
 import { cinemaEngine } from '@/lib/cinema-orchestrator';
-import { loadUserVoteForStep, loadViewerPreferences } from '@/lib/supabase/db';
+import { cinemaWorker } from '@/lib/cinema-worker';
+import { 
+  loadActiveMovieFromDb, 
+  loadLiveCinemaStateFromDb, 
+  loadUserVoteForStep, 
+  loadViewerPreferences,
+  loadRecentChatMessagesFromDb
+} from '@/lib/supabase/db';
+import { CINEMATIC_MOCK_VIDEOS } from '@/lib/fal-video';
 import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
+  // Ensure worker loop is running in background (leader election guarantees only ONE process ticks)
+  cinemaWorker.start();
+
   const { searchParams } = new URL(request.url);
   const cookieStore = await cookies();
   const cookieViewerId = cookieStore.get('kinetic_viewer_id')?.value;
@@ -13,26 +24,60 @@ export async function GET(request: Request) {
   const userId: string = isUuid && rawId ? rawId : crypto.randomUUID();
   const isNewViewer = !isUuid;
 
-  // If no movie is initialized yet, spin up or restore the movie
-  if (!cinemaEngine.movie) {
-    await cinemaEngine.initializeMovie();
+  // 1. Read live cinema state directly from Supabase database (Source of Truth)
+  let liveState = await loadLiveCinemaStateFromDb();
+  let activeMovie = await loadActiveMovieFromDb();
+
+  // If no movie exists in DB yet, initialize one
+  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) {
+    activeMovie = await cinemaEngine.initializeMovie();
+    liveState = await loadLiveCinemaStateFromDb();
   }
 
-  const state = cinemaEngine.getState(userId);
-
-  // Load vote from Supabase if not in memory
-  let hasUserVoted = state.hasUserVoted;
-  if (!hasUserVoted && cinemaEngine.movie) {
-    const dbVote = await loadUserVoteForStep(cinemaEngine.movie.id, cinemaEngine.movie.currentStep, userId);
-    if (dbVote) {
-      hasUserVoted = dbVote;
-      cinemaEngine.userVotes.set(userId, dbVote);
-    }
+  // Ensure active movie steps have valid playback URLs
+  if (activeMovie) {
+    activeMovie.steps = activeMovie.steps.map((s, idx) => {
+      const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+      return {
+        ...s,
+        videoUrl: (!s.videoUrl || s.videoUrl.startsWith('/videos/')) ? mock.url : s.videoUrl,
+        thumbnailUrl: s.thumbnailUrl || mock.poster
+      };
+    });
   }
+
+  const currentStepNum = liveState?.currentStep || activeMovie?.currentStep || 1;
+  const activeStep = activeMovie?.steps.find(s => s.stepNumber === currentStepNum)
+    || activeMovie?.steps?.[activeMovie.steps.length - 1]
+    || {
+      stepNumber: 1,
+      title: "Opening Scene",
+      synopsis: "The adventure begins.",
+      visualPrompt: "",
+      videoUrl: CINEMATIC_MOCK_VIDEOS[0].url,
+      thumbnailUrl: CINEMATIC_MOCK_VIDEOS[0].poster,
+      duration: 15,
+      votingWindowSeconds: 10,
+      options: [
+        { id: 'A', title: 'Option A', description: 'Branch A', prompt: '', votes: 0 },
+        { id: 'B', title: 'Option B', description: 'Branch B', prompt: '', votes: 0 }
+      ],
+      activeCharacters: [],
+      activeProps: [],
+      subtitles: [],
+      environment: "",
+      createdAt: new Date().toISOString()
+    };
+
+  // Load vote for this step directly from Supabase
+  const hasUserVoted = activeMovie 
+    ? await loadUserVoteForStep(activeMovie.id, currentStepNum, userId)
+    : null;
 
   // Load viewer preferences from Supabase
-  const viewerPreferences = await loadViewerPreferences(userId, cinemaEngine.movie?.id);
+  const viewerPreferences = await loadViewerPreferences(userId, activeMovie?.id);
 
+  // Load all available movies for selector
   const allAvailable = await cinemaEngine.loadAllAvailableMovies();
   const allMovies = allAvailable.map(m => ({
     id: m.id,
@@ -52,13 +97,43 @@ export async function GET(request: Request) {
     }))
   }));
 
+  // Load recent chat messages from Supabase
+  const chatMessages = activeMovie 
+    ? await loadRecentChatMessagesFromDb(activeMovie.id)
+    : [];
+
+  const timeRemaining = typeof liveState?.timeRemaining === 'number' ? liveState.timeRemaining : 15;
+  const phase = liveState?.phase || 'PLAYING';
+  const phaseDuration = liveState?.phaseDuration || (phase === 'VOTING' ? 10 : 15);
+  const phaseStartedAt = liveState?.phaseStartedAt || new Date().toISOString();
+  const phaseEndsAt = liveState?.phaseEndsAt || new Date(Date.now() + timeRemaining * 1000).toISOString();
+
   const response = NextResponse.json({
-    ...state,
+    movie: activeMovie,
+    activeStep,
+    phase,
+    timeRemaining,
+    phaseDuration,
+    phaseStartedAt,
+    phaseEndsAt,
+    votesA: liveState?.votesA || 0,
+    votesB: liveState?.votesB || 0,
+    totalAudience: liveState?.totalAudience || 142,
+    isLive: liveState?.isLive !== false,
+    isPaused: liveState?.isPaused ?? false,
+    isGenerationPaused: liveState?.isGenerationPaused ?? false,
+    activeAd: liveState?.activeAd || null,
+    adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
+    apiStatus: {
+      hasDeepseek: Boolean(process.env.DEEPSEEK_API_KEY),
+      hasFal: Boolean(process.env.FAL_KEY),
+      isMockMode: !process.env.DEEPSEEK_API_KEY || !process.env.FAL_KEY
+    },
     userId,
     hasUserVoted,
     viewerPreferences,
     allMovies,
-    chatMessages: cinemaEngine.chatMessages.slice(-50),
+    chatMessages: chatMessages.slice(-50),
     supabaseConfig: {
       url: process.env.NEXT_PUBLIC_SUPABASE_URL || null,
       anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || null

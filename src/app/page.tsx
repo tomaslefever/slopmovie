@@ -108,8 +108,10 @@ export default function CinemaStreamingPage() {
               movie: data.movie,
               activeStep: data.activeStep,
               phase: data.phase,
-              // Keep timeRemaining if phase is identical so timers animate smoothly without discrete jumps
-              timeRemaining: (prev && prev.phase === data.phase) ? prev.timeRemaining : data.timeRemaining,
+              timeRemaining: data.timeRemaining,
+              phaseDuration: data.phaseDuration,
+              phaseStartedAt: data.phaseStartedAt,
+              phaseEndsAt: data.phaseEndsAt,
               votesA: data.votesA,
               votesB: data.votesB,
               totalAudience: data.totalAudience,
@@ -386,6 +388,9 @@ export default function CinemaStreamingPage() {
                 ...prev,
                 phase: row.phase ?? prev.phase,
                 timeRemaining: row.time_remaining ?? prev.timeRemaining,
+                phaseDuration: row.phase_duration ?? prev.phaseDuration,
+                phaseStartedAt: row.phase_started_at ?? prev.phaseStartedAt,
+                phaseEndsAt: row.phase_ends_at ?? prev.phaseEndsAt,
                 votesA: row.votes_a ?? prev.votesA,
                 votesB: row.votes_b ?? prev.votesB,
                 totalAudience: row.total_audience ?? prev.totalAudience,
@@ -644,6 +649,8 @@ export default function CinemaStreamingPage() {
                 isVisible={cinemaState.phase === 'VOTING' || cinemaState.phase === 'GENERATING'}
                 phase={cinemaState.phase}
                 timeRemaining={cinemaState.timeRemaining}
+                phaseDuration={cinemaState.phaseDuration}
+                phaseEndsAt={cinemaState.phaseEndsAt}
                 options={cinemaState.activeStep.options}
                 votesA={cinemaState.votesA}
                 votesB={cinemaState.votesB}

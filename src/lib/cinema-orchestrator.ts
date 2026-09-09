@@ -252,9 +252,7 @@ class CinemaOrchestrator {
             }
           }
 
-          if (!this.isPaused) {
-            this.startEngineLoop();
-          }
+          // Movie restored from Supabase
           return this.movie;
         }
       } catch (err) {
@@ -351,50 +349,89 @@ class CinemaOrchestrator {
     await persistMovieStep(this.movie.id, firstStepWithVideo);
 
     this.addSystemMessage(`🎬 Starting new interactive film: "${this.movie.title}"`);
-    this.startEngineLoop();
-
     return this.movie;
   }
 
-  public startEngineLoop() {
-    if (this.isPaused) return;
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
-    this.isRunning = true;
-
-    this.timerInterval = setInterval(async () => {
-      if (!this.movie) return;
-      if (this.isPaused) return; // Live advancement & generation are paused
-
-      if (this.timeRemaining > 1) {
-        this.timeRemaining -= 1;
-        
-        // Random viewer fluctuations
-        if (Math.random() > 0.7) {
-          this.totalAudience += Math.random() > 0.4 ? 1 : -1;
-          if (this.totalAudience < 30) this.totalAudience = 45;
-        }
-
-        // Generate simulated audience chats occasionally
-        if (Math.random() > 0.85) {
-          this.injectSimulatedAudienceActivity();
-        }
-
-        // Persist live state to Supabase periodically (background sync, no counter jump)
-        if (this.timeRemaining % 5 === 0) {
-          this.persistCurrentStateToSupabase();
-        }
-
-      } else {
-        // Transition phase
-        await this.handlePhaseTransition();
+  /**
+   * Synchronize cinema orchestrator with state currently in Supabase.
+   */
+  public async syncFromDatabase() {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const savedMovie = await loadActiveMovieFromDb();
+      if (savedMovie && savedMovie.steps.length > 0) {
+        savedMovie.steps = savedMovie.steps.map((s, idx) => {
+          const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+          return {
+            ...s,
+            videoUrl: (!s.videoUrl || s.videoUrl.startsWith('/videos/')) ? mock.url : s.videoUrl,
+            thumbnailUrl: s.thumbnailUrl || mock.poster
+          };
+        });
+        this.movie = savedMovie;
       }
-    }, 1000);
+
+      const liveState = await loadLiveCinemaStateFromDb(this.movie?.id);
+      if (liveState) {
+        this.phase = liveState.phase || 'PLAYING';
+        this.timeRemaining = typeof liveState.timeRemaining === 'number' ? liveState.timeRemaining : 15;
+        this.phaseDuration = liveState.phaseDuration || 15;
+        this.phaseStartedAt = liveState.phaseStartedAt ? new Date(liveState.phaseStartedAt).getTime() : Date.now();
+        this.phaseEndsAt = liveState.phaseEndsAt ? new Date(liveState.phaseEndsAt).getTime() : Date.now() + this.timeRemaining * 1000;
+        this.votesA = liveState.votesA || 0;
+        this.votesB = liveState.votesB || 0;
+        this.totalAudience = liveState.totalAudience || 142;
+        this.isPaused = liveState.isPaused ?? false;
+        this.isGenerationPaused = liveState.isGenerationPaused ?? false;
+        if (liveState.adsConfig) this.adsConfig = liveState.adsConfig;
+        if (liveState.activeAd) this.activeAd = liveState.activeAd;
+        if (liveState.currentStep && this.movie) {
+          this.movie.currentStep = liveState.currentStep;
+        }
+      }
+    } catch (err) {
+      console.warn('[CinemaEngine] Error syncing from database:', err);
+    }
   }
 
-  private async handlePhaseTransition() {
+  /**
+   * Execute one tick of the engine. Called ONLY by the single leader worker.
+   */
+  public async tickWorker(workerId: string) {
+    if (!this.movie) {
+      await this.initializeMovie();
+      if (!this.movie) return;
+    }
+
+    // If stream is paused by director, refresh heartbeat in Supabase without advancing timers
+    if (this.isPaused) {
+      await this.persistCurrentStateToSupabase(workerId);
+      return;
+    }
+
+    if (this.timeRemaining > 1) {
+      this.timeRemaining -= 1;
+
+      // Random audience fluctuation
+      if (Math.random() > 0.7) {
+        this.totalAudience += Math.random() > 0.4 ? 1 : -1;
+        if (this.totalAudience < 30) this.totalAudience = 45;
+      }
+
+      // Generate simulated audience chats occasionally
+      if (Math.random() > 0.85) {
+        this.injectSimulatedAudienceActivity();
+      }
+
+      // Persist state to Supabase every tick so clients read the exact database state
+      await this.persistCurrentStateToSupabase(workerId);
+    } else {
+      // Transition phase
+      await this.handlePhaseTransition(workerId);
+    }
+  }
+
+  private async handlePhaseTransition(workerId?: string) {
     if (!this.movie) return;
 
     const currentStep = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
@@ -1218,11 +1255,6 @@ class CinemaOrchestrator {
   public pause(): boolean {
     if (this.isPaused) return false;
     this.isPaused = true;
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
-    this.isRunning = false;
     if (this.movie) {
       this.movie.status = 'paused';
       persistMovie(this.movie);
@@ -1248,7 +1280,6 @@ class CinemaOrchestrator {
       persistMovie(this.movie);
     }
     this.addSystemMessage('▶️ Cinema stream and AI generation RESUMED. Action continuing!');
-    this.startEngineLoop();
     broadcastCinemaEvent('cinema_resumed', {
       isPaused: false,
       phase: this.phase,
@@ -1469,7 +1500,7 @@ class CinemaOrchestrator {
     return Array.from(moviesMap.values());
   }
 
-  public async persistCurrentStateToSupabase() {
+  public async persistCurrentStateToSupabase(workerId?: string) {
     if (!this.movie) return;
     try {
       const currentStepObj = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
@@ -1488,17 +1519,21 @@ class CinemaOrchestrator {
         activeAd: this.activeAd,
         adsConfig: this.adsConfig,
         selectedOption: currentStepObj?.selectedOption,
-        wasRandomPick: currentStepObj?.wasRandomPick
+        wasRandomPick: currentStepObj?.wasRandomPick,
+        phaseStartedAt: this.phaseStartedAt,
+        phaseEndsAt: this.phaseEndsAt,
+        phaseDuration: this.phaseDuration,
+        workerId: workerId
       });
     } catch {
       // Non-blocking
     }
   }
 
-  public async broadcastStateSnapshot() {
+  public async broadcastStateSnapshot(workerId?: string) {
     if (!this.movie) return;
     const state = this.getState();
-    await this.persistCurrentStateToSupabase();
+    await this.persistCurrentStateToSupabase(workerId);
     await broadcastCinemaEvent('state_snapshot', {
       movie: state.movie,
       phase: state.phase,

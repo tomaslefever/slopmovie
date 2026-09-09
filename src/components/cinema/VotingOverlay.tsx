@@ -11,6 +11,8 @@ interface VotingOverlayProps {
   isVisible: boolean;
   phase?: PlaybackPhase;
   timeRemaining: number;
+  phaseDuration?: number;
+  phaseEndsAt?: string | number;
   options: [DecisionOption, DecisionOption];
   votesA: number;
   votesB: number;
@@ -24,6 +26,8 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   isVisible,
   phase = 'VOTING',
   timeRemaining,
+  phaseDuration = 10,
+  phaseEndsAt,
   options,
   votesA,
   votesB,
@@ -32,20 +36,31 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   wasRandomPick = false,
   onVote
 }) => {
-  const [localSeconds, setLocalSeconds] = useState(10);
+  const totalDuration = phaseDuration || 10;
+
+  const calculateRemaining = useCallback(() => {
+    if (phaseEndsAt) {
+      const endMs = typeof phaseEndsAt === 'number' ? phaseEndsAt : new Date(phaseEndsAt).getTime();
+      if (!isNaN(endMs)) {
+        const diffSec = Math.ceil((endMs - Date.now()) / 1000);
+        return Math.max(0, diffSec);
+      }
+    }
+    return Math.max(0, timeRemaining);
+  }, [phaseEndsAt, timeRemaining]);
+
+  const [localSeconds, setLocalSeconds] = useState<number>(calculateRemaining);
 
   useEffect(() => {
+    setLocalSeconds(calculateRemaining());
     if (!isVisible || phase !== 'VOTING') return;
-    setLocalSeconds(10);
-    const start = performance.now();
+
     const timer = setInterval(() => {
-      const elapsed = Math.floor((performance.now() - start) / 1000);
-      const remaining = Math.max(0, 10 - elapsed);
-      setLocalSeconds(prev => Math.min(prev, remaining));
-    }, 250);
+      setLocalSeconds(calculateRemaining());
+    }, 200);
 
     return () => clearInterval(timer);
-  }, [isVisible, phase]);
+  }, [isVisible, phase, calculateRemaining]);
 
   const isVotingEnded = phase === 'GENERATING' || (phase === 'VOTING' && localSeconds <= 0);
   const totalVotes = votesA + votesB;
@@ -177,10 +192,8 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                       strokeWidth="5"
                       fill="transparent"
                       strokeDasharray="251.2"
-                      className="drop-shadow-[0_0_12px_rgba(0,240,255,0.8)]"
-                      style={{
-                        animation: 'voting-circle 10s linear forwards'
-                      }}
+                      strokeDashoffset={251.2 * (1 - Math.min(1, Math.max(0, localSeconds / totalDuration)))}
+                      className="drop-shadow-[0_0_12px_rgba(0,240,255,0.8)] transition-[stroke-dashoffset] duration-200"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">

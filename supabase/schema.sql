@@ -245,6 +245,11 @@ create table if not exists public.cinema_state (
   ads_config jsonb not null default '{"autoAdsEnabled": true, "adIntervalSteps": 5, "lastAdStep": 0}'::jsonb,
   selected_option text check (selected_option in ('A', 'B')),
   was_random_pick boolean not null default false,
+  worker_id text,
+  worker_heartbeat timestamptz,
+  phase_started_at timestamptz default now(),
+  phase_ends_at timestamptz default (now() + interval '15 seconds'),
+  phase_duration int default 15,
   updated_at timestamptz not null default now()
 );
 

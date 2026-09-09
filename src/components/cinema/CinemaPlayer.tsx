@@ -119,23 +119,30 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
     }
   }, [currentVideoSrc, activeStep.stepNumber, phase, isMuted]);
 
-  // Enforce scene repeating without sound during VOTING phase
+  // Enforce scene repeating without sound during VOTING phase, and completely pause/mute during COMMERCIAL_BREAK
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    if (phase === 'VOTING') {
+    if (phase === 'COMMERCIAL_BREAK') {
+      // Completely pause and mute main video during sponsor ad break
+      video.pause();
+      video.muted = true;
+    } else if (phase === 'VOTING') {
       // Replay scene continuously without sound during voting
       video.muted = true;
       video.loop = true;
-      if (video.paused) {
+      if (video.paused && !isPaused) {
         video.play().catch(() => {});
       }
     } else if (phase === 'PLAYING') {
       // Restore user sound preference during movie playback
       video.muted = isMuted;
+      if (video.paused && !isPaused) {
+        video.play().catch(() => {});
+      }
     }
-  }, [phase, isMuted]);
+  }, [phase, isMuted, isPaused]);
 
   // Pause or resume HTML video playback when stream is paused/resumed
   useEffect(() => {
@@ -217,7 +224,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
         autoPlay
         playsInline
         loop
-        muted={phase === 'VOTING' ? true : isMuted}
+        muted={phase === 'VOTING' || phase === 'COMMERCIAL_BREAK' ? true : isMuted}
         onTimeUpdate={handleTimeUpdate}
         onError={handleVideoError}
         onEnded={() => {
@@ -228,7 +235,9 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
         }}
         onCanPlay={() => setIsVideoLoading(false)}
         onWaiting={() => setIsVideoLoading(true)}
-        className="w-full h-full object-cover object-center"
+        className={`w-full h-full object-cover object-center transition-opacity duration-300 ${
+          phase === 'COMMERCIAL_BREAK' ? 'opacity-0 invisible pointer-events-none' : 'opacity-100 visible'
+        }`}
       />
 
       {/* Subtle Grain Overlay */}

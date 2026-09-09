@@ -818,6 +818,12 @@ export interface LiveCinemaStateRecord {
   adsConfig?: AdsConfig;
   selectedOption?: 'A' | 'B';
   wasRandomPick?: boolean;
+  phaseStartedAt?: string | number;
+  phaseEndsAt?: string | number;
+  phaseDuration?: number;
+  workerId?: string | null;
+  workerHeartbeat?: string | null;
+  movieId?: string;
   updatedAt?: string;
 }
 
@@ -834,11 +840,19 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
   const supabase = getSupabaseServerClient();
   if (!supabase) return;
 
-  const nowIso = new Date().toISOString();
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const phaseStartedAtIso = payload.phaseStartedAt 
+    ? (typeof payload.phaseStartedAt === 'number' ? new Date(payload.phaseStartedAt).toISOString() : payload.phaseStartedAt) 
+    : nowIso;
+  const phaseEndsAtIso = payload.phaseEndsAt 
+    ? (typeof payload.phaseEndsAt === 'number' ? new Date(payload.phaseEndsAt).toISOString() : payload.phaseEndsAt) 
+    : new Date(now + (payload.timeRemaining || 15) * 1000).toISOString();
+  const phaseDuration = payload.phaseDuration || payload.timeRemaining || 15;
 
   // 1. Try public.cinema_state table
   try {
-    await supabase.from('cinema_state').upsert({
+    const upsertData: Record<string, any> = {
       id: 'active_session',
       movie_id: payload.movieId,
       phase: payload.phase,
@@ -854,8 +868,18 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
       ads_config: payload.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
       selected_option: payload.selectedOption || null,
       was_random_pick: payload.wasRandomPick || false,
+      phase_started_at: phaseStartedAtIso,
+      phase_ends_at: phaseEndsAtIso,
+      phase_duration: phaseDuration,
       updated_at: nowIso
-    }, { onConflict: 'id' });
+    };
+
+    if (payload.workerId !== undefined) {
+      upsertData.worker_id = payload.workerId;
+      upsertData.worker_heartbeat = payload.workerHeartbeat || nowIso;
+    }
+
+    await supabase.from('cinema_state').upsert(upsertData, { onConflict: 'id' });
   } catch {
     // Non-blocking fallback
   }
@@ -886,6 +910,11 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
         adsConfig: payload.adsConfig || null,
         selectedOption: payload.selectedOption || null,
         wasRandomPick: payload.wasRandomPick || false,
+        phaseStartedAt: phaseStartedAtIso,
+        phaseEndsAt: phaseEndsAtIso,
+        phaseDuration: phaseDuration,
+        workerId: payload.workerId || null,
+        workerHeartbeat: payload.workerHeartbeat || nowIso,
         updatedAt: nowIso
       }
     };
@@ -898,7 +927,7 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
         bible: updatedBible
       })
       .eq('id', payload.movieId);
-  } catch (err) {
+  } catch {
     // Non-blocking
   }
 }
@@ -920,6 +949,7 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
     const { data, error } = await query.maybeSingle();
     if (!error && data) {
       return {
+        movieId: data.movie_id,
         phase: data.phase as PlaybackPhase,
         timeRemaining: data.time_remaining,
         currentStep: data.current_step,
@@ -932,6 +962,11 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
         adsConfig: data.ads_config,
         selectedOption: data.selected_option,
         wasRandomPick: data.was_random_pick,
+        phaseStartedAt: data.phase_started_at,
+        phaseEndsAt: data.phase_ends_at,
+        phaseDuration: data.phase_duration,
+        workerId: data.worker_id,
+        workerHeartbeat: data.worker_heartbeat,
         updatedAt: data.updated_at
       };
     }
@@ -941,21 +976,99 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
 
   // 2. Fallback to movies.bible.liveState
   try {
-    let query = supabase.from('movies').select('bible').in('status', ['streaming', 'paused']);
+    let query = supabase.from('movies').select('id, bible').in('status', ['streaming', 'paused']);
     if (movieId) {
-      query = supabase.from('movies').select('bible').eq('id', movieId);
+      query = supabase.from('movies').select('id, bible').eq('id', movieId);
     } else {
       query = query.order('created_at', { ascending: false }).limit(1);
     }
     const { data, error } = await query.maybeSingle();
     if (!error && data?.bible?.liveState) {
-      return data.bible.liveState as LiveCinemaStateRecord;
+      return {
+        ...(data.bible.liveState as LiveCinemaStateRecord),
+        movieId: data.id
+      };
     }
   } catch {
     // Non-blocking
   }
 
   return null;
+}
+
+/**
+ * Acquire or renew the single worker leader lock in Supabase.
+ * Uses atomic heartbeat comparison:
+ * A worker holds the lock if its heartbeat is fresher than 6 seconds ago.
+ * If stale or empty or matching this worker, lock is granted!
+ */
+export async function acquireOrRenewWorkerLock(workerId: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const staleThreshold = 6000; // 6 seconds threshold
+
+  try {
+    const { data: state, error } = await supabase
+      .from('cinema_state')
+      .select('worker_id, worker_heartbeat')
+      .eq('id', 'active_session')
+      .maybeSingle();
+
+    if (error) return false;
+
+    if (!state) {
+      // Initialize active_session if missing
+      await supabase.from('cinema_state').insert({
+        id: 'active_session',
+        worker_id: workerId,
+        worker_heartbeat: nowIso,
+        updated_at: nowIso
+      });
+      return true;
+    }
+
+    const currentWorker = state.worker_id;
+    const lastHeartbeat = state.worker_heartbeat ? new Date(state.worker_heartbeat).getTime() : 0;
+    const isStale = (now - lastHeartbeat) > staleThreshold;
+
+    if (!currentWorker || currentWorker === workerId || isStale) {
+      const { error: updateError } = await supabase
+        .from('cinema_state')
+        .update({
+          worker_id: workerId,
+          worker_heartbeat: nowIso
+        })
+        .eq('id', 'active_session');
+
+      return !updateError;
+    }
+
+    // Another worker is actively holding the lock
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Release worker lock on shutdown
+ */
+export async function releaseWorkerLock(workerId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  try {
+    await supabase
+      .from('cinema_state')
+      .update({ worker_id: null, worker_heartbeat: null })
+      .eq('id', 'active_session')
+      .eq('worker_id', workerId);
+  } catch {
+    // Non-blocking
+  }
 }
 
 /**
