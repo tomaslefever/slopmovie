@@ -1,7 +1,7 @@
-﻿# Supabase CLI configuration
+# Supabase CLI configuration
 # https://supabase.com/docs/guides/cli/config
 
-project_id = "slopmovie"
+project_id = "bqaivpmgfntphfggbitz"
 
 [api]
 enabled = true
