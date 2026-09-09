@@ -1078,223 +1078,211 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            {/* Movie & Scene Selection Broadcast Control */}
-            {(() => {
-              const availableMoviesList = allMovies.length > 0 
-                ? allMovies 
-                : (cinemaState?.movie ? [cinemaState.movie] : []);
-              const inspectedMovie = availableMoviesList.find((m: any) => m.id === selectedMovieId) || cinemaState?.movie || availableMoviesList[0];
-              const isBroadcastingThisMovie = Boolean(cinemaState?.movie && inspectedMovie && cinemaState.movie.id === inspectedMovie.id);
-
-              return inspectedMovie ? (
-                <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 space-y-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center space-x-2">
-                        <Film className="w-5 h-5 text-amber-400 flex-shrink-0" />
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono truncate">
-                          Control de Transmisión: Selector de Película & Escena
-                        </h3>
-                      </div>
-                      <p className="text-xs text-neutral-400 mt-1 max-w-xl">
-                        Escoge cualquier película y escena del catálogo para ponerla inmediatamente al aire en la transmisión en vivo para toda la audiencia.
-                      </p>
+            {/* Movie & Scene Selection Broadcast Control (ADMIN ONLY) */}
+            {cinemaState?.movie && (
+              <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 space-y-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-2">
+                      <Film className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono truncate">
+                        Control de Emisión: Selector de Película & Escena (Solo Director)
+                      </h3>
                     </div>
+                    <p className="text-xs text-neutral-400 mt-1 max-w-xl">
+                      Selecciona la película que se transmitirá en vivo a toda la audiencia y la escena exacta para poner al aire de inmediato.
+                    </p>
+                  </div>
 
-                    {/* Movie & Step Quick Selectors */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0">
-                      {/* Movie Selector */}
-                      <div className="w-full sm:w-60 md:w-72">
-                        <select
-                          value={inspectedMovie.id}
-                          onChange={e => {
-                            setSelectedMovieId(e.target.value);
-                            setSelectedStepNumber('');
-                          }}
-                          className="w-full px-3 py-2 rounded-xl bg-black/80 border border-white/15 text-white text-xs font-mono focus:border-amber-400 focus:outline-none truncate cursor-pointer"
-                        >
-                          {availableMoviesList.map((m: any) => {
-                            const isLive = cinemaState?.movie?.id === m.id;
+                  {/* Movie & Step Selectors (Direct Broadcast) */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0">
+                    {/* Movie in Emission Selector */}
+                    <div className="flex flex-col gap-1 w-full sm:w-64 md:w-80">
+                      <label className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        Película en Emisión:
+                      </label>
+                      <select
+                        value={cinemaState.movie.id}
+                        onChange={e => {
+                          const targetId = e.target.value;
+                          if (targetId && targetId !== cinemaState.movie.id) {
+                            handleSwitchMovie(targetId, 1);
+                          }
+                        }}
+                        disabled={isSwitchingMovie}
+                        className="w-full px-3 py-2 rounded-xl bg-black/90 border border-amber-500/30 text-white text-xs font-mono focus:border-amber-400 focus:outline-none truncate cursor-pointer disabled:opacity-50"
+                      >
+                        {(() => {
+                          const list = allMovies.length > 0 
+                            ? allMovies 
+                            : [cinemaState.movie];
+                          const hasCurrent = list.some((m: any) => m.id === cinemaState.movie.id);
+                          const completeList = hasCurrent ? list : [cinemaState.movie, ...list];
+
+                          return completeList.map((m: any) => {
+                            const isLive = cinemaState.movie.id === m.id;
                             const count = m.steps?.length || m.totalSteps || 0;
                             return (
                               <option key={m.id} value={m.id}>
-                                {isLive ? '🔴 [EN VIVO] ' : ''}{m.title} ({m.genre}) - {count} sc.
+                                {isLive ? '🔴 [EN EMISIÓN] ' : ''}{m.title} ({m.genre}) - {count} sc.
                               </option>
                             );
-                          })}
-                        </select>
-                      </div>
+                          });
+                        })()}
+                      </select>
+                    </div>
 
-                      {/* Step Selector */}
-                      <div className="w-full sm:w-44 md:w-48">
-                        <select
-                          value={selectedStepNumber !== '' ? selectedStepNumber : (inspectedMovie.currentStep || 1)}
-                          onChange={e => setSelectedStepNumber(e.target.value ? Number(e.target.value) : '')}
-                          className="w-full px-3 py-2 rounded-xl bg-black/80 border border-white/15 text-white text-xs font-mono focus:border-amber-400 focus:outline-none truncate cursor-pointer"
-                        >
-                          {(inspectedMovie.steps || []).map((s: any) => {
-                            const shortTitle = s.title ? (s.title.length > 18 ? `${s.title.slice(0, 18)}...` : s.title) : '';
-                            return (
-                              <option key={s.stepNumber} value={s.stepNumber}>
-                                Step {s.stepNumber}{shortTitle ? ` - ${shortTitle}` : ''}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-
-                      {/* Broadcast CTA */}
-                      <button
-                        onClick={() => handleSwitchMovie(inspectedMovie.id, Number(selectedStepNumber || inspectedMovie.currentStep || 1))}
-                        disabled={isSwitchingMovie || isJumpingStep}
-                        className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.25)] flex-shrink-0 active:scale-95"
+                    {/* Step in Emission Selector */}
+                    <div className="flex flex-col gap-1 w-full sm:w-44 md:w-52">
+                      <label className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                        Escena (Step) al Aire:
+                      </label>
+                      <select
+                        value={cinemaState.movie.currentStep || 1}
+                        onChange={e => {
+                          const stepNum = Number(e.target.value);
+                          if (stepNum && stepNum !== cinemaState.movie.currentStep) {
+                            handleJumpToStep(stepNum);
+                          }
+                        }}
+                        disabled={isJumpingStep || isSwitchingMovie}
+                        className="w-full px-3 py-2 rounded-xl bg-black/90 border border-cyan-500/30 text-white text-xs font-mono focus:border-cyan-400 focus:outline-none truncate cursor-pointer disabled:opacity-50"
                       >
-                        <Radio className="w-3.5 h-3.5 text-black" />
-                        <span>{isSwitchingMovie ? 'Transmitiendo...' : 'Transmitir en Vivo'}</span>
+                        {(cinemaState.movie.steps || []).map((s: any) => {
+                          const shortTitle = s.title ? (s.title.length > 18 ? `${s.title.slice(0, 18)}...` : s.title) : '';
+                          return (
+                            <option key={s.stepNumber} value={s.stepNumber}>
+                              Step {s.stepNumber}{shortTitle ? ` - ${shortTitle}` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Replay Current Step CTA */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-mono uppercase tracking-wider text-transparent select-none hidden sm:block">
+                        Acción
+                      </label>
+                      <button
+                        onClick={() => handleJumpToStep(cinemaState.movie.currentStep || 1)}
+                        disabled={isJumpingStep || isSwitchingMovie}
+                        className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.25)] flex-shrink-0 active:scale-95 h-[38px]"
+                        title="Reiniciar reproducción de la escena actual en vivo"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-black" />
+                        <span>Replay</span>
                       </button>
                     </div>
                   </div>
+                </div>
 
-                  {/* Selected Movie Overview Banner */}
-                  <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-white font-mono">
-                          {inspectedMovie.title}
-                        </span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/10 text-cyan-300">
-                          {inspectedMovie.genre}
-                        </span>
-                        {isBroadcastingThisMovie ? (
-                          <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-mono font-bold text-emerald-400 animate-pulse">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            AL AIRE AHORA
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-800 text-neutral-400">
-                            ARCHIVO / DISPONIBLE
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-neutral-400 line-clamp-1">
-                        {inspectedMovie.initialPlot || inspectedMovie.tagline || 'Sinopsis de la obra cinematográfica interactiva.'}
-                      </p>
+                {/* Currently Broadcasting Movie Overview Banner */}
+                <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-white font-mono">
+                        {cinemaState.movie.title}
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/10 text-cyan-300">
+                        {cinemaState.movie.genre}
+                      </span>
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-mono font-bold text-emerald-400 animate-pulse">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        TRANSMITIENDO EN VIVO A LA AUDIENCIA
+                      </span>
                     </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0 text-xs font-mono text-neutral-400">
-                      <span>Total Escenas: <strong className="text-white">{inspectedMovie.steps?.length || 0}</strong></span>
-                      {isBroadcastingThisMovie && (
-                        <span>• En emisión: <strong className="text-amber-400">Step #{cinemaState.movie?.currentStep}</strong></span>
-                      )}
-                    </div>
+                    <p className="text-xs text-neutral-400 line-clamp-1">
+                      {cinemaState.movie.initialPlot || cinemaState.movie.tagline || 'Sinopsis de la obra cinematográfica interactiva en emisión.'}
+                    </p>
                   </div>
 
-                  {/* Interactive Grid of Movie Steps */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
-                      <span className="uppercase tracking-wider">
-                        Escenas Disponibles ({inspectedMovie.steps?.length || 0} Steps)
-                      </span>
-                      <span className="text-neutral-500 text-[11px]">
-                        Haz clic en &quot;Transmitir este Step&quot; para enviar esa escena en vivo
-                      </span>
-                    </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 text-xs font-mono text-neutral-400">
+                    <span>Total Escenas: <strong className="text-white">{cinemaState.movie.steps?.length || cinemaState.movie.totalSteps || 0}</strong></span>
+                    <span>• Al aire: <strong className="text-amber-400">Step #{cinemaState.movie.currentStep}</strong></span>
+                  </div>
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar bg-black/20 p-2 rounded-xl border border-white/5">
-                      {(inspectedMovie.steps || []).map((step: any) => {
-                        const isCurrentActive = isBroadcastingThisMovie && cinemaState?.movie?.currentStep === step.stepNumber;
-                        return (
-                          <div
-                            key={step.stepNumber}
-                            className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
-                              isCurrentActive
-                                ? 'bg-amber-950/20 border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/40'
-                                : 'bg-black/50 border-white/5 hover:border-white/20'
-                            }`}
-                          >
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                                    isCurrentActive ? 'bg-amber-500 text-black' : 'bg-neutral-800 text-neutral-300'
-                                  }`}>
-                                    STEP #{step.stepNumber}
-                                  </span>
-                                  {isCurrentActive && (
-                                    <span className="flex items-center gap-1 text-[10px] font-mono text-amber-400 font-bold animate-pulse">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                      EN TRANSMISIÓN EN VIVO
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="text-[10px] font-mono text-neutral-500">
-                                  {step.duration || 15}s
+                {/* Interactive Grid of Movie Steps */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
+                    <span className="uppercase tracking-wider">
+                      Escenas de la Película en Emisión ({cinemaState.movie.steps?.length || 0} Steps)
+                    </span>
+                    <span className="text-neutral-500 text-[11px]">
+                      Haz clic en &quot;Transmitir este Step&quot; para saltar a cualquier escena en vivo
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar bg-black/20 p-2 rounded-xl border border-white/5">
+                    {(cinemaState.movie.steps || []).map((step: any) => {
+                      const isCurrentActive = cinemaState.movie.currentStep === step.stepNumber;
+                      return (
+                        <div
+                          key={step.stepNumber}
+                          className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
+                            isCurrentActive
+                              ? 'bg-amber-950/20 border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/40'
+                              : 'bg-black/50 border-white/5 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                  isCurrentActive ? 'bg-amber-500 text-black' : 'bg-neutral-800 text-neutral-300'
+                                }`}>
+                                  STEP #{step.stepNumber}
                                 </span>
-                              </div>
-
-                              <h4 className="text-xs font-bold text-white line-clamp-1">
-                                {step.title}
-                              </h4>
-                              <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
-                                {step.synopsis}
-                              </p>
-                            </div>
-
-                            <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
-                              <div className="text-[10px] font-mono text-neutral-400 truncate max-w-[170px]">
-                                {step.selectedOption ? (
-                                  <span>Rama: Opción {step.selectedOption}</span>
-                                ) : (
-                                  <span className="text-neutral-500">Escena inicial</span>
+                                {isCurrentActive && (
+                                  <span className="flex items-center gap-1 text-[10px] font-mono text-amber-400 font-bold animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                    EN TRANSMISIÓN EN VIVO
+                                  </span>
                                 )}
                               </div>
-
-                              <button
-                                onClick={() => handleSwitchMovie(inspectedMovie.id, step.stepNumber)}
-                                disabled={isSwitchingMovie || isJumpingStep || isCurrentActive}
-                                className={`px-3 py-1.5 rounded-lg font-mono text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                                  isCurrentActive
-                                    ? 'bg-amber-500/20 text-amber-400 cursor-default border border-amber-500/30'
-                                    : 'bg-white/10 hover:bg-amber-500 hover:text-black text-white'
-                                }`}
-                              >
-                                <PlayCircle className="w-3.5 h-3.5" />
-                                <span>{isCurrentActive ? 'En Emisión' : 'Transmitir este Step'}</span>
-                              </button>
+                              <span className="text-[10px] font-mono text-neutral-500">
+                                {step.duration || 15}s
+                              </span>
                             </div>
+
+                            <h4 className="text-xs font-bold text-white line-clamp-1">
+                              {step.title}
+                            </h4>
+                            <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
+                              {step.synopsis}
+                            </p>
                           </div>
-                        );
-                      })}
-                    </div>
+
+                          <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
+                            <div className="text-[10px] font-mono text-neutral-400 truncate max-w-[170px]">
+                              {step.selectedOption ? (
+                                <span>Rama: Opción {step.selectedOption}</span>
+                              ) : (
+                                <span className="text-neutral-500">Escena inicial</span>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => handleJumpToStep(step.stepNumber)}
+                              disabled={isSwitchingMovie || isJumpingStep || isCurrentActive}
+                              className={`px-3 py-1.5 rounded-lg font-mono text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                                isCurrentActive
+                                  ? 'bg-amber-500/20 text-amber-400 cursor-default border border-amber-500/30'
+                                  : 'bg-white/10 hover:bg-amber-500 hover:text-black text-white'
+                              }`}
+                            >
+                              <PlayCircle className="w-3.5 h-3.5" />
+                              <span>{isCurrentActive ? 'Al Aire Ahora' : 'Transmitir este Step'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ) : null;
-            })()}
-
-            {/* Current Active Film Meta */}
-            {cinemaState?.movie && (
-              <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 space-y-4">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                  <div>
-                    <span className="text-[10px] font-mono text-cyan-400 uppercase font-bold">
-                      Current Streaming Film
-                    </span>
-                    <h2 className="text-xl font-black text-white">
-                      {cinemaState.movie.title}
-                    </h2>
-                  </div>
-
-                  <span className="px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/30 text-xs font-mono text-cyan-300 font-bold">
-                    STEP {cinemaState.movie.currentStep} / {cinemaState.movie.totalSteps}
-                  </span>
-                </div>
-
-                <p className="text-xs text-neutral-300">
-                  <strong className="text-neutral-400 font-mono">Genre:</strong> {cinemaState.movie.genre}
-                </p>
-                <p className="text-xs text-neutral-400 leading-relaxed font-sans">
-                  {cinemaState.movie.initialPlot}
-                </p>
               </div>
             )}
 
