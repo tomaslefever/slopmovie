@@ -444,7 +444,7 @@ Respond ONLY with a valid JSON object matching this schema:
             duration: 15,
             votingWindowSeconds: 10,
             options: parsed.firstStep.options.map((opt: DecisionOption) => ({ ...opt, votes: 0 })),
-            videoUrl: "/videos/cyberpunk_step_1.mp4",
+            videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
             createdAt: new Date().toISOString()
           }
         };

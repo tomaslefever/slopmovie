@@ -25,6 +25,14 @@ interface CinemaPlayerProps {
   onChangeSubtitleLanguage?: (lang: 'en' | 'es') => void;
 }
 
+const CINEMA_FALLBACK_VIDEOS = [
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+];
+
 export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   movieTitle,
   genre,
@@ -46,6 +54,29 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   const [isMuted, setIsMuted] = useState(() => audioCues.getMuted());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [, setIsVideoLoading] = useState(false);
+
+  // Reliable Video Source Resolution (Fallbacks guarantee a video ALWAYS plays)
+  const fallbackUrl = CINEMA_FALLBACK_VIDEOS[Math.abs((activeStep.stepNumber || 1) - 1) % CINEMA_FALLBACK_VIDEOS.length];
+
+  const getSanitizedVideoUrl = (url?: string) => {
+    if (!url || typeof url !== 'string' || url.trim() === '' || url.startsWith('/videos/')) {
+      return fallbackUrl;
+    }
+    return url;
+  };
+
+  const [currentVideoSrc, setCurrentVideoSrc] = useState<string>(() => getSanitizedVideoUrl(activeStep.videoUrl));
+
+  useEffect(() => {
+    setCurrentVideoSrc(getSanitizedVideoUrl(activeStep.videoUrl));
+  }, [activeStep.videoUrl, activeStep.stepNumber, fallbackUrl]);
+
+  const handleVideoError = () => {
+    console.warn(`[CinemaPlayer] Video failed to load from "${currentVideoSrc}". Reverting to fallback video.`);
+    if (currentVideoSrc !== fallbackUrl) {
+      setCurrentVideoSrc(fallbackUrl);
+    }
+  };
   
   // Subtitle System States synced from Supabase
   const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(initialSubtitlesEnabled);
@@ -77,7 +108,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
 
   // Auto-play and handle video src change
   useEffect(() => {
-    if (videoRef.current && activeStep.videoUrl) {
+    if (videoRef.current && currentVideoSrc) {
       setIsVideoLoading(true);
       videoRef.current.currentTime = 0;
       setVideoCurrentTime(0);
@@ -86,7 +117,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
         // Handled by muted autoplay
       });
     }
-  }, [activeStep.videoUrl, activeStep.stepNumber, phase, isMuted]);
+  }, [currentVideoSrc, activeStep.stepNumber, phase, isMuted]);
 
   // Enforce scene repeating without sound during VOTING phase
   useEffect(() => {
@@ -177,28 +208,28 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
       {/* Ambient background glow */}
       <div className="absolute inset-0 bg-radial from-cyan-950/20 via-transparent to-black pointer-events-none" />
 
-      {/* Main Video Element */}
-      {activeStep.videoUrl && (
-        <video
-          ref={videoRef}
-          src={activeStep.videoUrl}
-          poster={activeStep.thumbnailUrl}
-          autoPlay
-          playsInline
-          loop
-          muted={phase === 'VOTING' ? true : isMuted}
-          onTimeUpdate={handleTimeUpdate}
-          onEnded={() => {
-            if (videoRef.current) {
-              videoRef.current.currentTime = 0;
-              videoRef.current.play().catch(() => {});
-            }
-          }}
-          onCanPlay={() => setIsVideoLoading(false)}
-          onWaiting={() => setIsVideoLoading(true)}
-          className="w-full h-full object-cover object-center"
-        />
-      )}
+      {/* Main Video Element (Always rendered with verified or fallback video) */}
+      <video
+        ref={videoRef}
+        key={currentVideoSrc}
+        src={currentVideoSrc}
+        poster={activeStep.thumbnailUrl}
+        autoPlay
+        playsInline
+        loop
+        muted={phase === 'VOTING' ? true : isMuted}
+        onTimeUpdate={handleTimeUpdate}
+        onError={handleVideoError}
+        onEnded={() => {
+          if (videoRef.current) {
+            videoRef.current.currentTime = 0;
+            videoRef.current.play().catch(() => {});
+          }
+        }}
+        onCanPlay={() => setIsVideoLoading(false)}
+        onWaiting={() => setIsVideoLoading(true)}
+        className="w-full h-full object-cover object-center"
+      />
 
       {/* Subtle Grain Overlay */}
       <div 

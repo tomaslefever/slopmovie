@@ -14,6 +14,8 @@ import {
   persistChatMessage, 
   persistProp,
   loadActiveMovieFromDb, 
+  loadAllMoviesFromDb,
+  loadMovieByIdFromDb,
   loadRecentChatMessagesFromDb,
   loadImmersiveAdsFromDb,
   persistImmersiveAd,
@@ -206,6 +208,15 @@ class CinemaOrchestrator {
       try {
         const savedMovie = await loadActiveMovieFromDb();
         if (savedMovie && savedMovie.steps.length > 0) {
+          // Sanitize step video URLs so none are missing or 404
+          savedMovie.steps = savedMovie.steps.map((s, idx) => {
+            const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+            return {
+              ...s,
+              videoUrl: (!s.videoUrl || s.videoUrl.startsWith('/videos/')) ? mock.url : s.videoUrl,
+              thumbnailUrl: s.thumbnailUrl || mock.poster
+            };
+          });
           this.movie = savedMovie;
           this.phase = 'PLAYING';
           this.timeRemaining = 15;
@@ -1313,6 +1324,13 @@ class CinemaOrchestrator {
     const targetStep = this.movie.steps.find(s => s.stepNumber === stepNumber);
     if (!targetStep) return false;
 
+    // Sanitize videoUrl if missing or broken
+    if (!targetStep.videoUrl || targetStep.videoUrl.startsWith('/videos/')) {
+      const mockIndex = Math.abs(targetStep.stepNumber - 1) % CINEMATIC_MOCK_VIDEOS.length;
+      targetStep.videoUrl = CINEMATIC_MOCK_VIDEOS[mockIndex].url;
+      targetStep.thumbnailUrl = targetStep.thumbnailUrl || CINEMATIC_MOCK_VIDEOS[mockIndex].poster;
+    }
+
     this.movie.currentStep = stepNumber;
     const duration = targetStep.duration || 15;
     this.setPhase('PLAYING', duration);
@@ -1337,6 +1355,118 @@ class CinemaOrchestrator {
 
     await this.broadcastStateSnapshot();
     return true;
+  }
+
+  /**
+   * Switch active broadcasting movie to any existing/archived movie and optionally start at a specific step.
+   */
+  public async switchToMovie(movieId: string, stepNumber: number = 1): Promise<boolean> {
+    let targetMovie: Movie | null = null;
+
+    // 1. Check current movie
+    if (this.movie && this.movie.id === movieId) {
+      targetMovie = this.movie;
+    }
+
+    // 2. Check in-memory completed movies
+    if (!targetMovie) {
+      targetMovie = this.completedMovies.find(m => m.id === movieId) || null;
+    }
+
+    // 3. Check Supabase
+    if (!targetMovie && isSupabaseConfigured()) {
+      targetMovie = await loadMovieByIdFromDb(movieId);
+    }
+
+    if (!targetMovie || !targetMovie.steps || targetMovie.steps.length === 0) {
+      console.warn(`[Cinema] Cannot switch to movie ${movieId}: not found or has no steps`);
+      return false;
+    }
+
+    // Archive current movie if switching to a different one
+    if (this.movie && this.movie.id !== movieId) {
+      this.movie.status = 'completed';
+      if (!this.completedMovies.some(m => m.id === this.movie!.id)) {
+        this.completedMovies.unshift(this.movie);
+      }
+      persistMovie(this.movie);
+    }
+
+    // Sanitize all steps of targetMovie so videos play immediately without errors
+    targetMovie.steps = targetMovie.steps.map((s, idx) => {
+      const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+      return {
+        ...s,
+        videoUrl: (!s.videoUrl || s.videoUrl.startsWith('/videos/')) ? mock.url : s.videoUrl,
+        thumbnailUrl: s.thumbnailUrl || mock.poster
+      };
+    });
+
+    const chosenStepNum = Math.max(1, Math.min(stepNumber, targetMovie.steps.length));
+    targetMovie.currentStep = chosenStepNum;
+    targetMovie.status = 'streaming';
+    this.movie = targetMovie;
+
+    const currentStepObj = targetMovie.steps.find(s => s.stepNumber === chosenStepNum) || targetMovie.steps[0];
+    const duration = currentStepObj.duration || 15;
+    this.setPhase('PLAYING', duration);
+    this.votesA = 0;
+    this.votesB = 0;
+    this.userVotes.clear();
+    this.activeAd = null;
+
+    persistMovie(this.movie);
+
+    this.addSystemMessage(`🎬 [DIRECTOR SWITCH] Película cambiada a "${this.movie.title}" (Step ${chosenStepNum}).`);
+
+    // Broadcast new movie and new step to all clients
+    await broadcastCinemaEvent('new_movie_started', {
+      movie: this.movie
+    });
+
+    await broadcastCinemaEvent('new_step', {
+      step: currentStepObj,
+      currentStep: chosenStepNum,
+      totalSteps: this.movie.totalSteps || this.movie.steps.length,
+      phaseDuration: duration,
+      phaseStartedAt: this.phaseStartedAt,
+      phaseEndsAt: this.phaseEndsAt
+    });
+
+    await this.broadcastStateSnapshot();
+    return true;
+  }
+
+  /**
+   * Load all available movies across memory and database for director selection.
+   */
+  public async loadAllAvailableMovies(): Promise<Movie[]> {
+    const moviesMap = new Map<string, Movie>();
+
+    if (this.movie) {
+      moviesMap.set(this.movie.id, this.movie);
+    }
+
+    for (const m of this.completedMovies) {
+      if (!moviesMap.has(m.id)) {
+        moviesMap.set(m.id, m);
+      }
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        const dbMovies = await loadAllMoviesFromDb();
+        for (const m of dbMovies) {
+          if (!moviesMap.has(m.id)) {
+            moviesMap.set(m.id, m);
+          }
+        }
+      } catch (err) {
+        console.warn("[Cinema] Error loading all movies from db:", err);
+      }
+    }
+
+    return Array.from(moviesMap.values());
   }
 
   public async persistCurrentStateToSupabase() {

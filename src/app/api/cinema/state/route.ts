@@ -33,11 +33,31 @@ export async function GET(request: Request) {
   // Load viewer preferences from Supabase
   const viewerPreferences = await loadViewerPreferences(userId, cinemaEngine.movie?.id);
 
+  const allAvailable = await cinemaEngine.loadAllAvailableMovies();
+  const allMovies = allAvailable.map(m => ({
+    id: m.id,
+    title: m.title,
+    genre: m.genre,
+    currentStep: m.currentStep,
+    totalSteps: m.totalSteps,
+    stepsCount: m.steps.length,
+    status: m.status,
+    createdAt: m.createdAt,
+    steps: m.steps.map(s => ({
+      stepNumber: s.stepNumber,
+      title: s.title,
+      duration: s.duration || 15,
+      videoUrl: s.videoUrl,
+      synopsis: s.synopsis
+    }))
+  }));
+
   const response = NextResponse.json({
     ...state,
     userId,
     hasUserVoted,
     viewerPreferences,
+    allMovies,
     chatMessages: cinemaEngine.chatMessages.slice(-50),
     supabaseConfig: {
       url: process.env.NEXT_PUBLIC_SUPABASE_URL || null,
@@ -164,6 +184,20 @@ export async function POST(request: Request) {
       const success = await cinemaEngine.jumpToStep(stepNumber);
       return NextResponse.json({
         success,
+        currentStep: cinemaEngine.movie?.currentStep,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'switch_movie') {
+      const { movieId, stepNumber } = body;
+      if (!movieId) {
+        return NextResponse.json({ error: 'movieId es requerido' }, { status: 400 });
+      }
+      const success = await cinemaEngine.switchToMovie(movieId, stepNumber ? Number(stepNumber) : 1);
+      return NextResponse.json({
+        success,
+        movie: cinemaEngine.movie,
         currentStep: cinemaEngine.movie?.currentStep,
         state: cinemaEngine.getState()
       });

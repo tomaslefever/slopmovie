@@ -473,6 +473,151 @@ export async function loadActiveMovieFromDb(): Promise<Movie | null> {
 }
 
 /**
+ * Load all movies from database (streaming, paused, completed)
+ */
+export async function loadAllMoviesFromDb(limit = 30): Promise<Movie[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  try {
+    const { data: movies, error } = await supabase
+      .from('movies')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error || !movies) return [];
+
+    const result: Movie[] = [];
+    for (const m of movies) {
+      const { data: steps } = await supabase
+        .from('movie_steps')
+        .select('*')
+        .eq('movie_id', m.id)
+        .order('step_number', { ascending: true });
+
+      result.push({
+        id: m.id,
+        title: m.title,
+        genre: m.genre,
+        tagline: m.tagline,
+        initialPlot: m.initial_plot,
+        masterArcThread: m.master_arc_thread,
+        status: m.status,
+        currentStep: m.current_step,
+        totalSteps: m.total_steps,
+        bible: m.bible,
+        steps: (steps || []).map(s => ({
+          stepNumber: s.step_number,
+          title: s.title,
+          synopsis: s.synopsis,
+          dialogueSnippet: s.dialogue_snippet,
+          voiceDirection: s.voice_direction,
+          visualPrompt: s.visual_prompt,
+          cameraMotionPrompt: s.camera_motion_prompt,
+          videoUrl: s.video_url,
+          thumbnailUrl: s.thumbnail_url,
+          duration: s.duration,
+          votingWindowSeconds: s.voting_window_seconds,
+          options: s.options,
+          selectedOption: s.selected_option,
+          wasRandomPick: s.was_random_pick,
+          activeCharacters: s.active_characters,
+          activeProps: s.active_props,
+          newCharacter: s.new_character,
+          newProp: s.new_prop,
+          referenceVideoUrl: s.reference_video_url,
+          propReferenceImages: s.prop_reference_images,
+          subtitles: s.subtitles || [],
+          environment: s.environment,
+          createdAt: s.created_at,
+        })),
+        createdAt: m.created_at,
+        completedAt: m.completed_at,
+        totalVotesCast: m.total_votes_cast,
+        finalSummary: m.final_summary,
+        finalSynopsis: m.final_synopsis,
+      });
+    }
+
+    return result;
+  } catch (err) {
+    console.error('[Supabase] Exception in loadAllMoviesFromDb:', err);
+    return [];
+  }
+}
+
+/**
+ * Load a single movie by its ID from database
+ */
+export async function loadMovieByIdFromDb(movieId: string): Promise<Movie | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+
+  try {
+    const { data: m, error } = await supabase
+      .from('movies')
+      .select('*')
+      .eq('id', movieId)
+      .maybeSingle();
+
+    if (error || !m) return null;
+
+    const { data: steps } = await supabase
+      .from('movie_steps')
+      .select('*')
+      .eq('movie_id', m.id)
+      .order('step_number', { ascending: true });
+
+    return {
+      id: m.id,
+      title: m.title,
+      genre: m.genre,
+      tagline: m.tagline,
+      initialPlot: m.initial_plot,
+      masterArcThread: m.master_arc_thread,
+      status: m.status,
+      currentStep: m.current_step,
+      totalSteps: m.total_steps,
+      bible: m.bible,
+      steps: (steps || []).map(s => ({
+        stepNumber: s.step_number,
+        title: s.title,
+        synopsis: s.synopsis,
+        dialogueSnippet: s.dialogue_snippet,
+        voiceDirection: s.voice_direction,
+        visualPrompt: s.visual_prompt,
+        cameraMotionPrompt: s.camera_motion_prompt,
+        videoUrl: s.video_url,
+        thumbnailUrl: s.thumbnail_url,
+        duration: s.duration,
+        votingWindowSeconds: s.voting_window_seconds,
+        options: s.options,
+        selectedOption: s.selected_option,
+        wasRandomPick: s.was_random_pick,
+        activeCharacters: s.active_characters,
+        activeProps: s.active_props,
+        newCharacter: s.new_character,
+        newProp: s.new_prop,
+        referenceVideoUrl: s.reference_video_url,
+        propReferenceImages: s.prop_reference_images,
+        subtitles: s.subtitles || [],
+        environment: s.environment,
+        createdAt: s.created_at,
+      })),
+      createdAt: m.created_at,
+      completedAt: m.completed_at,
+      totalVotesCast: m.total_votes_cast,
+      finalSummary: m.final_summary,
+      finalSynopsis: m.final_synopsis,
+    };
+  } catch (err) {
+    console.error('[Supabase] Exception in loadMovieByIdFromDb:', err);
+    return null;
+  }
+}
+
+/**
  * Load recent chat messages for a movie
  */
 export async function loadRecentChatMessagesFromDb(movieId: string, limit = 50): Promise<ChatMessage[]> {
