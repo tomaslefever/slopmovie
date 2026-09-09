@@ -21,7 +21,13 @@ import {
   deleteImmersiveAdFromDb,
   archiveAllStreamingMovies,
   broadcastCinemaEvent, 
-  isSupabaseConfigured 
+  isSupabaseConfigured,
+  persistLiveCinemaState,
+  loadLiveCinemaStateFromDb,
+  recordUserVoteInDb,
+  voteChatMessageInDb,
+  loadTopVotedCommentsFromDb,
+  loadUserVotedCommentIdsFromDb
 } from './supabase/db';
 import { generateAndStorePropReferenceImage } from './supabase/storage';
 
@@ -92,15 +98,27 @@ class CinemaOrchestrator {
   public completedMovies: Movie[] = [];
   public phase: PlaybackPhase = 'PLAYING';
   public timeRemaining: number = 15; // 15s clip
+  public phaseDuration: number = 15;
+  public phaseStartedAt: number = Date.now();
+  public phaseEndsAt: number = Date.now() + 15000;
   public votesA: number = 0;
   public votesB: number = 0;
   public totalAudience: number = 142; // Dynamic audience count
   public chatMessages: ChatMessage[] = [];
+  public commentVotes: Map<string, Set<string>> = new Map();
   public isRunning: boolean = false;
   public isPaused: boolean = false;
   public isGenerationPaused: boolean = false;
   private timerInterval: NodeJS.Timeout | null = null;
-  private userVotes: Map<string, 'A' | 'B'> = new Map();
+  public userVotes: Map<string, 'A' | 'B'> = new Map();
+
+  public setPhase(newPhase: PlaybackPhase, durationSeconds: number) {
+    this.phase = newPhase;
+    this.timeRemaining = durationSeconds;
+    this.phaseDuration = durationSeconds;
+    this.phaseStartedAt = Date.now();
+    this.phaseEndsAt = Date.now() + durationSeconds * 1000;
+  }
 
   // Immersive Ads Engine
   public activeAd: ImmersiveAd | null = null;
@@ -118,6 +136,12 @@ class CinemaOrchestrator {
    * narrative continuity. Reset to null once consumed by the step generator.
    */
   private preAdVideoUrl: string | null = null;
+
+  // Historical archive of previous generated ad clips for replay mode
+  public generatedAdVideoArchive: string[] = [
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4"
+  ];
 
   private constructor() {
     if (process.env.PAUSE_VIDEO_GENERATION === 'true') {
@@ -144,6 +168,14 @@ class CinemaOrchestrator {
         const dbAds = await loadImmersiveAdsFromDb();
         if (dbAds && dbAds.length > 0) {
           this.adsList = dbAds;
+          dbAds.forEach(ad => {
+            if (ad.generatedAdVideoUrl && !this.generatedAdVideoArchive.includes(ad.generatedAdVideoUrl)) {
+              this.generatedAdVideoArchive.push(ad.generatedAdVideoUrl);
+            }
+            if (ad.videoUrl && !this.generatedAdVideoArchive.includes(ad.videoUrl)) {
+              this.generatedAdVideoArchive.push(ad.videoUrl);
+            }
+          });
         } else {
           for (const ad of DEFAULT_IMMERSIVE_ADS) {
             await persistImmersiveAd(ad);
@@ -180,6 +212,21 @@ class CinemaOrchestrator {
           this.votesA = 0;
           this.votesB = 0;
           this.userVotes.clear();
+
+          // Restore exact live state from Supabase
+          const liveState = await loadLiveCinemaStateFromDb(savedMovie.id);
+          if (liveState) {
+            this.phase = liveState.phase || 'PLAYING';
+            this.timeRemaining = typeof liveState.timeRemaining === 'number' ? liveState.timeRemaining : 15;
+            this.votesA = liveState.votesA || 0;
+            this.votesB = liveState.votesB || 0;
+            this.totalAudience = liveState.totalAudience || 142;
+            if (liveState.adsConfig) this.adsConfig = liveState.adsConfig;
+            if (liveState.activeAd) this.activeAd = liveState.activeAd;
+            if (liveState.isPaused !== undefined) this.isPaused = liveState.isPaused;
+            if (liveState.isGenerationPaused !== undefined) this.isGenerationPaused = liveState.isGenerationPaused;
+          }
+
           const dbChats = await loadRecentChatMessagesFromDb(savedMovie.id);
           if (dbChats.length > 0) this.chatMessages = dbChats;
 
@@ -324,17 +371,10 @@ class CinemaOrchestrator {
           this.injectSimulatedAudienceActivity();
         }
 
-        // Broadcast second tick via Supabase Realtime
-        const currentStepForTick = this.movie.steps[this.movie.steps.length - 1];
-        broadcastCinemaEvent('time_tick', {
-          timeRemaining: this.timeRemaining,
-          phase: this.phase,
-          votesA: this.votesA,
-          votesB: this.votesB,
-          totalAudience: this.totalAudience,
-          selectedOption: currentStepForTick?.selectedOption,
-          wasRandomPick: currentStepForTick?.wasRandomPick
-        });
+        // Persist live state to Supabase periodically (background sync, no counter jump)
+        if (this.timeRemaining % 5 === 0) {
+          this.persistCurrentStateToSupabase();
+        }
 
       } else {
         // Transition phase
@@ -346,17 +386,17 @@ class CinemaOrchestrator {
   private async handlePhaseTransition() {
     if (!this.movie) return;
 
-    const currentStepIndex = this.movie.steps.length - 1;
-    const currentStep = this.movie.steps[currentStepIndex];
+    const currentStep = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
+      || this.movie.steps[this.movie.steps.length - 1];
 
     if (this.phase === 'COMMERCIAL_BREAK') {
       // 15s Commercial break has completed -> Transition to next phase (typically VOTING)
       this.addSystemMessage(`📺 Sponsor transmission ended. Resuming live interactive film.`);
       this.activeAd = null;
-      this.phase = this.returnPhaseAfterAd;
+      const targetPhase = this.returnPhaseAfterAd;
 
-      if (this.phase === 'VOTING') {
-        this.timeRemaining = 10;
+      if (targetPhase === 'VOTING') {
+        this.setPhase('VOTING', 10);
         this.votesA = 0;
         this.votesB = 0;
         this.userVotes.clear();
@@ -364,15 +404,21 @@ class CinemaOrchestrator {
         broadcastCinemaEvent('phase_change', {
           phase: 'VOTING',
           timeRemaining: 10,
+          phaseDuration: 10,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt,
           options: currentStep.options
         });
       } else {
-        this.timeRemaining = 15;
+        this.setPhase('PLAYING', 15);
       }
 
       broadcastCinemaEvent('ad_break_ended', {
         phase: this.phase,
-        timeRemaining: this.timeRemaining
+        timeRemaining: this.timeRemaining,
+        phaseDuration: this.phaseDuration,
+        phaseStartedAt: this.phaseStartedAt,
+        phaseEndsAt: this.phaseEndsAt
       });
       await this.broadcastStateSnapshot();
       return;
@@ -396,8 +442,7 @@ class CinemaOrchestrator {
       }
 
       // Enter 10-second VOTING phase!
-      this.phase = 'VOTING';
-      this.timeRemaining = 10;
+      this.setPhase('VOTING', 10);
       this.votesA = 0;
       this.votesB = 0;
       this.userVotes.clear();
@@ -406,14 +451,16 @@ class CinemaOrchestrator {
       broadcastCinemaEvent('phase_change', {
         phase: 'VOTING',
         timeRemaining: 10,
+        phaseDuration: 10,
+        phaseStartedAt: this.phaseStartedAt,
+        phaseEndsAt: this.phaseEndsAt,
         options: currentStep.options
       });
       await this.broadcastStateSnapshot();
     } 
     else if (this.phase === 'VOTING') {
       // 10-second voting has concluded -> Resolve winner
-      this.phase = 'GENERATING';
-      this.timeRemaining = 4; // Short generative transition buffer
+      this.setPhase('GENERATING', 4); // Short generative transition buffer
 
       let chosenOption: 'A' | 'B';
       let wasRandomPick = false;
@@ -549,9 +596,13 @@ class CinemaOrchestrator {
 
         this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generación IA pausada. Reproduciendo clip #${replayStepNumber}: "${replayStep.title}" (sin gasto de créditos).`);
 
+        this.setPhase('PLAYING', 15);
         broadcastCinemaEvent('new_step', {
           step: replayStep,
-          currentStep: replayStepNumber
+          currentStep: replayStepNumber,
+          phaseDuration: 15,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
         });
 
         // Reset voting
@@ -559,16 +610,22 @@ class CinemaOrchestrator {
         this.votesB = 0;
         this.userVotes.clear();
 
-        this.phase = 'PLAYING';
-        this.timeRemaining = 15;
         await this.broadcastStateSnapshot();
         return;
       }
 
+      // Extract recent (last 30 seconds) and top-voted chat comments to inspire DeepSeek
+      const audienceComments = this.getRecentAndTopChatComments(30);
+
       // Generate step n + 1 with DeepSeek and fal.ai MiniMax H3-Max in 480p 16:9
       let nextStep: MovieStep | null = null;
       try {
-        const nextStepRaw = await generateNextStepWithDeepSeek(this.movie, chosenOption, currentStep);
+        const nextStepRaw = await generateNextStepWithDeepSeek(this.movie, chosenOption, currentStep, audienceComments);
+
+        if (audienceComments.length > 0 && (audienceComments[0].votesCount || 0) > 0) {
+          const topIdea = audienceComments[0];
+          this.addSystemMessage(`💡 Narrative twist influenced by @${topIdea.userName}'s top idea (${topIdea.votesCount} votes): "${topIdea.text}"`);
+        }
         
         // PROPS SE CREAN SÓLO CUANDO EL LLM DEBE INTEGRAR UN NUEVO PERSONAJE
         if (nextStepRaw.newCharacter) {
@@ -648,10 +705,14 @@ class CinemaOrchestrator {
         await persistMovie(this.movie);
         await persistMovieStep(this.movie.id, nextStep);
 
+        this.setPhase('PLAYING', 15);
         // Realtime broadcast of new clip
         broadcastCinemaEvent('new_step', {
           step: nextStep,
-          currentStep: nextStep.stepNumber
+          currentStep: nextStep.stepNumber,
+          phaseDuration: 15,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
         });
       } catch (err) {
         console.error("Error generating next step:", err);
@@ -662,8 +723,7 @@ class CinemaOrchestrator {
       this.votesB = 0;
       this.userVotes.clear();
 
-      this.phase = 'PLAYING';
-      this.timeRemaining = 15;
+      this.setPhase('PLAYING', 15);
       await this.broadcastStateSnapshot();
     }
   }
@@ -685,6 +745,12 @@ class CinemaOrchestrator {
     if (optionId === 'B') this.votesB++;
 
     this.userVotes.set(userId, optionId);
+
+    // Persist vote and updated counts directly to Supabase
+    if (this.movie) {
+      recordUserVoteInDb(this.movie.id, this.movie.currentStep, userId, optionId, userName);
+      this.persistCurrentStateToSupabase();
+    }
 
     // Broadcast updated vote counts via Realtime
     broadcastCinemaEvent('vote_update', {
@@ -709,7 +775,80 @@ class CinemaOrchestrator {
     return { success: true, votesA: this.votesA, votesB: this.votesB };
   }
 
+  /**
+   * Extract recent comments (default last 30 seconds) and top-voted chat ideas
+   * to influence the next narrative scene.
+   */
+  public getRecentAndTopChatComments(seconds: number = 30): ChatMessage[] {
+    const cutoff = Date.now() - seconds * 1000;
+    const userComments = this.chatMessages.filter(m => !m.isSystem && m.text.trim().length > 0);
+
+    const candidates = userComments.filter(m => {
+      const isRecent = (m.createdAtMs && m.createdAtMs >= cutoff) || true;
+      const hasVotes = (m.votesCount && m.votesCount > 0);
+      return isRecent || hasVotes;
+    });
+
+    return candidates
+      .sort((a, b) => {
+        const diffVotes = (b.votesCount || 0) - (a.votesCount || 0);
+        if (diffVotes !== 0) return diffVotes;
+        return (b.createdAtMs || 0) - (a.createdAtMs || 0);
+      })
+      .slice(0, 8);
+  }
+
+  /**
+   * Upvote a comment by a spectator (identified by their session UUID).
+   * Persists in Supabase and broadcasts realtime update.
+   */
+  public async voteComment(commentId: string, userId: string): Promise<{ success: boolean; votesCount: number; userVoted: boolean }> {
+    const targetMsg = this.chatMessages.find(m => m.id === commentId);
+    if (!targetMsg) return { success: false, votesCount: 0, userVoted: false };
+
+    let voters = this.commentVotes.get(commentId);
+    if (!voters) {
+      voters = new Set<string>();
+      this.commentVotes.set(commentId, voters);
+    }
+
+    let userVoted = false;
+    if (voters.has(userId)) {
+      voters.delete(userId);
+      userVoted = false;
+    } else {
+      voters.add(userId);
+      userVoted = true;
+    }
+
+    targetMsg.votesCount = voters.size;
+
+    // Persist to Supabase in background
+    if (this.movie) {
+      voteChatMessageInDb(commentId, userId, this.movie.id).catch(err => {
+        console.warn('[Cinema] Error persisting comment vote:', err);
+      });
+    }
+
+    // Broadcast comment vote via Supabase Realtime
+    broadcastCinemaEvent('comment_voted', {
+      commentId,
+      votesCount: targetMsg.votesCount,
+      userId,
+      userVoted
+    });
+
+    return { success: true, votesCount: targetMsg.votesCount, userVoted };
+  }
+
   public addChatMessage(message: ChatMessage) {
+    if (!message.createdAtMs) {
+      message.createdAtMs = Date.now();
+    }
+    if (message.votesCount === undefined) {
+      message.votesCount = 0;
+    }
+
     this.chatMessages.push(message);
     if (this.chatMessages.length > 100) {
       this.chatMessages.shift();
@@ -731,6 +870,8 @@ class CinemaOrchestrator {
       userName: "SISTEMA",
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAtMs: Date.now(),
+      votesCount: 0,
       isSystem: true
     });
   }
@@ -800,9 +941,8 @@ class CinemaOrchestrator {
     // ── Step 2: Switch phase immediately so UI enters COMMERCIAL_BREAK ────────
     this.returnPhaseAfterAd = nextPhase;
     this.activeAd = adToPlay;
-    this.phase = 'COMMERCIAL_BREAK';
     adToPlay.duration = 15;
-    this.timeRemaining = 15; // 15 seconds commercial clip
+    this.setPhase('COMMERCIAL_BREAK', 15);
 
     // Track impression
     adToPlay.impressions = (adToPlay.impressions || 0) + 1;
@@ -814,13 +954,46 @@ class CinemaOrchestrator {
     broadcastCinemaEvent('ad_break_started', {
       ad: adToPlay,
       timeRemaining: this.timeRemaining,
+      phaseDuration: 15,
+      phaseStartedAt: this.phaseStartedAt,
+      phaseEndsAt: this.phaseEndsAt,
       phase: 'COMMERCIAL_BREAK'
     });
     await this.broadcastStateSnapshot();
 
-    // ── Step 3: Generate immersive ad clip with fal.ai in the background (ONLY IF GENERATION IS NOT PAUSED) ──
-    // Prompt must explicitly instruct the model to continue the scene and integrate the ad naturally
-    if (!this.isGenerationPaused && (this.preAdVideoUrl || adToPlay.cinematicPrompt)) {
+    // ── Step 3: Handle ad playback — Replay previous versions if paused, or generate with fal.ai ──
+    if (this.isGenerationPaused) {
+      // Replay previous generated version of this ad or from the archive pool (zero fal.ai calls)
+      const allPreviousAdVideos = Array.from(new Set([
+        ...this.generatedAdVideoArchive,
+        ...this.adsList.map(a => a.generatedAdVideoUrl).filter((u): u is string => Boolean(u)),
+        ...this.adsList.map(a => a.videoUrl).filter((u): u is string => Boolean(u))
+      ]));
+
+      let replayAdUrl = adToPlay.generatedAdVideoUrl;
+      if (!replayAdUrl && allPreviousAdVideos.length > 0) {
+        replayAdUrl = allPreviousAdVideos[Math.floor(Math.random() * allPreviousAdVideos.length)];
+      } else if (!replayAdUrl) {
+        replayAdUrl = adToPlay.videoUrl || DEFAULT_IMMERSIVE_ADS[0].videoUrl;
+      }
+
+      if (replayAdUrl) {
+        adToPlay.generatedAdVideoUrl = replayAdUrl;
+        adToPlay.isArchiveReplay = true;
+        this.activeAd = { ...adToPlay };
+
+        this.addSystemMessage(`📺 [Archive Ad Replay] Reproduciendo versión anterior generada para "${adToPlay.brandName}" (cero créditos fal.ai).`);
+
+        broadcastCinemaEvent('ad_video_generated', {
+          adId: adToPlay.id,
+          generatedAdVideoUrl: replayAdUrl,
+          isArchiveReplay: true
+        });
+
+        await this.persistCurrentStateToSupabase();
+        await this.broadcastStateSnapshot();
+      }
+    } else if (this.preAdVideoUrl || adToPlay.cinematicPrompt) {
       const rawPrompt = adToPlay.cinematicPrompt
         || `A character naturally interacts with or observes "${adToPlay.brandName}". ${adToPlay.tagline || ''}. Maintain identical cinematic lighting, colors, lens flare, and environment as the previous shot.`;
 
@@ -836,7 +1009,13 @@ class CinemaOrchestrator {
         if (!this.activeAd || this.activeAd.id !== adToPlay.id) return; // Phase already changed
 
         adToPlay.generatedAdVideoUrl = adVideo.videoUrl;
+        adToPlay.isArchiveReplay = false;
         this.activeAd = { ...adToPlay }; // Trigger reactivity
+
+        // Store into historical archive
+        if (adVideo.videoUrl && !this.generatedAdVideoArchive.includes(adVideo.videoUrl)) {
+          this.generatedAdVideoArchive.push(adVideo.videoUrl);
+        }
 
         // Persist generated URL to Supabase
         persistImmersiveAd(adToPlay);
@@ -969,7 +1148,9 @@ class CinemaOrchestrator {
   }
 
   public getState(userId?: string): CinemaState {
-    const activeStep = this.movie?.steps[this.movie.steps.length - 1] || {
+    const activeStep = (this.movie?.steps.find(s => s.stepNumber === this.movie!.currentStep))
+      || this.movie?.steps[this.movie.steps.length - 1] 
+      || {
       stepNumber: 1,
       title: "Loading clip...",
       synopsis: "Initializing cinematic transmission...",
@@ -998,6 +1179,9 @@ class CinemaOrchestrator {
       movie: this.movie!,
       phase: this.phase,
       timeRemaining: this.timeRemaining,
+      phaseDuration: this.phaseDuration,
+      phaseStartedAt: this.phaseStartedAt,
+      phaseEndsAt: this.phaseEndsAt,
       totalAudience: this.totalAudience,
       votesA: this.votesA,
       votesB: this.votesB,
@@ -1121,13 +1305,77 @@ class CinemaOrchestrator {
     return this.isGenerationPaused ? this.resumeGeneration() : this.pauseGeneration();
   }
 
+  /**
+   * Jump to a specific step number in the current movie for manual replay.
+   */
+  public async jumpToStep(stepNumber: number): Promise<boolean> {
+    if (!this.movie || !this.movie.steps || this.movie.steps.length === 0) return false;
+    const targetStep = this.movie.steps.find(s => s.stepNumber === stepNumber);
+    if (!targetStep) return false;
+
+    this.movie.currentStep = stepNumber;
+    const duration = targetStep.duration || 15;
+    this.setPhase('PLAYING', duration);
+    this.votesA = 0;
+    this.votesB = 0;
+    this.userVotes.clear();
+    this.activeAd = null;
+
+    persistMovie(this.movie);
+
+    this.addSystemMessage(`⏮️ Director triggered manual replay of Step ${stepNumber}: "${targetStep.title}".`);
+
+    // Broadcast new_step so players switch video/subtitles immediately
+    await broadcastCinemaEvent('new_step', {
+      step: targetStep,
+      currentStep: stepNumber,
+      totalSteps: this.movie.totalSteps || this.movie.steps.length,
+      phaseDuration: duration,
+      phaseStartedAt: this.phaseStartedAt,
+      phaseEndsAt: this.phaseEndsAt
+    });
+
+    await this.broadcastStateSnapshot();
+    return true;
+  }
+
+  public async persistCurrentStateToSupabase() {
+    if (!this.movie) return;
+    try {
+      const currentStepObj = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
+        || this.movie.steps[this.movie.steps.length - 1];
+      await persistLiveCinemaState({
+        movieId: this.movie.id,
+        phase: this.phase,
+        timeRemaining: this.timeRemaining,
+        currentStep: this.movie.currentStep,
+        totalAudience: this.totalAudience,
+        votesA: this.votesA,
+        votesB: this.votesB,
+        isLive: !this.isPaused,
+        isPaused: this.isPaused,
+        isGenerationPaused: this.isGenerationPaused,
+        activeAd: this.activeAd,
+        adsConfig: this.adsConfig,
+        selectedOption: currentStepObj?.selectedOption,
+        wasRandomPick: currentStepObj?.wasRandomPick
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
   public async broadcastStateSnapshot() {
     if (!this.movie) return;
     const state = this.getState();
+    await this.persistCurrentStateToSupabase();
     await broadcastCinemaEvent('state_snapshot', {
       movie: state.movie,
       phase: state.phase,
       timeRemaining: state.timeRemaining,
+      phaseDuration: state.phaseDuration,
+      phaseStartedAt: state.phaseStartedAt,
+      phaseEndsAt: state.phaseEndsAt,
       totalAudience: state.totalAudience,
       votesA: state.votesA,
       votesB: state.votesB,

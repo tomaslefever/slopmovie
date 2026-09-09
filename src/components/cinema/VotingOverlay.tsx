@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DecisionOption, PlaybackPhase } from '@/types/cinema';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Dices, Sparkles, Timer, Trophy, Flame, Zap } from 'lucide-react';
@@ -32,7 +32,22 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   wasRandomPick = false,
   onVote
 }) => {
-  const isVotingEnded = phase === 'GENERATING' || (phase === 'VOTING' && timeRemaining <= 0);
+  const [localSeconds, setLocalSeconds] = useState(10);
+
+  useEffect(() => {
+    if (!isVisible || phase !== 'VOTING') return;
+    setLocalSeconds(10);
+    const start = performance.now();
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((performance.now() - start) / 1000);
+      const remaining = Math.max(0, 10 - elapsed);
+      setLocalSeconds(prev => Math.min(prev, remaining));
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [isVisible, phase]);
+
+  const isVotingEnded = phase === 'GENERATING' || (phase === 'VOTING' && localSeconds <= 0);
   const totalVotes = votesA + votesB;
   const percentA = totalVotes > 0 ? Math.round((votesA / totalVotes) * 100) : 50;
   const percentB = totalVotes > 0 ? Math.round((votesB / totalVotes) * 100) : 50;
@@ -158,19 +173,21 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                       cx="48"
                       cy="48"
                       r="40"
-                      stroke={timeRemaining <= 3 ? "#ef4444" : "#00f0ff"}
+                      stroke={localSeconds <= 3 ? "#ef4444" : "#00f0ff"}
                       strokeWidth="5"
                       fill="transparent"
                       strokeDasharray="251.2"
-                      strokeDashoffset={251.2 * (1 - timeRemaining / 10)}
-                      className="transition-all duration-1000 ease-linear drop-shadow-[0_0_12px_rgba(0,240,255,0.8)]"
+                      className="drop-shadow-[0_0_12px_rgba(0,240,255,0.8)]"
+                      style={{
+                        animation: 'voting-circle 10s linear forwards'
+                      }}
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className={`text-3xl font-black font-mono tracking-tighter ${
-                      timeRemaining <= 3 ? "text-red-500 animate-ping" : "text-white"
+                      localSeconds <= 3 ? "text-red-500 animate-pulse" : "text-white"
                     }`}>
-                      {timeRemaining}
+                      {localSeconds}
                     </span>
                     <span className="text-[10px] text-neutral-400 font-mono uppercase tracking-widest">
                       SEC

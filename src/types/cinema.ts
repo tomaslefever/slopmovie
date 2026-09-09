@@ -112,8 +112,11 @@ export interface ChatMessage {
   userAvatar?: string;
   text: string;
   timestamp: string;
+  createdAtMs?: number;
   isSystem?: boolean;
   votedOption?: 'A' | 'B';
+  votesCount?: number;
+  hasUserVoted?: boolean;
 }
 
 export type PlaybackPhase = 'PLAYING' | 'VOTING' | 'GENERATING' | 'COMMERCIAL_BREAK';
@@ -150,6 +153,10 @@ export interface ImmersiveAd {
    * Stored in Supabase so the ad can be replayed consistently across sessions.
    */
   generatedAdVideoUrl?: string;
+  /**
+   * Flag indicating this ad is playing a previously generated archive version.
+   */
+  isArchiveReplay?: boolean;
 }
 
 export interface AdsConfig {
@@ -162,6 +169,9 @@ export interface CinemaState {
   movie: Movie;
   phase: PlaybackPhase;
   timeRemaining: number; // in seconds
+  phaseDuration?: number; // Initial duration in seconds of current phase
+  phaseStartedAt?: number; // Epoch ms when current phase started
+  phaseEndsAt?: number; // Epoch ms when current phase will end
   totalAudience: number;
   votesA: number;
   votesB: number;

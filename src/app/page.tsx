@@ -14,34 +14,55 @@ export default function CinemaStreamingPage() {
   const [userVoted, setUserVoted] = useState<'A' | 'B' | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [supabaseReady, setSupabaseReady] = useState(false);
-  const [userId] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    try {
-      let storedId = localStorage.getItem('kinetic_user_id');
-      if (!storedId) {
-        storedId = `user_${Math.floor(1000 + Math.random() * 9000)}`;
-        localStorage.setItem('kinetic_user_id', storedId);
-      }
-      return storedId;
-    } catch {
-      return '';
-    }
-  });
+  const [userId, setUserId] = useState<string>('');
+  const [nickname, setNickname] = useState<string | null>(null);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(true);
+  const [subtitleLanguage, setSubtitleLanguage] = useState<'en' | 'es'>('en');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
   const [isGalleryOpen, setIsGalleryOpen] = useState<boolean>(false);
+  const [topVotedMessages, setTopVotedMessages] = useState<ChatMessage[]>([]);
 
-  // Initial state hydration on mount
+  // Fetch chat messages and top-voted comments from Supabase / API
+  const fetchChatAndTopVoted = async (uId?: string) => {
+    try {
+      const targetUserId = uId || userId;
+      const url = targetUserId ? `/api/cinema/chat?userId=${encodeURIComponent(targetUserId)}` : '/api/cinema/chat';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.messages && Array.isArray(data.messages)) {
+          setChatMessages(data.messages);
+        }
+        if (data.topVoted && Array.isArray(data.topVoted)) {
+          setTopVotedMessages(data.topVoted);
+        }
+      }
+    } catch {
+      // Ignored on transient network blip
+    }
+  };
+
+  // Initial state hydration on mount (fetches live cinema state, session identity, and viewer preferences from Supabase)
   useEffect(() => {
-    if (!userId) return;
-
     const fetchInitialState = async () => {
       try {
-        const res = await fetch(`/api/cinema/state?userId=${userId}`);
+        const res = await fetch('/api/cinema/state');
         if (res.ok) {
           const data = await res.json();
           setCinemaState(data);
+          if (data.userId) {
+            setUserId(data.userId);
+            fetchChatAndTopVoted(data.userId);
+          }
           if (data.hasUserVoted) {
             setUserVoted(data.hasUserVoted);
+          }
+          if (data.viewerPreferences) {
+            setSubtitlesEnabled(data.viewerPreferences.subtitlesEnabled !== false);
+            setSubtitleLanguage(data.viewerPreferences.subtitleLanguage === 'es' ? 'es' : 'en');
+            if (data.viewerPreferences.nickname) {
+              setNickname(data.viewerPreferences.nickname);
+            }
           }
           if (data.chatMessages) {
             setChatMessages(data.chatMessages);
@@ -58,17 +79,23 @@ export default function CinemaStreamingPage() {
     };
 
     fetchInitialState();
-  }, [userId]);
+  }, []);
 
   // Resilient Polling Heartbeat (guarantees continuous live advancement even if Realtime drops or is unbuilt)
   useEffect(() => {
-    if (!userId) return;
-
     const heartbeat = setInterval(async () => {
       try {
-        const res = await fetch(`/api/cinema/state?userId=${userId}`);
+        const url = userId ? `/api/cinema/state?userId=${userId}` : '/api/cinema/state';
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
+          if (!userId && data.userId) {
+            setUserId(data.userId);
+            fetchChatAndTopVoted(data.userId);
+          }
+          if (!nickname && data.viewerPreferences?.nickname) {
+            setNickname(data.viewerPreferences.nickname);
+          }
           setCinemaState((prev) => {
             if (!prev) return data;
             // When step advances, reset vote state
@@ -81,7 +108,8 @@ export default function CinemaStreamingPage() {
               movie: data.movie,
               activeStep: data.activeStep,
               phase: data.phase,
-              timeRemaining: data.timeRemaining,
+              // Keep timeRemaining if phase is identical so timers animate smoothly without discrete jumps
+              timeRemaining: (prev && prev.phase === data.phase) ? prev.timeRemaining : data.timeRemaining,
               votesA: data.votesA,
               votesB: data.votesB,
               totalAudience: data.totalAudience,
@@ -111,21 +139,6 @@ export default function CinemaStreamingPage() {
 
     return () => clearInterval(heartbeat);
   }, [userId, supabaseReady]);
-
-  // Smooth local countdown ticker
-  useEffect(() => {
-    const ticker = setInterval(() => {
-      setCinemaState((prev) => {
-        if (!prev || prev.isPaused || prev.timeRemaining <= 1) return prev;
-        return {
-          ...prev,
-          timeRemaining: prev.timeRemaining - 1
-        };
-      });
-    }, 1000);
-
-    return () => clearInterval(ticker);
-  }, []);
 
   // SUPABASE REALTIME SUBSCRIPTION
   useEffect(() => {
@@ -218,17 +231,22 @@ export default function CinemaStreamingPage() {
         if (payload.payload.step) {
           setCinemaState((prev) => {
             if (!prev) return prev;
+            const existingStepIndex = prev.movie.steps.findIndex(s => s.stepNumber === payload.payload.step.stepNumber);
+            const updatedSteps = existingStepIndex >= 0
+              ? prev.movie.steps.map((s, idx) => idx === existingStepIndex ? payload.payload.step : s)
+              : [...prev.movie.steps, payload.payload.step];
+
             const updatedMovie = {
               ...prev.movie,
               currentStep: payload.payload.currentStep,
-              steps: [...prev.movie.steps, payload.payload.step]
+              steps: updatedSteps
             };
             return {
               ...prev,
               movie: updatedMovie,
               activeStep: payload.payload.step,
               phase: 'PLAYING',
-              timeRemaining: 15,
+              timeRemaining: payload.payload.step.duration || 15,
               votesA: 0,
               votesB: 0,
               hasUserVoted: null
@@ -243,6 +261,23 @@ export default function CinemaStreamingPage() {
             return [...prev.slice(-99), payload.payload];
           });
         }
+      })
+      .on('broadcast', { event: 'comment_voted' }, (payload: { payload: { commentId: string; votesCount: number; userId: string; userVoted: boolean } }) => {
+        if (!payload.payload) return;
+        const { commentId, votesCount } = payload.payload;
+        setChatMessages((prev) =>
+          prev.map(m => m.id === commentId ? { ...m, votesCount } : m)
+        );
+        setTopVotedMessages((prev) => {
+          const exists = prev.some(m => m.id === commentId);
+          if (exists) {
+            return prev
+              .map(m => m.id === commentId ? { ...m, votesCount } : m)
+              .sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
+          }
+          return prev;
+        });
+        fetchChatAndTopVoted(userId);
       })
       .on('broadcast', { event: 'ad_break_started' }, (payload: any) => {
         setCinemaState((prev) => {
@@ -310,10 +345,129 @@ export default function CinemaStreamingPage() {
       })
       .subscribe();
 
+    // POSTGRES CDC REALTIME SUBSCRIPTIONS
+    const moviesChannel = supabase
+      .channel('schema_movies_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'movies' },
+        (payload) => {
+          if (payload.new && (payload.new as any).bible?.liveState) {
+            const live = (payload.new as any).bible.liveState;
+            setCinemaState((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                phase: live.phase ?? prev.phase,
+                timeRemaining: live.timeRemaining ?? prev.timeRemaining,
+                votesA: live.votesA ?? prev.votesA,
+                votesB: live.votesB ?? prev.votesB,
+                totalAudience: live.totalAudience ?? prev.totalAudience,
+                isPaused: live.isPaused ?? prev.isPaused,
+                isGenerationPaused: live.isGenerationPaused ?? prev.isGenerationPaused
+              };
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    const cinemaStateChannel = supabase
+      .channel('schema_cinema_state_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cinema_state' },
+        (payload) => {
+          if (payload.new) {
+            const row = payload.new as any;
+            setCinemaState((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                phase: row.phase ?? prev.phase,
+                timeRemaining: row.time_remaining ?? prev.timeRemaining,
+                votesA: row.votes_a ?? prev.votesA,
+                votesB: row.votes_b ?? prev.votesB,
+                totalAudience: row.total_audience ?? prev.totalAudience,
+                isPaused: row.is_paused ?? prev.isPaused,
+                isGenerationPaused: row.is_generation_paused ?? prev.isGenerationPaused
+              };
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    const topCommentsChannel = supabase
+      .channel('schema_top_comments_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'top_voted_comments' },
+        () => {
+          fetchChatAndTopVoted(userId);
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(moviesChannel);
+      supabase.removeChannel(cinemaStateChannel);
+      supabase.removeChannel(topCommentsChannel);
     };
   }, [supabaseReady]);
+
+  // Subtitle preference handlers synced with Supabase (zero browser localStorage)
+  const handleToggleSubtitles = async (enabled: boolean) => {
+    setSubtitlesEnabled(enabled);
+    if (userId) {
+      try {
+        await fetch('/api/cinema/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, subtitlesEnabled: enabled })
+        });
+      } catch (err) {
+        console.error("Error saving subtitle preference:", err);
+      }
+    }
+  };
+
+  const handleChangeSubtitleLanguage = async (lang: 'en' | 'es') => {
+    setSubtitleLanguage(lang);
+    setSubtitlesEnabled(true);
+    if (userId) {
+      try {
+        await fetch('/api/cinema/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, subtitleLanguage: lang, subtitlesEnabled: true })
+        });
+      } catch (err) {
+        console.error("Error saving subtitle language preference:", err);
+      }
+    }
+  };
+
+  // Nickname preference handler synced with Supabase (zero browser localStorage)
+  const handleSetNickname = async (newNick: string) => {
+    const trimmed = newNick.trim().replace(/^@+/, '');
+    if (!trimmed || trimmed.length < 2) return false;
+    setNickname(trimmed);
+    if (userId) {
+      try {
+        await fetch('/api/cinema/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, nickname: trimmed })
+        });
+        return true;
+      } catch (err) {
+        console.error("Error saving nickname to Supabase:", err);
+      }
+    }
+    return false;
+  };
 
   // Cast vote handler
   const handleVote = async (optionId: 'A' | 'B') => {
@@ -330,7 +484,7 @@ export default function CinemaStreamingPage() {
           action: 'vote',
           optionId,
           userId,
-          userName: `Viewer_${userId.slice(-4)}`
+          userName: nickname || `Viewer_${userId.slice(-4)}`
         })
       });
 
@@ -350,20 +504,71 @@ export default function CinemaStreamingPage() {
     }
   };
 
-  // Send chat message handler
+  // Send chat message handler (requires nickname)
   const handleSendMessage = async (text: string) => {
+    if (!nickname) return;
+
     try {
       await fetch('/api/cinema/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
-          userName: `Viewer_${userId.slice(-4)}`,
+          userName: nickname,
           text
         })
       });
     } catch (err) {
       console.error("Error sending message:", err);
+    }
+  };
+
+  // Upvote comment handler (requires userId session)
+  const handleVoteComment = async (commentId: string) => {
+    if (!userId) return;
+
+    // Optimistically toggle vote state locally
+    const updater = (prev: ChatMessage[]) =>
+      prev.map((m) => {
+        if (m.id === commentId) {
+          const wasVoted = Boolean(m.hasUserVoted);
+          return {
+            ...m,
+            hasUserVoted: !wasVoted,
+            votesCount: Math.max(0, (m.votesCount || 0) + (wasVoted ? -1 : 1))
+          };
+        }
+        return m;
+      });
+
+    setChatMessages(updater);
+    setTopVotedMessages(updater);
+
+    try {
+      const res = await fetch('/api/cinema/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'vote_comment',
+          commentId,
+          userId
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const serverUpdater = (prev: ChatMessage[]) =>
+          prev.map((m) =>
+            m.id === commentId ? { ...m, votesCount: data.votesCount, hasUserVoted: data.userVoted } : m
+          );
+        setChatMessages(serverUpdater);
+        setTopVotedMessages((prev) => {
+          const updated = serverUpdater(prev);
+          return updated.sort((a, b) => (b.votesCount || 0) - (a.votesCount || 0));
+        });
+      }
+    } catch (err) {
+      console.error("Error voting on comment:", err);
     }
   };
 
@@ -444,6 +649,10 @@ export default function CinemaStreamingPage() {
                 isPaused={cinemaState.isPaused}
                 isGenerationPaused={cinemaState.isGenerationPaused}
                 onTogglePauseGeneration={handleTogglePauseGeneration}
+                subtitlesEnabled={subtitlesEnabled}
+                subtitleLanguage={subtitleLanguage}
+                onToggleSubtitles={handleToggleSubtitles}
+                onChangeSubtitleLanguage={handleChangeSubtitleLanguage}
                 inSceneAd={
                   cinemaState.activeAd?.type === 'in_scene_overlay'
                     ? cinemaState.activeAd
@@ -484,8 +693,12 @@ export default function CinemaStreamingPage() {
               messages={chatMessages}
               totalAudience={cinemaState.totalAudience}
               onSendMessage={handleSendMessage}
+              nickname={nickname}
+              onSetNickname={handleSetNickname}
               isOpen={isChatOpen}
               onToggle={() => setIsChatOpen(!isChatOpen)}
+              onVoteComment={handleVoteComment}
+              topVotedMessages={topVotedMessages}
             />
           </>
         )}

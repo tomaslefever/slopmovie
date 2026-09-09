@@ -19,7 +19,21 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
 }) => {
   const [isMuted, setIsMuted] = useState<boolean>(true);
   const [hasInteracted, setHasInteracted] = useState<boolean>(false);
+  const [adSeconds, setAdSeconds] = useState(ad.duration || 15);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    setAdSeconds(ad.duration || 15);
+    const start = performance.now();
+    const total = ad.duration || 15;
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((performance.now() - start) / 1000);
+      const remaining = Math.max(0, total - elapsed);
+      setAdSeconds(prev => Math.min(prev, remaining));
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [ad.id, ad.duration]);
 
   // Resolve the best available video source:
   //  1. generatedAdVideoUrl — fal.ai cinematic ad clip (visual continuation of the film)
@@ -100,11 +114,13 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
       {/* Radial Vignette & Chromatic Ambient Glow */}
       <div className="absolute inset-0 bg-radial from-transparent via-black/40 to-black/90 pointer-events-none" />
 
-      {/* AI-Generated badge — appears once fal.ai clip is ready */}
+      {/* AI-Generated badge or Archive Replay badge */}
       {isCinematicAd && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 bg-cyan-500/15 border border-cyan-400/30 px-3 py-1 rounded-full backdrop-blur-md">
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 bg-cyan-500/15 border border-cyan-400/30 px-3 py-1 rounded-full backdrop-blur-md shadow-[0_0_15px_rgba(0,240,255,0.2)]">
           <Sparkles className="w-3 h-3 text-cyan-400" />
-          <span className="text-[10px] font-mono font-bold tracking-widest text-cyan-300 uppercase">AI Cinematic Ad</span>
+          <span className="text-[10px] font-mono font-bold tracking-widest text-cyan-300 uppercase">
+            {ad.isArchiveReplay ? 'Holo-Archive Ad Replay' : 'AI Cinematic Ad'}
+          </span>
         </div>
       )}
 
@@ -129,7 +145,7 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
           <div className="flex items-center space-x-2 bg-neutral-900/90 border border-white/15 px-3 py-1.5 rounded-full backdrop-blur-md font-mono text-xs text-neutral-200 shadow-xl">
             <span className="text-neutral-400">RESUMES IN</span>
             <span className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 font-bold flex items-center justify-center text-xs">
-              {timeRemaining}s
+              {adSeconds}s
             </span>
           </div>
 
@@ -229,11 +245,12 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
         </div>
       </motion.div>
 
-      {/* Bottom Progress Bar for Ad */}
+      {/* Bottom Progress Bar for Ad with Initial-to-Final State Animation */}
       <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-neutral-950">
         <div 
-          className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(245,158,11,0.8)]"
-          style={{ width: `${progressPercent}%` }}
+          key={`ad_prog_${ad.id}`}
+          className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 shadow-[0_0_10px_rgba(245,158,11,0.8)]"
+          style={{ animation: `ad-countdown ${ad.duration || 15}s linear forwards` }}
         />
       </div>
     </div>

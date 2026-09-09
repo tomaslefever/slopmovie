@@ -20,7 +20,10 @@ import {
   Check, 
   AlertCircle,
   Radio,
-  Shuffle
+  Shuffle,
+  RotateCcw,
+  History,
+  PlayCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
@@ -45,6 +48,8 @@ export default function AdminDashboardPage() {
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
   const [customPremise, setCustomPremise] = useState('');
   const [isTogglingPause, setIsTogglingPause] = useState(false);
+  const [selectedStepNumber, setSelectedStepNumber] = useState<number | ''>('');
+  const [isJumpingStep, setIsJumpingStep] = useState(false);
 
   // New Ad Form State
   const [newBrandName, setNewBrandName] = useState('');
@@ -413,6 +418,39 @@ export default function AdminDashboardPage() {
       showFeedback('Network error toggling generation pause');
     } finally {
       setIsTogglingGenPause(false);
+    }
+  };
+
+  // Jump to specific step for manual replay
+  const handleJumpToStep = async (stepNum: number) => {
+    audioCues.playClick();
+    setIsJumpingStep(true);
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'jump_to_step',
+          stepNumber: stepNum
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCinemaState((prev: any) => prev ? {
+          ...prev,
+          movie: prev.movie ? { ...prev.movie, currentStep: data.currentStep } : prev.movie,
+          ...data.state
+        } : prev);
+        showFeedback(`⏮️ Saltando al Step ${stepNum} para replay instantáneo.`);
+        fetchData();
+      } else {
+        showFeedback('Error al saltar de step');
+      }
+    } catch {
+      showFeedback('Error de red al cambiar de step');
+    } finally {
+      setIsJumpingStep(false);
     }
   };
 
@@ -995,6 +1033,125 @@ export default function AdminDashboardPage() {
                 )}
               </button>
             </div>
+
+            {/* Step Selection & Manual Replay Control */}
+            {cinemaState?.movie && (
+              <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 space-y-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <History className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
+                        Selector Manual de Step & Control de Replay
+                      </h3>
+                    </div>
+                    <p className="text-xs text-neutral-400 mt-1">
+                      Elige cualquier escena ya transmitida para saltar y retransmitirla en vivo instantáneamente a todos los espectadores.
+                    </p>
+                  </div>
+
+                  {/* Quick Select & Jump Form */}
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <select
+                      value={selectedStepNumber}
+                      onChange={e => setSelectedStepNumber(e.target.value ? Number(e.target.value) : '')}
+                      className="px-3 py-2 rounded-xl bg-black/60 border border-white/15 text-white text-xs font-mono focus:border-amber-400 focus:outline-none"
+                    >
+                      <option value="">Seleccionar Step...</option>
+                      {(cinemaState.movie.steps || []).map((s: any) => (
+                        <option key={s.stepNumber} value={s.stepNumber}>
+                          Step {s.stepNumber}: {s.title}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={() => selectedStepNumber && handleJumpToStep(Number(selectedStepNumber))}
+                      disabled={isJumpingStep || !selectedStepNumber}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Replay Step</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Interactive Grid of Movie Steps */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
+                    <span className="uppercase tracking-wider">Historial de Escenas ({cinemaState.movie.steps?.length || 0} Steps)</span>
+                    <span className="text-neutral-500 text-[11px]">Haz clic en &quot;Replay&quot; en cualquier tarjeta para cambiar de escena</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
+                    {(cinemaState.movie.steps || []).map((step: any) => {
+                      const isCurrentActive = cinemaState.movie.currentStep === step.stepNumber;
+                      return (
+                        <div
+                          key={step.stepNumber}
+                          className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
+                            isCurrentActive
+                              ? 'bg-amber-950/20 border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/40'
+                              : 'bg-black/50 border-white/5 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                  isCurrentActive ? 'bg-amber-500 text-black' : 'bg-neutral-800 text-neutral-300'
+                                }`}>
+                                  STEP #{step.stepNumber}
+                                </span>
+                                {isCurrentActive && (
+                                  <span className="flex items-center gap-1 text-[10px] font-mono text-amber-400 font-bold animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                    EN TRANSMISIÓN
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] font-mono text-neutral-500">
+                                {step.duration || 15}s
+                              </span>
+                            </div>
+
+                            <h4 className="text-xs font-bold text-white line-clamp-1">
+                              {step.title}
+                            </h4>
+                            <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
+                              {step.synopsis}
+                            </p>
+                          </div>
+
+                          <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
+                            <div className="text-[10px] font-mono text-neutral-400 truncate max-w-[170px]">
+                              {step.selectedOption ? (
+                                <span>Rama: Opción {step.selectedOption}</span>
+                              ) : (
+                                <span className="text-neutral-500">Escena inicial</span>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => handleJumpToStep(step.stepNumber)}
+                              disabled={isJumpingStep || isCurrentActive}
+                              className={`px-3 py-1.5 rounded-lg font-mono text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                                isCurrentActive
+                                  ? 'bg-amber-500/20 text-amber-400 cursor-default border border-amber-500/30'
+                                  : 'bg-white/10 hover:bg-amber-500 hover:text-black text-white'
+                              }`}
+                            >
+                              <PlayCircle className="w-3.5 h-3.5" />
+                              <span>{isCurrentActive ? 'Reproduciendo' : 'Replay este Step'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Current Active Film Meta */}
             {cinemaState?.movie && (

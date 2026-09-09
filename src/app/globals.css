@@ -46,3 +46,19 @@ body {
 .glow-amber {
   box-shadow: 0 0 25px rgba(255, 170, 0, 0.35);
 }
+
+/* Smooth initial-to-final animations without per-second jumps */
+@keyframes cinema-progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+@keyframes voting-circle {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 251.2; }
+}
+
+@keyframes ad-countdown {
+  from { width: 100%; }
+  to { width: 0%; }
+}

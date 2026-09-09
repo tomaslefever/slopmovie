@@ -20,6 +20,10 @@ interface CinemaPlayerProps {
   isPaused?: boolean;
   isGenerationPaused?: boolean;
   onTogglePauseGeneration?: () => void;
+  subtitlesEnabled?: boolean;
+  subtitleLanguage?: 'en' | 'es';
+  onToggleSubtitles?: (enabled: boolean) => void;
+  onChangeSubtitleLanguage?: (lang: 'en' | 'es') => void;
 }
 
 export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
@@ -33,7 +37,11 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   inSceneAd,
   isPaused = false,
   isGenerationPaused = false,
-  onTogglePauseGeneration
+  onTogglePauseGeneration,
+  subtitlesEnabled: initialSubtitlesEnabled = true,
+  subtitleLanguage: initialSubtitleLanguage = 'en',
+  onToggleSubtitles,
+  onChangeSubtitleLanguage
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,44 +49,31 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [, setIsVideoLoading] = useState(false);
   
-  // Subtitle System States with persistent defaults
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    try {
-      const stored = localStorage.getItem('kinetic_subtitles_enabled');
-      return stored !== null ? stored === 'true' : true;
-    } catch {
-      return true;
-    }
-  });
+  // Subtitle System States synced from Supabase
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(initialSubtitlesEnabled);
+  const [subtitleLanguage, setSubtitleLanguage] = useState<'en' | 'es'>(initialSubtitleLanguage);
 
-  const [subtitleLanguage, setSubtitleLanguage] = useState<'en' | 'es'>(() => {
-    if (typeof window === 'undefined') return 'en';
-    try {
-      const stored = localStorage.getItem('kinetic_subtitles_lang');
-      return stored === 'es' || stored === 'en' ? stored : 'en';
-    } catch {
-      return 'en';
-    }
-  });
+  useEffect(() => {
+    setSubtitlesEnabled(initialSubtitlesEnabled);
+  }, [initialSubtitlesEnabled]);
+
+  useEffect(() => {
+    setSubtitleLanguage(initialSubtitleLanguage);
+  }, [initialSubtitleLanguage]);
 
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState<number>(0);
 
   const toggleSubtitlesEnabled = (val: boolean) => {
     setSubtitlesEnabled(val);
-    try {
-      localStorage.setItem('kinetic_subtitles_enabled', String(val));
-    } catch {}
+    onToggleSubtitles?.(val);
   };
 
   const changeSubtitleLanguage = (lang: 'en' | 'es') => {
     setSubtitleLanguage(lang);
     setSubtitlesEnabled(true);
-    try {
-      localStorage.setItem('kinetic_subtitles_lang', lang);
-      localStorage.setItem('kinetic_subtitles_enabled', 'true');
-    } catch {}
+    onChangeSubtitleLanguage?.(lang);
+    onToggleSubtitles?.(true);
     setShowSubtitleMenu(false);
   };
 
@@ -406,19 +401,24 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
         {/* Clip HUD Meta Info */}
         <div className="w-full flex items-center justify-between text-xs text-neutral-400 font-mono px-2 mb-1.5">
           <div className="flex items-center space-x-2">
-            <Clock className="w-3.5 h-3.5 text-neutral-500" />
-            <span>15s CLIP {phase === 'PLAYING' ? `(${timeRemaining}s remaining)` : ''}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{phase === 'PLAYING' ? `${activeStep.duration || 15}s SCENE • LIVE` : 'PAUSED / TRANSITION'}</span>
           </div>
           <span className="text-neutral-300 font-semibold truncate max-w-md">
             {movieTitle} — {activeStep.title}
           </span>
         </div>
 
-        {/* 15s Progress Bar */}
+        {/* 15s Progress Bar with Initial and Final State Animation (Zero 1-second jumps) */}
         <div className="w-full h-1.5 bg-neutral-900/90 rounded-full overflow-hidden border border-white/5 backdrop-blur-sm">
           <div 
-            className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-amber-400 transition-all duration-1000 ease-linear rounded-full shadow-[0_0_8px_rgba(6,182,212,0.8)]"
-            style={{ width: `${progressPercent}%` }}
+            key={`cinema_prog_${activeStep.stepNumber}_${phase}_${isPaused ? 'p' : 'r'}`}
+            className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-amber-400 rounded-full shadow-[0_0_8px_rgba(6,182,212,0.8)]"
+            style={{ 
+              animation: (phase === 'PLAYING' && !isPaused) ? `cinema-progress ${activeStep.duration || 15}s linear forwards` : undefined,
+              width: phase === 'PLAYING' ? undefined : '100%'
+            }}
           />
         </div>
       </div>

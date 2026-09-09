@@ -1,4 +1,4 @@
-import { Character, Prop, SceneEnvironment, MovieBible, MovieStep, DecisionOption, Movie, SubtitleCue } from '@/types/cinema';
+import { Character, Prop, SceneEnvironment, MovieBible, MovieStep, DecisionOption, Movie, SubtitleCue, ChatMessage } from '@/types/cinema';
 
 export interface GeneratedStoryBible {
   title: string;
@@ -532,11 +532,21 @@ Respond ONLY with a valid JSON object matching this schema:
 export async function generateNextStepWithDeepSeek(
   movie: Movie,
   chosenOptionId: 'A' | 'B',
-  previousStep: MovieStep
+  previousStep: MovieStep,
+  audienceComments?: ChatMessage[]
 ): Promise<MovieStep> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   const nextStepNum = previousStep.stepNumber + 1;
   const chosenOption = previousStep.options.find(o => o.id === chosenOptionId) || previousStep.options[0];
+
+  const audienceSuggestionsText = audienceComments && audienceComments.length > 0
+    ? `\n\nLIVE AUDIENCE CHAT SUGGESTIONS & TOP-VOTED IDEAS (Last 30 seconds):
+${audienceComments.map(c => `- @${c.userName} (Votes: ${c.votesCount || 0}): "${c.text}"`).join('\n')}
+
+AUDIENCE INSPIRATION DIRECTIVE:
+The interactive audience has posted the above comments and ideas in the live chat during the last 30 seconds.
+Carefully review their suggestions. If any comment features an intriguing twist, clever dialogue idea, or dramatic escalation that complements the winning option (${chosenOptionId}: "${chosenOption.title}"), incorporate or be inspired by this audience concept to give a surprising twist to this scene while maintaining film continuity!`
+    : '';
 
   if (apiKey) {
     try {
@@ -606,7 +616,7 @@ Previous step (${previousStep.stepNumber}): "${previousStep.synopsis}".
 Previous video URL reference: "${previousStep.videoUrl}".
 Audience-voted winning option: "${chosenOption.text}" (Expected consequence: ${chosenOption.expectedConsequence}).
 Existing characters: ${JSON.stringify(movie.bible.characters.map(c => ({ id: c.id, name: c.name, role: c.role })))};
-Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p.name, owner: p.ownerCharacterName })))};`;
+Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p.name, owner: p.ownerCharacterName })))};${audienceSuggestionsText}`;
 
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",

@@ -1,4 +1,4 @@
-import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd } from '@/types/cinema';
+import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig } from '@/types/cinema';
 import { getSupabaseServerClient } from './server';
 
 export function isSupabaseConfigured(): boolean {
@@ -175,6 +175,7 @@ export async function persistChatMessage(movieId: string, msg: ChatMessage): Pro
       is_system: msg.isSystem || false,
       voted_option: msg.votedOption || null,
       created_at: new Date().toISOString(),
+      votes_count: msg.votesCount || 0
     }, { onConflict: 'id' });
 
     if (error) {
@@ -182,6 +183,145 @@ export async function persistChatMessage(movieId: string, msg: ChatMessage): Pro
     }
   } catch (err) {
     console.error('[Supabase] Exception in persistChatMessage:', err);
+  }
+}
+
+/**
+ * Vote or unvote on an audience comment.
+ * Returns the updated votes count and whether the user is currently voting for it.
+ */
+export async function voteChatMessageInDb(
+  commentId: string,
+  userId: string,
+  movieId: string
+): Promise<{ votesCount: number; userVoted: boolean }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return { votesCount: 0, userVoted: false };
+
+  try {
+    // 1. Check existing vote
+    const { data: existing } = await supabase
+      .from('comment_votes')
+      .select('id')
+      .eq('comment_id', commentId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    let userVoted = false;
+    if (existing) {
+      // Remove vote (toggle)
+      await supabase.from('comment_votes').delete().eq('comment_id', commentId).eq('user_id', userId);
+      userVoted = false;
+    } else {
+      // Insert vote
+      await supabase.from('comment_votes').insert({
+        comment_id: commentId,
+        user_id: userId,
+        movie_id: movieId
+      });
+      userVoted = true;
+    }
+
+    // 2. Count total votes for this comment
+    const { count } = await supabase
+      .from('comment_votes')
+      .select('*', { count: 'exact', head: true })
+      .eq('comment_id', commentId);
+
+    const votesCount = count ?? (userVoted ? 1 : 0);
+
+    // 3. Update votes_count on chat_messages table
+    await supabase
+      .from('chat_messages')
+      .update({ votes_count: votesCount })
+      .eq('id', commentId);
+
+    // 4. Update top_voted_comments table
+    if (votesCount > 0) {
+      const { data: msg } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('id', commentId)
+        .maybeSingle();
+
+      if (msg) {
+        await supabase.from('top_voted_comments').upsert({
+          id: commentId,
+          comment_id: commentId,
+          movie_id: movieId,
+          user_id: msg.user_id,
+          user_name: msg.user_name,
+          text: msg.text,
+          votes_count: votesCount,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+      }
+    } else {
+      await supabase.from('top_voted_comments').delete().eq('id', commentId);
+    }
+
+    return { votesCount, userVoted };
+  } catch (err) {
+    console.error('[Supabase] Exception in voteChatMessageInDb:', err);
+    return { votesCount: 0, userVoted: false };
+  }
+}
+
+/**
+ * Load top voted comments for a movie
+ */
+export async function loadTopVotedCommentsFromDb(movieId: string, limit = 10): Promise<ChatMessage[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('top_voted_comments')
+      .select('*')
+      .eq('movie_id', movieId)
+      .order('votes_count', { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+
+    return data.map(item => ({
+      id: item.comment_id,
+      userId: item.user_id,
+      userName: item.user_name,
+      text: item.text,
+      votesCount: item.votes_count,
+      timestamp: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }));
+  } catch (err) {
+    console.error('[Supabase] Exception in loadTopVotedCommentsFromDb:', err);
+    return [];
+  }
+}
+
+/**
+ * Load IDs of comments upvoted by a specific user session UUID
+ */
+export async function loadUserVotedCommentIdsFromDb(userId: string, movieId?: string): Promise<string[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  try {
+    let query = supabase
+      .from('comment_votes')
+      .select('comment_id')
+      .eq('user_id', userId);
+
+    if (movieId) {
+      query = query.eq('movie_id', movieId);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) return [];
+
+    return data.map(d => d.comment_id);
+  } catch (err) {
+    console.error('[Supabase] Exception in loadUserVotedCommentIdsFromDb:', err);
+    return [];
   }
 }
 
@@ -356,8 +496,10 @@ export async function loadRecentChatMessagesFromDb(movieId: string, limit = 50):
       userAvatar: msg.user_avatar,
       text: msg.text,
       timestamp: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAtMs: new Date(msg.created_at).getTime(),
       isSystem: msg.is_system,
       votedOption: msg.voted_option,
+      votesCount: msg.votes_count || 0
     }));
   } catch (err) {
     console.error('[Supabase] Exception in loadRecentChatMessagesFromDb:', err);
@@ -515,4 +657,408 @@ export async function archiveAllStreamingMovies(): Promise<void> {
   } catch (err) {
     console.error('[Supabase] Exception in archiveAllStreamingMovies:', err);
   }
+}
+
+export interface LiveCinemaStateRecord {
+  phase: PlaybackPhase;
+  timeRemaining: number;
+  currentStep: number;
+  totalAudience: number;
+  votesA: number;
+  votesB: number;
+  isLive: boolean;
+  isPaused: boolean;
+  isGenerationPaused: boolean;
+  activeAd?: ImmersiveAd | null;
+  adsConfig?: AdsConfig;
+  selectedOption?: 'A' | 'B';
+  wasRandomPick?: boolean;
+  updatedAt?: string;
+}
+
+export interface LiveCinemaStatePayload extends LiveCinemaStateRecord {
+  movieId: string;
+}
+
+/**
+ * Persist live cinema state to Supabase.
+ * Dual-writes to public.cinema_state AND public.movies.bible.liveState
+ * ensuring complete real-time persistence even if migration tables are pending.
+ */
+export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  const nowIso = new Date().toISOString();
+
+  // 1. Try public.cinema_state table
+  try {
+    await supabase.from('cinema_state').upsert({
+      id: 'active_session',
+      movie_id: payload.movieId,
+      phase: payload.phase,
+      time_remaining: payload.timeRemaining,
+      current_step: payload.currentStep,
+      total_audience: payload.totalAudience,
+      votes_a: payload.votesA,
+      votes_b: payload.votesB,
+      is_live: payload.isLive,
+      is_paused: payload.isPaused,
+      is_generation_paused: payload.isGenerationPaused,
+      active_ad_id: payload.activeAd?.id || null,
+      ads_config: payload.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
+      selected_option: payload.selectedOption || null,
+      was_random_pick: payload.wasRandomPick || false,
+      updated_at: nowIso
+    }, { onConflict: 'id' });
+  } catch {
+    // Non-blocking fallback
+  }
+
+  // 2. Dual-write to public.movies (existing table with RLS and realtime publication)
+  try {
+    const { data: movieData } = await supabase
+      .from('movies')
+      .select('bible')
+      .eq('id', payload.movieId)
+      .maybeSingle();
+
+    const currentBible = (movieData as any)?.bible || {};
+    const updatedBible = {
+      ...currentBible,
+      isGenerationPaused: payload.isGenerationPaused,
+      liveState: {
+        phase: payload.phase,
+        timeRemaining: payload.timeRemaining,
+        currentStep: payload.currentStep,
+        totalAudience: payload.totalAudience,
+        votesA: payload.votesA,
+        votesB: payload.votesB,
+        isLive: payload.isLive,
+        isPaused: payload.isPaused,
+        isGenerationPaused: payload.isGenerationPaused,
+        activeAd: payload.activeAd || null,
+        adsConfig: payload.adsConfig || null,
+        selectedOption: payload.selectedOption || null,
+        wasRandomPick: payload.wasRandomPick || false,
+        updatedAt: nowIso
+      }
+    };
+
+    await supabase
+      .from('movies')
+      .update({
+        current_step: payload.currentStep,
+        status: payload.isPaused ? 'paused' : 'streaming',
+        bible: updatedBible
+      })
+      .eq('id', payload.movieId);
+  } catch (err) {
+    // Non-blocking
+  }
+}
+
+/**
+ * Load live cinema state from Supabase.
+ * Checks public.cinema_state first, falling back to public.movies.bible.liveState.
+ */
+export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveCinemaStateRecord | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+
+  // 1. Try public.cinema_state
+  try {
+    let query = supabase.from('cinema_state').select('*').eq('id', 'active_session');
+    if (movieId) {
+      query = query.eq('movie_id', movieId);
+    }
+    const { data, error } = await query.maybeSingle();
+    if (!error && data) {
+      return {
+        phase: data.phase as PlaybackPhase,
+        timeRemaining: data.time_remaining,
+        currentStep: data.current_step,
+        totalAudience: data.total_audience,
+        votesA: data.votes_a,
+        votesB: data.votes_b,
+        isLive: data.is_live,
+        isPaused: data.is_paused,
+        isGenerationPaused: data.is_generation_paused,
+        adsConfig: data.ads_config,
+        selectedOption: data.selected_option,
+        wasRandomPick: data.was_random_pick,
+        updatedAt: data.updated_at
+      };
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+
+  // 2. Fallback to movies.bible.liveState
+  try {
+    let query = supabase.from('movies').select('bible').in('status', ['streaming', 'paused']);
+    if (movieId) {
+      query = supabase.from('movies').select('bible').eq('id', movieId);
+    } else {
+      query = query.order('created_at', { ascending: false }).limit(1);
+    }
+    const { data, error } = await query.maybeSingle();
+    if (!error && data?.bible?.liveState) {
+      return data.bible.liveState as LiveCinemaStateRecord;
+    }
+  } catch {
+    // Non-blocking
+  }
+
+  return null;
+}
+
+/**
+ * Record a user vote directly in Supabase.
+ * Stores in public.step_votes, public.viewer_preferences, and movies.bible.stepVotes.
+ */
+export async function recordUserVoteInDb(
+  movieId: string,
+  stepNumber: number,
+  userId: string,
+  optionId: 'A' | 'B',
+  userName?: string
+): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  const nowIso = new Date().toISOString();
+
+  // 1. Try public.step_votes table
+  try {
+    await supabase.from('step_votes').upsert({
+      movie_id: movieId,
+      step_number: stepNumber,
+      user_id: userId,
+      user_name: userName || `Viewer_${userId.slice(-4)}`,
+      option_id: optionId,
+      created_at: nowIso
+    }, { onConflict: 'movie_id,step_number,user_id' });
+  } catch {
+    // Non-blocking
+  }
+
+  // 2. Try public.viewer_preferences table
+  try {
+    await supabase.from('viewer_preferences').upsert({
+      user_id: userId,
+      last_voted_step: stepNumber,
+      voted_option: optionId,
+      updated_at: nowIso
+    }, { onConflict: 'user_id' });
+  } catch {
+    // Non-blocking
+  }
+
+  // 3. Dual-write to public.movies.bible.stepVotes & viewerPreferences
+  try {
+    const { data: movieData } = await supabase
+      .from('movies')
+      .select('bible')
+      .eq('id', movieId)
+      .single();
+
+    if (movieData) {
+      const bible = (movieData as any)?.bible || {};
+      const stepVotes = bible.stepVotes || {};
+      const currentStepMap = stepVotes[stepNumber] || {};
+      currentStepMap[userId] = optionId;
+      stepVotes[stepNumber] = currentStepMap;
+
+      const viewerPrefs = bible.viewerPreferences || {};
+      viewerPrefs[userId] = {
+        ...(viewerPrefs[userId] || {}),
+        lastVotedStep: stepNumber,
+        votedOption: optionId,
+        updatedAt: nowIso
+      };
+
+      await supabase
+        .from('movies')
+        .update({
+          bible: { ...bible, stepVotes, viewerPreferences: viewerPrefs }
+        })
+        .eq('id', movieId);
+    }
+  } catch {
+    // Non-blocking
+  }
+
+  return true;
+}
+
+/**
+ * Load whether a user has already voted for a specific step from Supabase.
+ */
+export async function loadUserVoteForStep(
+  movieId: string,
+  stepNumber: number,
+  userId: string
+): Promise<'A' | 'B' | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+
+  // 1. Try public.step_votes table
+  try {
+    const { data } = await supabase
+      .from('step_votes')
+      .select('option_id')
+      .eq('movie_id', movieId)
+      .eq('step_number', stepNumber)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (data?.option_id === 'A' || data?.option_id === 'B') {
+      return data.option_id as 'A' | 'B';
+    }
+  } catch {
+    // Non-blocking
+  }
+
+  // 2. Try movies.bible.stepVotes
+  try {
+    const { data } = await supabase
+      .from('movies')
+      .select('bible')
+      .eq('id', movieId)
+      .maybeSingle();
+
+    const option = (data as any)?.bible?.stepVotes?.[stepNumber]?.[userId];
+    if (option === 'A' || option === 'B') {
+      return option;
+    }
+  } catch {
+    // Non-blocking
+  }
+
+  // 3. Try public.viewer_preferences table
+  try {
+    const { data } = await supabase
+      .from('viewer_preferences')
+      .select('last_voted_step, voted_option')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (data?.last_voted_step === stepNumber && (data?.voted_option === 'A' || data?.voted_option === 'B')) {
+      return data.voted_option as 'A' | 'B';
+    }
+  } catch {
+    // Non-blocking
+  }
+
+  return null;
+}
+
+/**
+ * Persist viewer preferences (subtitles, language, nickname) to Supabase.
+ */
+export async function persistViewerPreferences(
+  userId: string,
+  prefs: { subtitlesEnabled?: boolean; subtitleLanguage?: 'en' | 'es'; nickname?: string | null },
+  movieId?: string
+): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  const nowIso = new Date().toISOString();
+
+  // 1. Try public.viewer_preferences table
+  try {
+    const payload: any = { user_id: userId, updated_at: nowIso };
+    if (prefs.subtitlesEnabled !== undefined) payload.subtitles_enabled = prefs.subtitlesEnabled;
+    if (prefs.subtitleLanguage !== undefined) payload.subtitle_language = prefs.subtitleLanguage;
+    if (prefs.nickname !== undefined) payload.nickname = prefs.nickname?.trim() || null;
+    await supabase.from('viewer_preferences').upsert(payload, { onConflict: 'user_id' });
+  } catch {
+    // Non-blocking
+  }
+
+  // 2. Dual-write to public.movies.bible.viewerPreferences
+  try {
+    let query = supabase.from('movies').select('id, bible').in('status', ['streaming', 'paused']);
+    if (movieId) {
+      query = supabase.from('movies').select('id, bible').eq('id', movieId);
+    } else {
+      query = query.order('created_at', { ascending: false }).limit(1);
+    }
+    const { data } = await query.maybeSingle();
+    if (data) {
+      const bible = (data as any)?.bible || {};
+      const viewerPrefs = bible.viewerPreferences || {};
+      viewerPrefs[userId] = {
+        ...(viewerPrefs[userId] || {}),
+        ...prefs,
+        nickname: prefs.nickname !== undefined ? (prefs.nickname?.trim() || null) : (viewerPrefs[userId]?.nickname || null),
+        updatedAt: nowIso
+      };
+      await supabase
+        .from('movies')
+        .update({
+          bible: { ...bible, viewerPreferences: viewerPrefs }
+        })
+        .eq('id', data.id);
+    }
+  } catch {
+    // Non-blocking
+  }
+}
+
+/**
+ * Load viewer preferences from Supabase.
+ */
+export async function loadViewerPreferences(
+  userId: string,
+  movieId?: string
+): Promise<{ subtitlesEnabled: boolean; subtitleLanguage: 'en' | 'es'; nickname: string | null }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return { subtitlesEnabled: true, subtitleLanguage: 'en', nickname: null };
+  }
+
+  // 1. Try public.viewer_preferences
+  try {
+    const { data } = await supabase
+      .from('viewer_preferences')
+      .select('subtitles_enabled, subtitle_language, nickname')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (data) {
+      return {
+        subtitlesEnabled: data.subtitles_enabled !== false,
+        subtitleLanguage: data.subtitle_language === 'es' ? 'es' : 'en',
+        nickname: data.nickname || null
+      };
+    }
+  } catch {
+    // Non-blocking
+  }
+
+  // 2. Fallback to movies.bible.viewerPreferences
+  try {
+    let query = supabase.from('movies').select('bible').in('status', ['streaming', 'paused']);
+    if (movieId) {
+      query = supabase.from('movies').select('bible').eq('id', movieId);
+    } else {
+      query = query.order('created_at', { ascending: false }).limit(1);
+    }
+    const { data } = await query.maybeSingle();
+    const pref = (data as any)?.bible?.viewerPreferences?.[userId];
+    if (pref) {
+      return {
+        subtitlesEnabled: pref.subtitlesEnabled !== false,
+        subtitleLanguage: pref.subtitleLanguage === 'es' ? 'es' : 'en',
+        nickname: pref.nickname || null
+      };
+    }
+  } catch {
+    // Non-blocking
+  }
+
+  return { subtitlesEnabled: true, subtitleLanguage: 'en', nickname: null };
 }

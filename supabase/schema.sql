@@ -213,4 +213,170 @@ begin
   if not exists (select 1 from pg_publication_tables where tablename = 'immersive_ads' and pubname = 'supabase_realtime') then
     alter publication supabase_realtime add table public.immersive_ads;
   end if;
+  if not exists (select 1 from pg_publication_tables where tablename = 'cinema_state' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.cinema_state;
+  end if;
+  if not exists (select 1 from pg_publication_tables where tablename = 'viewer_preferences' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.viewer_preferences;
+  end if;
+  if not exists (select 1 from pg_publication_tables where tablename = 'step_votes' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.step_votes;
+  end if;
 end $$;
+
+-- ==============================================================================
+-- 10. REALTIME CINEMA STATE & VIEWER PREFERENCES
+-- ==============================================================================
+
+-- 10.1. Cinema Live State Table (Single live broadcast row)
+create table if not exists public.cinema_state (
+  id text primary key default 'active_session',
+  movie_id text references public.movies(id) on delete cascade,
+  phase text not null default 'PLAYING' check (phase in ('PLAYING', 'VOTING', 'GENERATING', 'COMMERCIAL_BREAK')),
+  time_remaining int not null default 15,
+  current_step int not null default 1,
+  total_audience int not null default 142,
+  votes_a int not null default 0,
+  votes_b int not null default 0,
+  is_live boolean not null default true,
+  is_paused boolean not null default false,
+  is_generation_paused boolean not null default false,
+  active_ad_id text references public.immersive_ads(id) on delete set null,
+  ads_config jsonb not null default '{"autoAdsEnabled": true, "adIntervalSteps": 5, "lastAdStep": 0}'::jsonb,
+  selected_option text check (selected_option in ('A', 'B')),
+  was_random_pick boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+-- 10.2. Viewer Preferences Table (Subtitles, language, zero-browser-storage)
+create table if not exists public.viewer_preferences (
+  user_id text primary key,
+  subtitles_enabled boolean not null default true,
+  subtitle_language text not null default 'en' check (subtitle_language in ('en', 'es')),
+  last_voted_step int,
+  voted_option text check (voted_option in ('A', 'B')),
+  nickname text,
+  updated_at timestamptz not null default now()
+);
+
+-- 10.3. Step Votes Table (Persistent audience votes)
+create table if not exists public.step_votes (
+  id uuid default gen_random_uuid() primary key,
+  movie_id text not null references public.movies(id) on delete cascade,
+  step_number int not null,
+  user_id text not null,
+  user_name text,
+  option_id text not null check (option_id in ('A', 'B')),
+  created_at timestamptz not null default now(),
+  unique (movie_id, step_number, user_id)
+);
+
+create index if not exists idx_step_votes_lookup on public.step_votes(movie_id, step_number, user_id);
+create index if not exists idx_cinema_state_movie on public.cinema_state(movie_id);
+
+grant select on public.cinema_state to anon, authenticated;
+grant all on public.cinema_state to service_role;
+
+grant select, insert, update on public.viewer_preferences to anon, authenticated;
+grant all on public.viewer_preferences to service_role;
+
+grant select, insert on public.step_votes to anon, authenticated;
+grant all on public.step_votes to service_role;
+
+alter table public.cinema_state enable row level security;
+alter table public.viewer_preferences enable row level security;
+alter table public.step_votes enable row level security;
+
+drop policy if exists "Public view cinema state" on public.cinema_state;
+create policy "Public view cinema state" on public.cinema_state
+  for select to anon, authenticated using (true);
+
+drop policy if exists "Service role manage cinema state" on public.cinema_state;
+create policy "Service role manage cinema state" on public.cinema_state
+  for all to service_role using (true) with check (true);
+
+drop policy if exists "Public view viewer preferences" on public.viewer_preferences;
+create policy "Public view viewer preferences" on public.viewer_preferences
+  for select to anon, authenticated using (true);
+
+drop policy if exists "Public insert/update viewer preferences" on public.viewer_preferences;
+create policy "Public insert/update viewer preferences" on public.viewer_preferences
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "Service role manage viewer preferences" on public.viewer_preferences;
+create policy "Service role manage viewer preferences" on public.viewer_preferences
+  for all to service_role using (true) with check (true);
+
+drop policy if exists "Public view step votes" on public.step_votes;
+create policy "Public view step votes" on public.step_votes
+  for select to anon, authenticated using (true);
+
+drop policy if exists "Public insert step votes" on public.step_votes;
+create policy "Public insert step votes" on public.step_votes
+  for insert to anon, authenticated with check (true);
+
+drop policy if exists "Service role manage step votes" on public.step_votes;
+create policy "Service role manage step votes" on public.step_votes
+  for all to service_role using (true) with check (true);
+
+-- 9. COMMENT VOTES & TOP VOTED COMMENTS
+alter table public.chat_messages add column if not exists votes_count int not null default 0;
+
+create table if not exists public.comment_votes (
+  id uuid default gen_random_uuid() primary key,
+  comment_id text not null references public.chat_messages(id) on delete cascade,
+  user_id text not null,
+  movie_id text not null references public.movies(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (comment_id, user_id)
+);
+
+create table if not exists public.top_voted_comments (
+  id text primary key,
+  comment_id text not null,
+  movie_id text not null references public.movies(id) on delete cascade,
+  user_id text not null,
+  user_name text not null,
+  text text not null,
+  votes_count int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_comment_votes_lookup on public.comment_votes(comment_id, user_id);
+create index if not exists idx_top_voted_movie on public.top_voted_comments(movie_id, votes_count desc);
+create index if not exists idx_chat_messages_votes on public.chat_messages(movie_id, votes_count desc);
+
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where tablename = 'comment_votes' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.comment_votes;
+  end if;
+  if not exists (select 1 from pg_publication_tables where tablename = 'top_voted_comments' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.top_voted_comments;
+  end if;
+end $$;
+
+grant select, insert, delete on public.comment_votes to anon, authenticated;
+grant all on public.comment_votes to service_role;
+grant select, insert, update, delete on public.top_voted_comments to anon, authenticated;
+grant all on public.top_voted_comments to service_role;
+
+alter table public.comment_votes enable row level security;
+alter table public.top_voted_comments enable row level security;
+
+drop policy if exists "Public view comment votes" on public.comment_votes;
+create policy "Public view comment votes" on public.comment_votes for select to anon, authenticated using (true);
+drop policy if exists "Public insert comment votes" on public.comment_votes;
+create policy "Public insert comment votes" on public.comment_votes for insert to anon, authenticated with check (true);
+drop policy if exists "Public delete own comment votes" on public.comment_votes;
+create policy "Public delete own comment votes" on public.comment_votes for delete to anon, authenticated using (true);
+drop policy if exists "Service role all comment votes" on public.comment_votes;
+create policy "Service role all comment votes" on public.comment_votes for all to service_role using (true) with check (true);
+
+drop policy if exists "Public view top comments" on public.top_voted_comments;
+create policy "Public view top comments" on public.top_voted_comments for select to anon, authenticated using (true);
+drop policy if exists "Public manage top comments" on public.top_voted_comments;
+create policy "Public manage top comments" on public.top_voted_comments for all to anon, authenticated using (true) with check (true);
+drop policy if exists "Service role all top comments" on public.top_voted_comments;
+create policy "Service role all top comments" on public.top_voted_comments for all to service_role using (true) with check (true);

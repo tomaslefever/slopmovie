@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import { cinemaEngine } from '@/lib/cinema-orchestrator';
+import { loadUserVoteForStep, loadViewerPreferences } from '@/lib/supabase/db';
+import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get('userId') || 'guest';
+  const cookieStore = await cookies();
+  const cookieViewerId = cookieStore.get('kinetic_viewer_id')?.value;
+  
+  const rawId = searchParams.get('userId') || cookieViewerId;
+  const isUuid = Boolean(rawId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId));
+  const userId: string = isUuid && rawId ? rawId : crypto.randomUUID();
+  const isNewViewer = !isUuid;
 
   // If no movie is initialized yet, spin up or restore the movie
   if (!cinemaEngine.movie) {
@@ -11,14 +19,42 @@ export async function GET(request: Request) {
   }
 
   const state = cinemaEngine.getState(userId);
-  return NextResponse.json({
+
+  // Load vote from Supabase if not in memory
+  let hasUserVoted = state.hasUserVoted;
+  if (!hasUserVoted && cinemaEngine.movie) {
+    const dbVote = await loadUserVoteForStep(cinemaEngine.movie.id, cinemaEngine.movie.currentStep, userId);
+    if (dbVote) {
+      hasUserVoted = dbVote;
+      cinemaEngine.userVotes.set(userId, dbVote);
+    }
+  }
+
+  // Load viewer preferences from Supabase
+  const viewerPreferences = await loadViewerPreferences(userId, cinemaEngine.movie?.id);
+
+  const response = NextResponse.json({
     ...state,
+    userId,
+    hasUserVoted,
+    viewerPreferences,
     chatMessages: cinemaEngine.chatMessages.slice(-50),
     supabaseConfig: {
       url: process.env.NEXT_PUBLIC_SUPABASE_URL || null,
       anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || null
     }
   });
+
+  // Set HTTP-only compatible session cookie (zero localStorage required)
+  if (isNewViewer || !cookieViewerId) {
+    response.cookies.set('kinetic_viewer_id', userId, {
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 365 * 24 * 60 * 60
+    });
+  }
+
+  return response;
 }
 
 export async function POST(request: Request) {
@@ -116,6 +152,19 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success,
         isGenerationPaused: cinemaEngine.isGenerationPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'jump_to_step' || action === 'set_current_step') {
+      const stepNumber = Number(body.stepNumber);
+      if (isNaN(stepNumber) || stepNumber < 1) {
+        return NextResponse.json({ error: 'Número de step inválido' }, { status: 400 });
+      }
+      const success = await cinemaEngine.jumpToStep(stepNumber);
+      return NextResponse.json({
+        success,
+        currentStep: cinemaEngine.movie?.currentStep,
         state: cinemaEngine.getState()
       });
     }
