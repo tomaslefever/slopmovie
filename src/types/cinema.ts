@@ -182,7 +182,7 @@ export interface CinemaState {
   isGenerationPaused?: boolean;
   activeAd?: ImmersiveAd | null;
   adsConfig?: AdsConfig;
-  apiStatus: {
+  apiStatus?: {
     hasDeepseek: boolean;
     hasFal: boolean;
     isMockMode: boolean;

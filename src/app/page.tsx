@@ -23,11 +23,9 @@ export default function CinemaStreamingPage() {
   const [topVotedMessages, setTopVotedMessages] = useState<ChatMessage[]>([]);
 
   // Fetch chat messages and top-voted comments from Supabase / API
-  const fetchChatAndTopVoted = async (uId?: string) => {
+  const fetchChatAndTopVoted = async () => {
     try {
-      const targetUserId = uId || userId;
-      const url = targetUserId ? `/api/cinema/chat?userId=${encodeURIComponent(targetUserId)}` : '/api/cinema/chat';
-      const res = await fetch(url);
+      const res = await fetch('/api/cinema/chat');
       if (res.ok) {
         const data = await res.json();
         if (data.messages && Array.isArray(data.messages)) {
@@ -52,7 +50,7 @@ export default function CinemaStreamingPage() {
           setCinemaState(data);
           if (data.userId) {
             setUserId(data.userId);
-            fetchChatAndTopVoted(data.userId);
+            fetchChatAndTopVoted();
           }
           if (data.hasUserVoted) {
             setUserVoted(data.hasUserVoted);
@@ -81,17 +79,19 @@ export default function CinemaStreamingPage() {
     fetchInitialState();
   }, []);
 
-  // Resilient Polling Heartbeat (guarantees continuous live advancement even if Realtime drops or is unbuilt)
+  // Fallback Polling Heartbeat (safety sync only; Realtime handles live ticks)
   useEffect(() => {
+    // If Realtime is active, poll rarely (20s) as backup; if disconnected, poll every 5s
+    const intervalMs = supabaseReady ? 20000 : 5000;
+
     const heartbeat = setInterval(async () => {
       try {
-        const url = userId ? `/api/cinema/state?userId=${userId}` : '/api/cinema/state';
-        const res = await fetch(url);
+        const res = await fetch('/api/cinema/state');
         if (res.ok) {
           const data = await res.json();
           if (!userId && data.userId) {
             setUserId(data.userId);
-            fetchChatAndTopVoted(data.userId);
+            fetchChatAndTopVoted();
           }
           if (!nickname && data.viewerPreferences?.nickname) {
             setNickname(data.viewerPreferences.nickname);
@@ -102,13 +102,23 @@ export default function CinemaStreamingPage() {
             if (data.activeStep?.stepNumber !== prev.activeStep?.stepNumber) {
               setUserVoted(data.hasUserVoted || null);
             }
+
+            const isSameStep = prev.activeStep?.stepNumber === data.activeStep?.stepNumber;
+            const isSamePhase = prev.phase === data.phase;
+
             return {
               ...prev,
               ...data,
               movie: data.movie,
-              activeStep: data.activeStep,
+              // Maintain activeStep object reference if step number & video haven't changed
+              activeStep: (isSameStep && prev.activeStep?.videoUrl === data.activeStep?.videoUrl)
+                ? prev.activeStep
+                : data.activeStep,
               phase: data.phase,
-              timeRemaining: data.timeRemaining,
+              // Do not jump backward in time during the same phase
+              timeRemaining: (isSamePhase && prev.timeRemaining < data.timeRemaining && prev.timeRemaining > 0)
+                ? prev.timeRemaining
+                : data.timeRemaining,
               phaseDuration: data.phaseDuration,
               phaseStartedAt: data.phaseStartedAt,
               phaseEndsAt: data.phaseEndsAt,
@@ -116,7 +126,8 @@ export default function CinemaStreamingPage() {
               votesB: data.votesB,
               totalAudience: data.totalAudience,
               isPaused: data.isPaused,
-              isGenerationPaused: data.isGenerationPaused
+              isGenerationPaused: data.isGenerationPaused,
+              apiStatus: data.apiStatus ?? prev.apiStatus
             };
           });
 
@@ -137,7 +148,7 @@ export default function CinemaStreamingPage() {
       } catch {
         // Ignored on transient network blip
       }
-    }, 2500);
+    }, intervalMs);
 
     return () => clearInterval(heartbeat);
   }, [userId, supabaseReady]);
@@ -154,11 +165,18 @@ export default function CinemaStreamingPage() {
     channel
       .on('broadcast', { event: 'state_snapshot' }, (payload: { payload: Partial<CinemaState> }) => {
         setCinemaState((prev) => {
-          if (!prev) return (payload.payload as CinemaState) || null;
           const snapshot = payload.payload;
+          const defaultApiStatus = { hasDeepseek: false, hasFal: false, isMockMode: true };
+          if (!prev) {
+            return snapshot ? {
+              ...snapshot,
+              apiStatus: snapshot.apiStatus || defaultApiStatus
+            } as CinemaState : null;
+          }
           return {
             ...prev,
             ...snapshot,
+            apiStatus: snapshot.apiStatus ?? prev.apiStatus ?? defaultApiStatus,
             movie: snapshot.movie ?? prev.movie,
             activeStep: snapshot.activeStep ?? prev.activeStep,
             phase: snapshot.phase ?? prev.phase,
@@ -279,7 +297,7 @@ export default function CinemaStreamingPage() {
           }
           return prev;
         });
-        fetchChatAndTopVoted(userId);
+        fetchChatAndTopVoted();
       })
       .on('broadcast', { event: 'ad_break_started' }, (payload: any) => {
         setCinemaState((prev) => {
@@ -354,7 +372,7 @@ export default function CinemaStreamingPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'top_voted_comments' },
         () => {
-          fetchChatAndTopVoted(userId);
+          fetchChatAndTopVoted();
         }
       )
       .subscribe();
@@ -536,7 +554,7 @@ export default function CinemaStreamingPage() {
       {/* Top Navigation */}
       <Navbar
         movieTitle={cinemaState.movie.title}
-        isMockMode={cinemaState.apiStatus.isMockMode}
+        isMockMode={cinemaState.apiStatus?.isMockMode ?? false}
         onToggleGallery={() => setIsGalleryOpen(!isGalleryOpen)}
         isGalleryOpen={isGalleryOpen}
         currentStep={cinemaState.movie.currentStep}

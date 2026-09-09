@@ -105,6 +105,8 @@ create table if not exists public.immersive_ads (
   step_trigger int,
   impressions int not null default 0,
   clicks int not null default 0,
+  cinematic_prompt text,
+  generated_ad_video_url text,
   created_at timestamptz not null default now()
 );
 
@@ -192,43 +194,12 @@ create policy "Public view ads" on public.immersive_ads
 create policy "Service role manage ads" on public.immersive_ads
   for all to service_role using (true) with check (true);
 
--- ==============================================================================
--- 9. SUPABASE REALTIME REPLICATION
--- Adds tables to the realtime publication so web clients receive live events
--- ==============================================================================
-do $$
-begin
-  if not exists (select 1 from pg_publication_tables where tablename = 'movies' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.movies;
-  end if;
-  if not exists (select 1 from pg_publication_tables where tablename = 'movie_steps' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.movie_steps;
-  end if;
-  if not exists (select 1 from pg_publication_tables where tablename = 'props' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.props;
-  end if;
-  if not exists (select 1 from pg_publication_tables where tablename = 'chat_messages' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.chat_messages;
-  end if;
-  if not exists (select 1 from pg_publication_tables where tablename = 'immersive_ads' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.immersive_ads;
-  end if;
-  if not exists (select 1 from pg_publication_tables where tablename = 'cinema_state' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.cinema_state;
-  end if;
-  if not exists (select 1 from pg_publication_tables where tablename = 'viewer_preferences' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.viewer_preferences;
-  end if;
-  if not exists (select 1 from pg_publication_tables where tablename = 'step_votes' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.step_votes;
-  end if;
-end $$;
 
 -- ==============================================================================
--- 10. REALTIME CINEMA STATE & VIEWER PREFERENCES
+-- 9. REALTIME CINEMA STATE & VIEWER PREFERENCES
 -- ==============================================================================
 
--- 10.1. Cinema Live State Table (Single live broadcast row)
+-- 9.1. Cinema Live State Table (Single live broadcast row)
 create table if not exists public.cinema_state (
   id text primary key default 'active_session',
   movie_id text references public.movies(id) on delete cascade,
@@ -253,7 +224,7 @@ create table if not exists public.cinema_state (
   updated_at timestamptz not null default now()
 );
 
--- 10.2. Viewer Preferences Table (Subtitles, language, zero-browser-storage)
+-- 9.2. Viewer Preferences Table (Subtitles, language, zero-browser-storage)
 create table if not exists public.viewer_preferences (
   user_id text primary key,
   subtitles_enabled boolean not null default true,
@@ -264,7 +235,7 @@ create table if not exists public.viewer_preferences (
   updated_at timestamptz not null default now()
 );
 
--- 10.3. Step Votes Table (Persistent audience votes)
+-- 9.3. Step Votes Table (Persistent audience votes)
 create table if not exists public.step_votes (
   id uuid default gen_random_uuid() primary key,
   movie_id text not null references public.movies(id) on delete cascade,
@@ -324,7 +295,7 @@ drop policy if exists "Service role manage step votes" on public.step_votes;
 create policy "Service role manage step votes" on public.step_votes
   for all to service_role using (true) with check (true);
 
--- 9. COMMENT VOTES & TOP VOTED COMMENTS
+-- 10. COMMENT VOTES & TOP VOTED COMMENTS
 alter table public.chat_messages add column if not exists votes_count int not null default 0;
 
 create table if not exists public.comment_votes (
@@ -352,16 +323,6 @@ create index if not exists idx_comment_votes_lookup on public.comment_votes(comm
 create index if not exists idx_top_voted_movie on public.top_voted_comments(movie_id, votes_count desc);
 create index if not exists idx_chat_messages_votes on public.chat_messages(movie_id, votes_count desc);
 
-do $$
-begin
-  if not exists (select 1 from pg_publication_tables where tablename = 'comment_votes' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.comment_votes;
-  end if;
-  if not exists (select 1 from pg_publication_tables where tablename = 'top_voted_comments' and pubname = 'supabase_realtime') then
-    alter publication supabase_realtime add table public.top_voted_comments;
-  end if;
-end $$;
-
 grant select, insert, delete on public.comment_votes to anon, authenticated;
 grant all on public.comment_votes to service_role;
 grant select, insert, update, delete on public.top_voted_comments to anon, authenticated;
@@ -385,3 +346,55 @@ drop policy if exists "Public manage top comments" on public.top_voted_comments;
 create policy "Public manage top comments" on public.top_voted_comments for all to anon, authenticated using (true) with check (true);
 drop policy if exists "Service role all top comments" on public.top_voted_comments;
 create policy "Service role all top comments" on public.top_voted_comments for all to service_role using (true) with check (true);
+
+-- ==============================================================================
+-- 11. SUPABASE REALTIME REPLICATION
+-- Adds all interactive tables to the realtime publication so web clients receive live events.
+-- Safe check ensuring tables exist (to_regclass) and aren't already published.
+-- ==============================================================================
+do $$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+
+  if to_regclass('public.movies') is not null and not exists (select 1 from pg_publication_tables where tablename = 'movies' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.movies;
+  end if;
+
+  if to_regclass('public.movie_steps') is not null and not exists (select 1 from pg_publication_tables where tablename = 'movie_steps' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.movie_steps;
+  end if;
+
+  if to_regclass('public.props') is not null and not exists (select 1 from pg_publication_tables where tablename = 'props' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.props;
+  end if;
+
+  if to_regclass('public.chat_messages') is not null and not exists (select 1 from pg_publication_tables where tablename = 'chat_messages' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.chat_messages;
+  end if;
+
+  if to_regclass('public.immersive_ads') is not null and not exists (select 1 from pg_publication_tables where tablename = 'immersive_ads' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.immersive_ads;
+  end if;
+
+  if to_regclass('public.cinema_state') is not null and not exists (select 1 from pg_publication_tables where tablename = 'cinema_state' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.cinema_state;
+  end if;
+
+  if to_regclass('public.viewer_preferences') is not null and not exists (select 1 from pg_publication_tables where tablename = 'viewer_preferences' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.viewer_preferences;
+  end if;
+
+  if to_regclass('public.step_votes') is not null and not exists (select 1 from pg_publication_tables where tablename = 'step_votes' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.step_votes;
+  end if;
+
+  if to_regclass('public.comment_votes') is not null and not exists (select 1 from pg_publication_tables where tablename = 'comment_votes' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.comment_votes;
+  end if;
+
+  if to_regclass('public.top_voted_comments') is not null and not exists (select 1 from pg_publication_tables where tablename = 'top_voted_comments' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.top_voted_comments;
+  end if;
+end $$;

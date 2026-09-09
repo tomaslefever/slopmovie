@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { cinemaEngine } from '@/lib/cinema-orchestrator';
-import { cinemaWorker } from '@/lib/cinema-worker';
 import { 
   loadActiveMovieFromDb, 
   loadLiveCinemaStateFromDb, 
@@ -12,9 +11,6 @@ import { CINEMATIC_MOCK_VIDEOS } from '@/lib/fal-video';
 import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
-  // Ensure worker loop is running in background (leader election guarantees only ONE process ticks)
-  cinemaWorker.start();
-
   const { searchParams } = new URL(request.url);
   const cookieStore = await cookies();
   const cookieViewerId = cookieStore.get('kinetic_viewer_id')?.value;
@@ -26,7 +22,7 @@ export async function GET(request: Request) {
 
   // 1. Read live cinema state directly from Supabase database (Source of Truth)
   let liveState = await loadLiveCinemaStateFromDb();
-  let activeMovie = await loadActiveMovieFromDb();
+  let activeMovie = await loadActiveMovieFromDb(liveState?.movieId);
 
   // If no movie exists in DB yet, initialize one
   if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) {
@@ -102,10 +98,16 @@ export async function GET(request: Request) {
     ? await loadRecentChatMessagesFromDb(activeMovie.id)
     : [];
 
-  const timeRemaining = typeof liveState?.timeRemaining === 'number' ? liveState.timeRemaining : 15;
   const phase = liveState?.phase || 'PLAYING';
   const phaseDuration = liveState?.phaseDuration || (phase === 'VOTING' ? 10 : 15);
   const phaseStartedAt = liveState?.phaseStartedAt || new Date().toISOString();
+
+  // Dynamically compute exact seconds remaining based on phaseEndsAt timestamp
+  const endsAtMs = liveState?.phaseEndsAt ? new Date(liveState.phaseEndsAt).getTime() : 0;
+  const timeRemaining = endsAtMs > 0
+    ? Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000))
+    : (typeof liveState?.timeRemaining === 'number' ? liveState.timeRemaining : phaseDuration);
+
   const phaseEndsAt = liveState?.phaseEndsAt || new Date(Date.now() + timeRemaining * 1000).toISOString();
 
   const response = NextResponse.json({

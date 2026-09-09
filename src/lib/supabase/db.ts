@@ -403,17 +403,18 @@ export async function loadCompletedMoviesFromDb(): Promise<Movie[]> {
 /**
  * Load latest active streaming movie from database
  */
-export async function loadActiveMovieFromDb(): Promise<Movie | null> {
+export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
   try {
-    const { data: movies, error } = await supabase
-      .from('movies')
-      .select('*')
-      .in('status', ['streaming', 'paused'])
-      .order('created_at', { ascending: false })
-      .limit(1);
+    let query = supabase.from('movies').select('*');
+    if (movieId) {
+      query = query.eq('id', movieId);
+    } else {
+      query = query.in('status', ['streaming', 'paused']).order('created_at', { ascending: false });
+    }
+    const { data: movies, error } = await query.limit(1);
 
     if (error || !movies || movies.length === 0) return null;
 

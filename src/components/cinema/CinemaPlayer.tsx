@@ -68,7 +68,8 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   const [currentVideoSrc, setCurrentVideoSrc] = useState<string>(() => getSanitizedVideoUrl(activeStep.videoUrl));
 
   useEffect(() => {
-    setCurrentVideoSrc(getSanitizedVideoUrl(activeStep.videoUrl));
+    const nextSrc = getSanitizedVideoUrl(activeStep.videoUrl);
+    setCurrentVideoSrc(prev => prev !== nextSrc ? nextSrc : prev);
   }, [activeStep.videoUrl, activeStep.stepNumber, fallbackUrl]);
 
   const handleVideoError = () => {
@@ -106,18 +107,29 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
     setShowSubtitleMenu(false);
   };
 
-  // Auto-play and handle video src change
+  const lastPlayedStepRef = useRef<number>(activeStep.stepNumber);
+  const lastVideoSrcRef = useRef<string>(currentVideoSrc);
+
+  // Auto-play and handle video src change ONLY when step number or video src actually transitions
   useEffect(() => {
-    if (videoRef.current && currentVideoSrc) {
+    const video = videoRef.current;
+    if (!video || !currentVideoSrc) return;
+
+    const isDifferentStep = lastPlayedStepRef.current !== activeStep.stepNumber;
+    const isDifferentSrc = lastVideoSrcRef.current !== currentVideoSrc;
+
+    if (isDifferentStep || isDifferentSrc) {
+      lastPlayedStepRef.current = activeStep.stepNumber;
+      lastVideoSrcRef.current = currentVideoSrc;
       setIsVideoLoading(true);
-      videoRef.current.currentTime = 0;
+      video.currentTime = 0;
       setVideoCurrentTime(0);
-      videoRef.current.muted = phase === 'VOTING' ? true : isMuted;
-      videoRef.current.play().catch(() => {
-        // Handled by muted autoplay
-      });
+      video.muted = phase === 'VOTING' ? true : isMuted;
+      video.play().catch(() => {});
+    } else if (video.paused && phase === 'PLAYING' && !isPaused) {
+      video.play().catch(() => {});
     }
-  }, [currentVideoSrc, activeStep.stepNumber]);
+  }, [currentVideoSrc, activeStep.stepNumber, phase, isMuted, isPaused]);
 
   // Enforce scene repeating without sound during VOTING phase, and completely pause/mute during COMMERCIAL_BREAK
   useEffect(() => {

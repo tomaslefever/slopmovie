@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { cinemaEngine } from '@/lib/cinema-orchestrator';
 import { loadTopVotedCommentsFromDb, loadUserVotedCommentIdsFromDb } from '@/lib/supabase/db';
+import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get('userId');
+  const cookieStore = await cookies();
+  const userId = searchParams.get('userId') || cookieStore.get('kinetic_viewer_id')?.value;
 
   const movieId = cinemaEngine.movie?.id;
   const topVotedFromDb = movieId ? await loadTopVotedCommentsFromDb(movieId, 15) : [];
