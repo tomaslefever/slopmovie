@@ -374,10 +374,17 @@ class CinemaOrchestrator {
       const liveState = await loadLiveCinemaStateFromDb(this.movie?.id);
       if (liveState) {
         this.phase = liveState.phase || 'PLAYING';
-        this.timeRemaining = typeof liveState.timeRemaining === 'number' ? liveState.timeRemaining : 15;
         this.phaseDuration = liveState.phaseDuration || 15;
         this.phaseStartedAt = liveState.phaseStartedAt ? new Date(liveState.phaseStartedAt).getTime() : Date.now();
-        this.phaseEndsAt = liveState.phaseEndsAt ? new Date(liveState.phaseEndsAt).getTime() : Date.now() + this.timeRemaining * 1000;
+        this.phaseEndsAt = liveState.phaseEndsAt ? new Date(liveState.phaseEndsAt).getTime() : Date.now() + 15000;
+        
+        // If phase has already ended in real time, set timeRemaining to 0 so transition fires immediately
+        if (liveState.phaseEndsAt) {
+          const remainingSec = Math.ceil((new Date(liveState.phaseEndsAt).getTime() - Date.now()) / 1000);
+          this.timeRemaining = Math.max(0, remainingSec);
+        } else {
+          this.timeRemaining = typeof liveState.timeRemaining === 'number' ? liveState.timeRemaining : 15;
+        }
         this.votesA = liveState.votesA || 0;
         this.votesB = liveState.votesB || 0;
         this.totalAudience = liveState.totalAudience || 142;
@@ -468,7 +475,7 @@ class CinemaOrchestrator {
         phaseStartedAt: this.phaseStartedAt,
         phaseEndsAt: this.phaseEndsAt
       });
-      await this.broadcastStateSnapshot();
+      await this.broadcastStateSnapshot(workerId);
       return;
     }
 
@@ -504,7 +511,7 @@ class CinemaOrchestrator {
         phaseEndsAt: this.phaseEndsAt,
         options: currentStep.options
       });
-      await this.broadcastStateSnapshot();
+      await this.broadcastStateSnapshot(workerId);
     } 
     else if (this.phase === 'VOTING') {
       // 10-second voting has concluded -> Resolve winner
@@ -545,7 +552,7 @@ class CinemaOrchestrator {
         votesA: this.votesA,
         votesB: this.votesB
       });
-      await this.broadcastStateSnapshot();
+      await this.broadcastStateSnapshot(workerId);
 
       if (wasRandomPick) {
         this.addSystemMessage(`🎲 [TIE / RANDOM] Fate chose at random: OPTION ${chosenOption} ("${winningOption.title}")`);
@@ -642,6 +649,10 @@ class CinemaOrchestrator {
         this.movie.steps.push(replayStep);
         this.movie.currentStep = replayStepNumber;
 
+        // Persist movie and replay step to Supabase
+        await persistMovie(this.movie);
+        await persistMovieStep(this.movie.id, replayStep);
+
         this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generación IA pausada. Reproduciendo clip #${replayStepNumber}: "${replayStep.title}" (sin gasto de créditos).`);
 
         this.setPhase('PLAYING', 15);
@@ -658,7 +669,7 @@ class CinemaOrchestrator {
         this.votesB = 0;
         this.userVotes.clear();
 
-        await this.broadcastStateSnapshot();
+        await this.broadcastStateSnapshot(workerId);
         return;
       }
 
@@ -772,7 +783,7 @@ class CinemaOrchestrator {
       this.userVotes.clear();
 
       this.setPhase('PLAYING', 15);
-      await this.broadcastStateSnapshot();
+      await this.broadcastStateSnapshot(workerId);
     }
   }
 

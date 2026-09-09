@@ -1,4 +1,4 @@
-﻿import { acquireOrRenewWorkerLock, releaseWorkerLock } from './supabase/db';
+import { acquireOrRenewWorkerLock, releaseWorkerLock } from './supabase/db';
 import { cinemaEngine } from './cinema-orchestrator';
 
 /**
@@ -20,6 +20,8 @@ class CinemaWorker {
     return CinemaWorker.instance;
   }
 
+  private isBusy: boolean = false;
+
   public start() {
     if (this.isRunning) return;
     this.isRunning = true;
@@ -28,6 +30,8 @@ class CinemaWorker {
 
     // Run tick every 1000ms
     this.interval = setInterval(async () => {
+      if (this.isBusy) return;
+      this.isBusy = true;
       try {
         // 1. Leader election check in Supabase database
         const hasLock = await acquireOrRenewWorkerLock(this.workerId);
@@ -51,6 +55,8 @@ class CinemaWorker {
         await cinemaEngine.tickWorker(this.workerId);
       } catch (err) {
         console.error('[CinemaWorker] Error in worker tick:', err);
+      } finally {
+        this.isBusy = false;
       }
     }, 1000);
   }

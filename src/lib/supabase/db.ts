@@ -91,7 +91,7 @@ export async function persistProp(movieId: string, prop: Prop): Promise<void> {
       movie_id: movieId,
       name: prop.name,
       description: prop.description || '',
-      visual_appearance: prop.visualAppearance,
+      visual_appearance: prop.visualAppearance || prop.description || prop.name || 'Prop item',
       narrative_significance: prop.narrativeSignificance || '',
       image_url: prop.imageUrl || null,
       step_introduced: prop.stepIntroduced || 1,
@@ -1010,6 +1010,7 @@ export async function acquireOrRenewWorkerLock(workerId: string): Promise<boolea
   const nowIso = new Date(now).toISOString();
   const staleThreshold = 6000; // 6 seconds threshold
 
+  // 1. Try public.cinema_state if available in Supabase
   try {
     const { data: state, error } = await supabase
       .from('cinema_state')
@@ -1017,36 +1018,81 @@ export async function acquireOrRenewWorkerLock(workerId: string): Promise<boolea
       .eq('id', 'active_session')
       .maybeSingle();
 
-    if (error) return false;
+    if (!error) {
+      if (!state) {
+        // Initialize active_session if missing
+        await supabase.from('cinema_state').insert({
+          id: 'active_session',
+          worker_id: workerId,
+          worker_heartbeat: nowIso,
+          updated_at: nowIso
+        });
+        return true;
+      }
 
-    if (!state) {
-      // Initialize active_session if missing
-      await supabase.from('cinema_state').insert({
-        id: 'active_session',
-        worker_id: workerId,
-        worker_heartbeat: nowIso,
-        updated_at: nowIso
-      });
+      const currentWorker = state.worker_id;
+      const lastHeartbeat = state.worker_heartbeat ? new Date(state.worker_heartbeat).getTime() : 0;
+      const isStale = (now - lastHeartbeat) > staleThreshold;
+
+      if (!currentWorker || currentWorker === workerId || isStale) {
+        const { error: updateError } = await supabase
+          .from('cinema_state')
+          .update({
+            worker_id: workerId,
+            worker_heartbeat: nowIso
+          })
+          .eq('id', 'active_session');
+
+        if (!updateError) return true;
+      } else {
+        // Another worker actively holds cinema_state lock
+        return false;
+      }
+    }
+  } catch {
+    // Fall through to movies table
+  }
+
+  // 2. Resilient fallback to public.movies (guaranteed table with existing realtime publication)
+  try {
+    const { data: movie, error: movieErr } = await supabase
+      .from('movies')
+      .select('id, bible')
+      .in('status', ['streaming', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (movieErr || !movie) {
+      // If no movie created yet, grant lock so worker can initialize it
       return true;
     }
 
-    const currentWorker = state.worker_id;
-    const lastHeartbeat = state.worker_heartbeat ? new Date(state.worker_heartbeat).getTime() : 0;
+    const bible = (movie.bible as any) || {};
+    const liveState = bible.liveState || {};
+    const currentWorker = liveState.workerId;
+    const lastHeartbeat = liveState.workerHeartbeat ? new Date(liveState.workerHeartbeat).getTime() : 0;
     const isStale = (now - lastHeartbeat) > staleThreshold;
 
     if (!currentWorker || currentWorker === workerId || isStale) {
-      const { error: updateError } = await supabase
-        .from('cinema_state')
-        .update({
-          worker_id: workerId,
-          worker_heartbeat: nowIso
-        })
-        .eq('id', 'active_session');
+      const updatedBible = {
+        ...bible,
+        liveState: {
+          ...liveState,
+          workerId: workerId,
+          workerHeartbeat: nowIso
+        }
+      };
 
-      return !updateError;
+      const { error: updateErr } = await supabase
+        .from('movies')
+        .update({ bible: updatedBible })
+        .eq('id', movie.id);
+
+      return !updateErr;
     }
 
-    // Another worker is actively holding the lock
+    // Another worker is actively holding the lock in movies.bible
     return false;
   } catch {
     return false;
@@ -1066,9 +1112,29 @@ export async function releaseWorkerLock(workerId: string): Promise<void> {
       .update({ worker_id: null, worker_heartbeat: null })
       .eq('id', 'active_session')
       .eq('worker_id', workerId);
-  } catch {
-    // Non-blocking
-  }
+  } catch {}
+
+  try {
+    const { data: movie } = await supabase
+      .from('movies')
+      .select('id, bible')
+      .in('status', ['streaming', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (movie?.bible?.liveState?.workerId === workerId) {
+      const updatedBible = {
+        ...movie.bible,
+        liveState: {
+          ...movie.bible.liveState,
+          workerId: null,
+          workerHeartbeat: null
+        }
+      };
+      await supabase.from('movies').update({ bible: updatedBible }).eq('id', movie.id);
+    }
+  } catch {}
 }
 
 /**
