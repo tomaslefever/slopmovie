@@ -9,6 +9,7 @@ import { AudienceChat } from '@/components/cinema/AudienceChat';
 import { GalleryView } from '@/components/gallery/GalleryView';
 import { Navbar } from '@/components/layout/Navbar';
 import { BuyAdsModal } from '@/components/cinema/BuyAdsModal';
+import { ContactModal } from '@/components/cinema/ContactModal';
 import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
 import { isRealGeneratedVideoUrl } from '@/lib/fal-video';
 
@@ -42,6 +43,7 @@ export default function CinemaStreamingPage() {
   const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
   const [isGalleryOpen, setIsGalleryOpen] = useState<boolean>(false);
   const [isBuyAdsModalOpen, setIsBuyAdsModalOpen] = useState<boolean>(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState<boolean>(false);
   const [topVotedMessages, setTopVotedMessages] = useState<ChatMessage[]>([]);
   // Wraps CinemaPlayer + voting overlays so fullscreen keeps the vote cards visible
   const stageContainerRef = useRef<HTMLDivElement>(null);
@@ -1000,6 +1002,7 @@ export default function CinemaStreamingPage() {
         currentStep={cinemaState.movie.currentStep}
         totalSteps={cinemaState.movie.totalSteps}
         onOpenBuyAds={() => setIsBuyAdsModalOpen(true)}
+        onOpenContact={() => setIsContactModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -1085,6 +1088,12 @@ export default function CinemaStreamingPage() {
       <BuyAdsModal 
         isOpen={isBuyAdsModalOpen} 
         onClose={() => setIsBuyAdsModalOpen(false)} 
+      />
+
+      {/* Contact Modal (Direct Dispatch / Feedback / Webhook) */}
+      <ContactModal
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Film, LayoutGrid, Menu, Radio, Sparkles, X } from 'lucide-react';
+import { Film, LayoutGrid, Menu, Radio, Sparkles, X, Mail } from 'lucide-react';
 import { audioCues } from '@/lib/audio-cues';
 
 interface NavbarProps {
@@ -12,6 +12,7 @@ interface NavbarProps {
   currentStep?: number;
   totalSteps?: number;
   onOpenBuyAds?: () => void;
+  onOpenContact?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,7 +21,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   isGalleryOpen,
   currentStep = 1,
   totalSteps = 50,
-  onOpenBuyAds
+  onOpenBuyAds,
+  onOpenContact
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const progressPercent = Math.min(100, Math.max(0, Math.round((currentStep / (totalSteps || 50)) * 100)));
@@ -84,6 +86,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>Buy Ads</span>
         </button>
 
+        {/* Contact Modal Trigger */}
+        <button
+          onClick={() => {
+            audioCues.playClick();
+            onOpenContact?.();
+          }}
+          className="px-3.5 py-1.5 rounded-xl border border-cyan-500/30 bg-gradient-to-r from-cyan-500/10 to-sky-500/5 hover:from-cyan-500/20 hover:to-sky-500/15 text-cyan-300 hover:text-cyan-200 text-xs font-mono font-bold flex items-center space-x-1.5 shadow-[0_0_12px_rgba(6,182,212,0.15)] transition-all hover:scale-105 active:scale-95 group"
+          title="Contact the SlopMovie Team"
+        >
+          <Mail className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+          <span>Contact</span>
+        </button>
+
         {/* Gallery Toggle */}
         <button
           onClick={() => { audioCues.playClick(); onToggleGallery(); }}
@@ -137,6 +152,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             <span>Buy Ads</span>
+          </button>
+
+          <button
+            onClick={() => {
+              audioCues.playClick();
+              setIsMenuOpen(false);
+              onOpenContact?.();
+            }}
+            className="w-full px-3 py-2 rounded-xl border border-cyan-500/30 bg-gradient-to-r from-cyan-500/10 to-sky-500/5 text-cyan-300 text-xs font-mono font-bold flex items-center justify-center space-x-1.5 transition-colors"
+          >
+            <Mail className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Contact</span>
           </button>
 
           <button
