@@ -1,13 +1,23 @@
 import { NextResponse } from 'next/server';
+import { 
+  persistContactMessage, 
+  loadContactMessages, 
+  updateContactMessageStatus, 
+  deleteContactMessage 
+} from '@/lib/supabase/db';
 
 export const maxDuration = 30;
 
+/**
+ * POST /api/contact
+ * Save contact submission directly to database and optionally relay to webhook if configured.
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { name, email, subject, message } = body;
 
-    // Basic validation
+    // Validation
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
@@ -26,18 +36,31 @@ export async function POST(request: Request) {
     const cleanMessage = message.trim();
     const timestamp = new Date().toISOString();
 
-    const webhookUrl = process.env.CONTACT_WEBHOOK_URL?.trim();
+    // 1. Primary storage: Persist in Supabase contact_messages table
+    const dbResult = await persistContactMessage({
+      name: cleanName,
+      email: cleanEmail,
+      subject: cleanSubject,
+      message: cleanMessage
+    });
 
+    if (!dbResult.success) {
+      console.warn('[Contact API] Failed saving to Supabase, continuing with fallback:', dbResult.error);
+    } else {
+      console.log(`[Contact API] Message saved to Supabase (ID: ${dbResult.data?.id}) from ${cleanEmail}`);
+    }
+
+    // 2. Secondary relay: Send to webhook if configured (non-blocking)
+    const webhookUrl = process.env.CONTACT_WEBHOOK_URL?.trim();
     if (webhookUrl) {
-      // Formatted payload compatible with Discord, Slack, Zapier, n8n, Make, and generic webhook endpoints
       const webhookPayload = {
+        id: dbResult.data?.id,
         name: cleanName,
         email: cleanEmail,
         subject: cleanSubject,
         message: cleanMessage,
         timestamp,
         source: 'SlopMovie Interactive Cinema',
-        // Discord webhook compatibility
         content: `📬 **New Contact Submission from ${cleanName}**\n**Email:** ${cleanEmail}\n**Subject:** ${cleanSubject}\n>>> ${cleanMessage}`,
         embeds: [
           {
@@ -49,47 +72,121 @@ export async function POST(request: Request) {
               { name: 'Subject', value: cleanSubject, inline: false },
               { name: 'Message', value: cleanMessage, inline: false }
             ],
-            footer: { text: 'SlopMovie Contact Form' },
+            footer: { text: 'SlopMovie Contact Inbox' },
             timestamp
           }
         ]
       };
 
-      try {
-        const webhookResponse = await fetch(webhookUrl, {
-          signal: AbortSignal.timeout(10000),
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload)
+      fetch(webhookUrl, {
+        signal: AbortSignal.timeout(10000),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookPayload)
+      })
+        .then(res => {
+          if (!res.ok) console.warn(`[Contact Webhook] Status: ${res.status}`);
+        })
+        .catch(err => {
+          console.warn('[Contact Webhook] Webhook ping failed (non-critical):', err?.message || err);
         });
-
-        if (!webhookResponse.ok) {
-          const errorText = await webhookResponse.text().catch(() => '');
-          console.warn(`[Contact Webhook] Failed with status ${webhookResponse.status}: ${errorText}`);
-        } else {
-          console.log(`[Contact Webhook] Successfully delivered contact message from ${cleanEmail}`);
-        }
-      } catch (err) {
-        console.error('[Contact Webhook] Error sending payload to webhook:', err);
-      }
-    } else {
-      console.log('[Contact Webhook] Note: CONTACT_WEBHOOK_URL environment variable is not configured yet. Form submitted payload:', {
-        name: cleanName,
-        email: cleanEmail,
-        subject: cleanSubject,
-        message: cleanMessage,
-        timestamp
-      });
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Your message has been sent successfully!'
+      message: 'Your message has been sent successfully!',
+      data: dbResult.data
     });
   } catch (err: any) {
     console.error('[Contact API] Error handling contact form request:', err);
     return NextResponse.json(
       { error: err?.message || 'Failed to process contact submission' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * GET /api/contact
+ * Retrieve contact messages for admin dashboard
+ */
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status') || 'all';
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : 100;
+
+    const messages = await loadContactMessages({ status, limit });
+    return NextResponse.json({
+      success: true,
+      messages
+    });
+  } catch (err: any) {
+    console.error('[Contact API] Error loading contact messages:', err);
+    return NextResponse.json(
+      { error: err?.message || 'Failed to fetch contact messages' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/contact
+ * Update contact message status (read / unread / archived)
+ */
+export async function PATCH(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, status } = body;
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'Message ID is required' }, { status: 400 });
+    }
+
+    if (!['unread', 'read', 'archived'].includes(status)) {
+      return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
+    }
+
+    const success = await updateContactMessageStatus(id, status);
+    if (!success) {
+      return NextResponse.json({ error: 'Failed to update message status' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, status });
+  } catch (err: any) {
+    console.error('[Contact API] Error updating contact message:', err);
+    return NextResponse.json(
+      { error: err?.message || 'Failed to update message' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/contact
+ * Remove a contact message
+ */
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const { searchParams } = new URL(request.url);
+    const id = body.id || searchParams.get('id');
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'Message ID is required' }, { status: 400 });
+    }
+
+    const success = await deleteContactMessage(id);
+    if (!success) {
+      return NextResponse.json({ error: 'Failed to delete message' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, id });
+  } catch (err: any) {
+    console.error('[Contact API] Error deleting contact message:', err);
+    return NextResponse.json(
+      { error: err?.message || 'Failed to delete message' },
       { status: 500 }
     );
   }

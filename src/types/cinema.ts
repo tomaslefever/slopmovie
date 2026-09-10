@@ -207,3 +207,13 @@ export interface CinemaState {
   };
 }
 
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: 'unread' | 'read' | 'archived';
+  created_at: string;
+}
+

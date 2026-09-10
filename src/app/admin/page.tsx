@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
-import { ImmersiveAd, AdsConfig, Movie } from '@/types/cinema';
+import { ImmersiveAd, AdsConfig, Movie, ContactMessage } from '@/types/cinema';
 import { 
   Film, 
   Tv, 
@@ -33,7 +33,10 @@ import {
   Search,
   Filter,
   Layers,
-  Clapperboard
+  Clapperboard,
+  Mail,
+  Inbox,
+  MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
@@ -71,7 +74,7 @@ export default function AdminDashboardPage() {
     adIntervalSteps: 5,
     lastAdStep: 0
   });
-  const [activeTab, setActiveTab] = useState<'ads' | 'movie' | 'movies' | 'stats'>('ads');
+  const [activeTab, setActiveTab] = useState<'ads' | 'movie' | 'movies' | 'stats' | 'messages'>('ads');
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
   const [customPremise, setCustomPremise] = useState('');
   const [isTogglingPause, setIsTogglingPause] = useState(false);
@@ -129,6 +132,110 @@ export default function AdminDashboardPage() {
       setIsLoadingStats(false);
     }
   };
+
+  // Contact Messages state & operations
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
+  const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const [messageSearchQuery, setMessageSearchQuery] = useState('');
+  const [isUpdatingMessage, setIsUpdatingMessage] = useState(false);
+
+  // Fetch contact messages
+  const fetchContactMessages = async () => {
+    setIsLoadingMessages(true);
+    try {
+      const res = await fetch('/api/contact');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.messages)) {
+          setContactMessages(data.messages);
+          setSelectedMessage(prev => {
+            if (!prev) return data.messages[0] || null;
+            const stillExists = data.messages.find((m: ContactMessage) => m.id === prev.id);
+            return stillExists || data.messages[0] || null;
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching contact messages:', err);
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  };
+
+  const handleToggleMessageStatus = async (msg: ContactMessage) => {
+    audioCues.playClick();
+    const newStatus = msg.status === 'unread' ? 'read' : 'unread';
+    setIsUpdatingMessage(true);
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: msg.id, status: newStatus })
+      });
+      if (res.ok) {
+        setContactMessages(prev =>
+          prev.map(m => (m.id === msg.id ? { ...m, status: newStatus } : m))
+        );
+        setSelectedMessage(prev => (prev?.id === msg.id ? { ...prev, status: newStatus } : prev));
+        showFeedback(newStatus === 'read' ? '✉️ Marcado como leído' : '📬 Marcado como no leído');
+      } else {
+        showFeedback('Error al actualizar estado del mensaje');
+      }
+    } catch {
+      showFeedback('Error de red al actualizar mensaje');
+    } finally {
+      setIsUpdatingMessage(false);
+    }
+  };
+
+  const handleDeleteContactMessage = async (id: string, name?: string) => {
+    audioCues.playClick();
+    if (!confirm(`🗑️ ¿Eliminar definitivamente el mensaje de "${name || 'este remitente'}"?`)) return;
+
+    setIsUpdatingMessage(true);
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      if (res.ok) {
+        setContactMessages(prev => {
+          const next = prev.filter(m => m.id !== id);
+          if (selectedMessage?.id === id) {
+            setSelectedMessage(next[0] || null);
+          }
+          return next;
+        });
+        showFeedback('🗑️ Mensaje eliminado correctamente');
+      } else {
+        showFeedback('Error al eliminar mensaje');
+      }
+    } catch {
+      showFeedback('Error de red al eliminar mensaje');
+    } finally {
+      setIsUpdatingMessage(false);
+    }
+  };
+
+  // Filtered contact messages
+  const filteredMessages = contactMessages.filter(msg => {
+    if (messageFilter === 'unread' && msg.status !== 'unread') return false;
+    if (messageFilter === 'read' && msg.status === 'unread') return false;
+    if (messageSearchQuery.trim()) {
+      const q = messageSearchQuery.toLowerCase();
+      const matchName = msg.name?.toLowerCase().includes(q);
+      const matchEmail = msg.email?.toLowerCase().includes(q);
+      const matchSubject = msg.subject?.toLowerCase().includes(q);
+      const matchMessage = msg.message?.toLowerCase().includes(q);
+      return matchName || matchEmail || matchSubject || matchMessage;
+    }
+    return true;
+  });
+
+  const unreadMessagesCount = contactMessages.filter(m => m.status === 'unread').length;
 
   // New Ad Form State
   const [newBrandName, setNewBrandName] = useState('');
@@ -197,6 +304,7 @@ export default function AdminDashboardPage() {
           initSupabaseBrowserClient(stateData.supabaseConfig.url, stateData.supabaseConfig.anonKey);
         }
       }
+      fetchContactMessages();
     } catch (err) {
       console.error('Error fetching admin data:', err);
     }
@@ -279,6 +387,9 @@ export default function AdminDashboardPage() {
           .on('postgres_changes', { event: '*', schema: 'public', table: 'movie_steps' }, debouncedFetch)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'immersive_ads' }, debouncedFetch)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'blockbuster_votes' }, debouncedFetch)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_messages' }, () => {
+            fetchContactMessages();
+          })
           .subscribe();
 
         return () => {
@@ -1266,6 +1377,27 @@ export default function AdminDashboardPage() {
           >
             <BarChart3 className="w-4 h-4" />
             <span>Estadísticas</span>
+          </button>
+
+          <button
+            onClick={() => { audioCues.playClick(); setActiveTab('messages'); fetchContactMessages(); }}
+            className={`px-4 py-2 rounded-xl font-mono text-xs font-bold tracking-wider uppercase flex items-center space-x-2 transition-all relative ${
+              activeTab === 'messages'
+                ? 'bg-cyan-400 text-black shadow-[0_0_15px_rgba(34,211,238,0.4)]'
+                : 'bg-neutral-900 text-neutral-400 hover:text-white border border-white/5'
+            }`}
+          >
+            <Inbox className="w-4 h-4" />
+            <span>Buzón / Mensajes</span>
+            {unreadMessagesCount > 0 ? (
+              <span className={`px-1.5 py-0.5 text-[10px] font-black rounded-full leading-none ${
+                activeTab === 'messages' ? 'bg-black text-cyan-400' : 'bg-cyan-400 text-black shadow-[0_0_8px_rgba(34,211,238,0.8)] animate-pulse'
+              }`}>
+                {unreadMessagesCount}
+              </span>
+            ) : (
+              <span className="text-[10px] opacity-60">({contactMessages.length})</span>
+            )}
           </button>
         </div>
 
@@ -2938,6 +3070,271 @@ export default function AdminDashboardPage() {
               <p className="text-[10px] font-mono text-neutral-500">
                 Cada visitante único cuenta una vez por día. Los espectadores activos se calculan con actividad de los últimos 5 minutos.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: CONTACT INBOX / MENSAJES */}
+        {activeTab === 'messages' && (
+          <div className="space-y-6">
+            {/* Header & Stats Bar */}
+            <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                  <Inbox className="w-4 h-4 text-cyan-400" />
+                  Buzón de Mensajes & Contacto
+                </h3>
+                <p className="text-xs text-neutral-400">
+                  Mensajes y solicitudes enviadas por la audiencia y patrocinadores desde el formulario web.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center space-x-2 bg-neutral-900/80 px-3.5 py-2 rounded-xl border border-white/5 text-xs font-mono">
+                  <span className="text-neutral-400">Total:</span>
+                  <span className="font-bold text-white">{contactMessages.length}</span>
+                  <span className="text-neutral-600">|</span>
+                  <span className="text-cyan-400">No leídos:</span>
+                  <span className="font-bold text-cyan-300">{unreadMessagesCount}</span>
+                </div>
+
+                <button
+                  onClick={() => { audioCues.playClick(); fetchContactMessages(); }}
+                  disabled={isLoadingMessages}
+                  className="px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 disabled:opacity-40 text-cyan-300 border border-cyan-500/30 font-mono text-xs flex items-center gap-2 transition-colors"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${isLoadingMessages ? 'animate-spin' : ''}`} />
+                  <span>{isLoadingMessages ? 'Cargando...' : 'Actualizar'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              {/* Filter Pills */}
+              <div className="flex items-center space-x-1.5 p-1 bg-neutral-950/90 rounded-xl border border-white/10">
+                {(['all', 'unread', 'read'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => { audioCues.playClick(); setMessageFilter(tab); }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all ${
+                      messageFilter === tab
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    {tab === 'all' && `Todos (${contactMessages.length})`}
+                    {tab === 'unread' && `No leídos (${unreadMessagesCount})`}
+                    {tab === 'read' && `Leídos (${contactMessages.length - unreadMessagesCount})`}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Box */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, correo, asunto o contenido..."
+                  value={messageSearchQuery}
+                  onChange={e => setMessageSearchQuery(e.target.value)}
+                  className="w-full bg-neutral-950/90 border border-white/10 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none focus:border-cyan-500/50"
+                />
+                {messageSearchQuery && (
+                  <button
+                    onClick={() => setMessageSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Master-Detail Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[520px]">
+              {/* Left Column: Messages List (5 cols) */}
+              <div className="lg:col-span-5 flex flex-col rounded-2xl bg-neutral-950/80 border border-white/10 overflow-hidden">
+                <div className="p-3 border-b border-white/10 bg-black/40 text-[11px] font-mono text-neutral-400 flex items-center justify-between">
+                  <span>MENSAJES ({filteredMessages.length})</span>
+                  <span className="text-[10px] text-neutral-500">Orden: Más recientes primero</span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto max-h-[600px] divide-y divide-white/5">
+                  {filteredMessages.length === 0 ? (
+                    <div className="p-12 text-center space-y-3">
+                      <Inbox className="w-8 h-8 text-neutral-600 mx-auto" />
+                      <p className="text-xs font-mono text-neutral-400">
+                        {messageSearchQuery
+                          ? 'No se encontraron mensajes con ese criterio.'
+                          : messageFilter === 'unread'
+                          ? 'No hay mensajes sin leer.'
+                          : 'Aún no hay mensajes recibidos.'}
+                      </p>
+                    </div>
+                  ) : (
+                    filteredMessages.map(msg => {
+                      const isSelected = selectedMessage?.id === msg.id;
+                      const isUnread = msg.status === 'unread';
+                      const formattedDate = new Date(msg.created_at).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      });
+
+                      return (
+                        <div
+                          key={msg.id}
+                          onClick={() => {
+                            audioCues.playClick();
+                            setSelectedMessage(msg);
+                          }}
+                          className={`p-4 cursor-pointer transition-all border-l-2 relative group ${
+                            isSelected
+                              ? 'bg-white/10 border-l-cyan-400 shadow-inner'
+                              : isUnread
+                              ? 'bg-cyan-950/15 border-l-cyan-500/60 hover:bg-white/5'
+                              : 'border-l-transparent hover:bg-white/5 opacity-80 hover:opacity-100'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isUnread && (
+                                <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0 shadow-[0_0_6px_rgba(34,211,238,0.8)]" />
+                              )}
+                              <span className={`text-xs font-mono font-bold truncate ${isUnread ? 'text-white' : 'text-neutral-300'}`}>
+                                {msg.name}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-neutral-500 shrink-0">
+                              {formattedDate}
+                            </span>
+                          </div>
+
+                          <div className="text-xs text-neutral-200 font-medium truncate mb-1">
+                            {msg.subject || 'Sin asunto'}
+                          </div>
+
+                          <div className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
+                            {msg.message}
+                          </div>
+
+                          <div className="mt-2.5 flex items-center justify-between text-[10px] font-mono text-neutral-500">
+                            <span className="truncate max-w-[180px]">{msg.email}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-bold ${
+                              isUnread ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-neutral-400'
+                            }`}>
+                              {isUnread ? 'No leído' : 'Leído'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Message Detail Pane (7 cols) */}
+              <div className="lg:col-span-7 rounded-2xl bg-neutral-950/80 border border-white/10 overflow-hidden flex flex-col">
+                {selectedMessage ? (
+                  <div className="flex-1 flex flex-col p-6 space-y-6">
+                    {/* Top Detail Bar */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2.5">
+                          <h2 className="text-base font-bold text-white tracking-wide">
+                            {selectedMessage.subject || 'Sin Asunto'}
+                          </h2>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono uppercase font-bold ${
+                            selectedMessage.status === 'unread'
+                              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_8px_rgba(34,211,238,0.3)]'
+                              : 'bg-neutral-800 text-neutral-400'
+                          }`}>
+                            {selectedMessage.status === 'unread' ? 'No leído' : 'Leído'}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-neutral-400">
+                          <span className="font-semibold text-neutral-200">{selectedMessage.name}</span>
+                          <span>•</span>
+                          <a
+                            href={`mailto:${selectedMessage.email}`}
+                            className="text-cyan-400 hover:underline flex items-center gap-1"
+                            title="Enviar email"
+                          >
+                            {selectedMessage.email}
+                            <ExternalLink className="w-3 h-3 inline" />
+                          </a>
+                          <span>•</span>
+                          <span className="text-neutral-500">
+                            {new Date(selectedMessage.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleToggleMessageStatus(selectedMessage)}
+                          disabled={isUpdatingMessage}
+                          className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                            selectedMessage.status === 'unread'
+                              ? 'bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border-cyan-500/30'
+                              : 'bg-neutral-900 text-neutral-400 hover:text-white border-white/10'
+                          }`}
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{selectedMessage.status === 'unread' ? 'Marcar Leído' : 'Marcar No Leído'}</span>
+                        </button>
+
+                        <a
+                          href={`mailto:${selectedMessage.email}?subject=Re: ${encodeURIComponent(selectedMessage.subject)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-mono text-xs border border-white/10 flex items-center gap-1.5 transition-colors"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Responder</span>
+                        </a>
+
+                        <button
+                          onClick={() => handleDeleteContactMessage(selectedMessage.id, selectedMessage.name)}
+                          disabled={isUpdatingMessage}
+                          className="p-2 rounded-xl bg-red-950/20 hover:bg-red-900/30 text-red-400 border border-red-500/20 transition-colors"
+                          title="Eliminar mensaje"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Message Body Content */}
+                    <div className="flex-1 bg-black/40 border border-white/5 rounded-xl p-5 overflow-y-auto min-h-[160px]">
+                      <div className="text-xs font-mono uppercase tracking-widest text-neutral-500 mb-3 flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5 text-neutral-400" />
+                        Mensaje
+                      </div>
+                      <div className="text-sm text-neutral-200 whitespace-pre-wrap leading-relaxed font-sans select-text">
+                        {selectedMessage.message}
+                      </div>
+                    </div>
+
+                    {/* Metadata Card Footer */}
+                    <div className="p-3 bg-neutral-900/40 rounded-xl border border-white/5 flex items-center justify-between text-[11px] font-mono text-neutral-500">
+                      <span>ID: {selectedMessage.id}</span>
+                      <span>Canal: Formulario Web SlopMovie</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3">
+                    <Mail className="w-12 h-12 text-neutral-700" />
+                    <h4 className="text-sm font-mono font-bold text-neutral-400">Ningún mensaje seleccionado</h4>
+                    <p className="text-xs text-neutral-500 max-w-sm">
+                      Haz clic en cualquiera de los mensajes de la lista para leer el contenido completo y responder.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

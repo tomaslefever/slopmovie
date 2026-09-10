@@ -400,4 +400,29 @@ begin
   if to_regclass('public.top_voted_comments') is not null and not exists (select 1 from pg_publication_tables where tablename = 'top_voted_comments' and pubname = 'supabase_realtime') then
     alter publication supabase_realtime add table public.top_voted_comments;
   end if;
+
+  if to_regclass('public.contact_messages') is not null and not exists (select 1 from pg_publication_tables where tablename = 'contact_messages' and pubname = 'supabase_realtime') then
+    alter publication supabase_realtime add table public.contact_messages;
+  end if;
 end $$;
+
+-- ==============================================================================
+-- 12. CONTACT MESSAGES TABLE (Inbox for audience & business inquiries)
+-- ==============================================================================
+create table if not exists public.contact_messages (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text not null,
+  subject text not null default 'General Inquiry',
+  message text not null,
+  status text not null default 'unread' check (status in ('unread', 'read', 'archived')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.contact_messages enable row level security;
+
+drop policy if exists "Anyone can insert contact messages" on public.contact_messages;
+create policy "Anyone can insert contact messages" on public.contact_messages for insert to anon, authenticated with check (true);
+
+drop policy if exists "Service role all contact messages" on public.contact_messages;
+create policy "Service role all contact messages" on public.contact_messages for all to service_role using (true) with check (true);

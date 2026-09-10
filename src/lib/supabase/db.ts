@@ -1,4 +1,4 @@
-import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
+import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig, BlockbusterCandidate, TOTAL_STEPS, ContactMessage } from '@/types/cinema';
 import { getSupabaseServerClient } from './server';
 
 export function isSupabaseConfigured(): boolean {
@@ -1772,3 +1772,133 @@ export async function loadViewerPreferences(
 
   return { subtitlesEnabled: true, subtitleLanguage: 'en', nickname: null };
 }
+
+/**
+ * Persist a contact form message to Supabase
+ */
+export async function persistContactMessage(msg: {
+  name: string;
+  email: string;
+  subject?: string;
+  message: string;
+}): Promise<{ success: boolean; data?: ContactMessage; error?: string }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return { success: false, error: 'Database client unavailable' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('contact_messages')
+      .insert({
+        name: msg.name.trim(),
+        email: msg.email.trim(),
+        subject: msg.subject?.trim() || 'General Inquiry',
+        message: msg.message.trim(),
+        status: 'unread',
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logSupabaseError('persistContactMessage', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: data as ContactMessage };
+  } catch (err: any) {
+    console.error('[Supabase] Exception in persistContactMessage:', err);
+    return { success: false, error: err?.message || 'Database error' };
+  }
+}
+
+/**
+ * Load contact form messages from Supabase
+ */
+export async function loadContactMessages(options?: {
+  status?: string;
+  limit?: number;
+}): Promise<ContactMessage[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  try {
+    let query = supabase
+      .from('contact_messages')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (options?.status && options.status !== 'all') {
+      query = query.eq('status', options.status);
+    }
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      logSupabaseError('loadContactMessages', error);
+      return [];
+    }
+
+    return (data || []) as ContactMessage[];
+  } catch (err) {
+    console.error('[Supabase] Exception in loadContactMessages:', err);
+    return [];
+  }
+}
+
+/**
+ * Update a contact message status (e.g. 'read', 'unread', 'archived')
+ */
+export async function updateContactMessageStatus(
+  id: string,
+  status: 'unread' | 'read' | 'archived'
+): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase
+      .from('contact_messages')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) {
+      logSupabaseError('updateContactMessageStatus', error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Exception in updateContactMessageStatus:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete a contact message from Supabase
+ */
+export async function deleteContactMessage(id: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase
+      .from('contact_messages')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      logSupabaseError('deleteContactMessage', error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Exception in deleteContactMessage:', err);
+    return false;
+  }
+}
