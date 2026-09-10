@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cinemaEngine } from '@/lib/cinema-orchestrator';
+
+export const maxDuration = 60;
 import { 
   loadActiveMovieFromDb, 
   loadLiveCinemaStateFromDb, 

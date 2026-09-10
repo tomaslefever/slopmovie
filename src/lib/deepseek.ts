@@ -58,6 +58,7 @@ export interface CallLlmParams {
   seed?: number;
   response_format?: { type: string };
   label: string;
+  timeoutMs?: number;
 }
 
 export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | null> {
@@ -66,9 +67,11 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
 
   const endpoint = getLlmEndpoint();
   const model = getLlmModel();
+  const timeoutMs = params.timeoutMs ?? 30000;
 
   try {
     const response = await fetch(endpoint, {
+      signal: AbortSignal.timeout(timeoutMs),
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -79,7 +82,7 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
         messages: params.messages,
         temperature: params.temperature ?? 1,
         top_p: params.top_p ?? 0.95,
-        max_tokens: params.max_tokens ?? 16384,
+        max_tokens: params.max_tokens ?? 2500,
         seed: params.seed ?? Math.floor(Math.random() * 2147483647),
         chat_template_kwargs: { thinking: false },
         response_format: params.response_format ?? { type: "json_object" },
@@ -795,6 +798,271 @@ export interface CommentInfluence {
   optionId: 'A' | 'B';
 }
 
+// 50 unique procedural dilemmas ensuring zero option repetition across entire films
+export const PROCEDURAL_DILEMMAS: Array<{
+  title: string;
+  optA: { title: string; hook: string; consequence: string };
+  optB: { title: string; hook: string; consequence: string };
+}> = [
+  // 1-4: Act I
+  {
+    title: "Opening Gambit & The Primary Breach",
+    optA: { title: "Direct Kinetic Assault", hook: "Full-frontal engagement with maximum shock value", consequence: "Breaches outer gate rapidly but triggers perimeter alarms" },
+    optB: { title: "Cloaked Reconnaissance", hook: "Silent telemetry harvest through perimeter shadows", consequence: "Preserves stealth but allows enemy patrol to reposition" }
+  },
+  {
+    title: "Rising Shadows & Secondary Breach",
+    optA: { title: "Bypass Security Firewall", hook: "High-speed cryptographic intrusion", consequence: "Disables surveillance cameras for three sectors" },
+    optB: { title: "Jam Radio Transmissions", hook: "Wide-spectrum localized frequency jamming", consequence: "Prevents guard reinforcements at cost of own comms" }
+  },
+  {
+    title: "Threshold of the Crucible",
+    optA: { title: "Overload Reactor Conduit", hook: "Force a localized electrical surge", consequence: "Creates physical explosion clearing the corridor" },
+    optB: { title: "Deploy Chaff Screen", hook: "Heavy particle fog blinding targeting sensors", consequence: "Provides cover for tactical withdrawal" }
+  },
+  {
+    title: "Point of No Return: First Choice",
+    optA: { title: "Pierce Central Sub-Grid", hook: "Dive straight into high-risk mainframe core", consequence: "Instant access to enemy archives" },
+    optB: { title: "Establish Fallback Perimeter", hook: "Fortify tactical rear position", consequence: "Guarantees safe escape route if ambushed" }
+  },
+  // 5-10: Inciting breach & first escalation
+  {
+    title: "Quantum Resonance in Shadows",
+    optA: { title: "Overcharge the Access Junction", hook: "Force entry before the biometric lock triggers", consequence: "Rapid breach with imminent lockdown risk" },
+    optB: { title: "Deploy Diversionary Pulse", hook: "Blackout three city blocks with EMP", consequence: "Provides silent stealth evacuation through shadows" }
+  },
+  {
+    title: "Monorail Crossfire & High-Speed Pursuit",
+    optA: { title: "Decouple the Cargo Carriages", hook: "Sever the train to derail pursuers", consequence: "Halts pursuers but destroys valuable supply crates" },
+    optB: { title: "Engage Emergency Magnetic Brakes", hook: "Violent deceleration to throw off enemy boarding squads", consequence: "Sparks close-quarters firefight on the train roof" }
+  },
+  {
+    title: "The OmniaTech Breach",
+    optA: { title: "Raid the Armory Depots", hook: "Equip military-grade experimental weaponry", consequence: "Drastically boosts firepower for upcoming waves" },
+    optB: { title: "Extract Research Telemetry", hook: "Steal confidential synthetic genome blueprints", consequence: "Uncovers vulnerability in the enemy commander's armor" }
+  },
+  {
+    title: "Encounter in the Catacombs",
+    optA: { title: "Form an Uneasy Alliance", hook: "Offer sanctuary in exchange for tactical maps", consequence: "Unlocks forgotten subterranean shortcuts" },
+    optB: { title: "Confiscate Black-Market Deck", hook: "Disarm the informant and take the hardware", consequence: "Secures untraceable decryption rig without sharing spoils" }
+  },
+  {
+    title: "Spire Infiltration & Glass Horizon",
+    optA: { title: "Ascend via Exterior Mag-Lift", hook: "Exposed climb along vertigo-inducing spire facade", consequence: "Vulnerable to aerial gunships but bypasses indoor checkpoints" },
+    optB: { title: "Infiltrate HVAC Ventilation Shafts", hook: "Crawl through toxic filtration conduits", consequence: "Undetected entry into the executive suites" }
+  },
+  {
+    title: "Lyra's Fragmented Signal",
+    optA: { title: "Trace the Distress Beacon", hook: "Divert course toward the survivor's coordinates", consequence: "High risk of walking into a primed kill-zone" },
+    optB: { title: "Purge the Frequency to Prevent Tracking", hook: "Sever incoming transmissions to maintain radio silence", consequence: "Preserves cover but abandons the stranded ally" }
+  },
+  // 11-20: Deep infiltration & high stakes
+  {
+    title: "The Black Market Broker",
+    optA: { title: "Bribe with Quantum Credits", hook: "Pay exorbitant ransom for clean access codes", consequence: "Secures diplomatic VIP transit clearance" },
+    optB: { title: "Intimidate at Gunpoint", hook: "Force cooperation through cold tactical leverage", consequence: "Obtains codes for free, but broker alerts syndicate bounty hunters" }
+  },
+  {
+    title: "Weaponizing the Anomaly",
+    optA: { title: "Unleash Unstable Energy Core", hook: "Harness wild fluctuations to incinerate defense turrets", consequence: "Obliterates perimeter defenses but triggers structural fissures" },
+    optB: { title: "Harmonize the Harmonic Field", hook: "Calibrate output to generate a kinetic barrier", consequence: "Absorbs incoming artillery fire for 60 seconds" }
+  },
+  {
+    title: "The Transit Hub Ambush",
+    optA: { title: "Trigger Sprinkler Electrical Trap", hook: "Flood the concourse and electrify the floor", consequence: "Incapacitates an entire mercenary squad simultaneously" },
+    optB: { title: "Blend with the Civilian Commuters", hook: "Vanish into dense crowd to evade facial recognition", consequence: "Evades thermal sensors without firing a single round" }
+  },
+  {
+    title: "Overclocking the Sub-Station",
+    optA: { title: "Meltdown the Cooling Towers", hook: "Induce supercritical steam venting to blind the plaza", consequence: "Blankets sector in zero-visibility fog" },
+    optB: { title: "Reroute Grid to Defense Matrix", hook: "Funnel city wattage into personal exosuits", consequence: "Grants temporary superhuman reflexes and shielding" }
+  },
+  {
+    title: "The Rogue Specialist's Offer",
+    optA: { title: "Accept the Prototype Implant", hook: "Inject experimental neuro-stimulant for battle readiness", consequence: "Doubles reaction speed but induces hallucinations" },
+    optB: { title: "Rely on Unaugmented Grit", hook: "Refuse biological tampering and fight human", consequence: "Maintains clear mental clarity and uncorrupted neural link" }
+  },
+  {
+    title: "Breaching the Inner Perimeter",
+    optA: { title: "Deploy Nanite Dissolver Charges", hook: "Melt through 3 feet of reinforced tungsten bulkhead", consequence: "Creates silent breach with zero acoustic signature" },
+    optB: { title: "Hijack Heavy Construction Droid", hook: "Ram through reinforced security gates with industrial mech", consequence: "Loud explosive entrance drawing heavy enforcer response" }
+  },
+  {
+    title: "Silent Infiltration vs Chaos Diversion",
+    optA: { title: "Ghost Through Laser Tripwires", hook: "Acrobatic traversal through dense infrared grid", consequence: "Zero alarms raised, stealth multiplier active" },
+    optB: { title: "Detonate Fuel Silos Outside", hook: "Massive secondary explosions across adjacent district", consequence: "Draws 80% of garrison troops away from the target vault" }
+  },
+  {
+    title: "Interrogating the Corporate Courier",
+    optA: { title: "Extract Biometric Thumbdrive", hook: "Sever encryption dongle before security self-destructs", consequence: "Gains master encryption keys to satellite uplink" },
+    optB: { title: "Turn Courier into Double Agent", hook: "Feed falsified telemetry back to syndicate headquarters", consequence: "Sends elite strike teams to wrong district coordinates" }
+  },
+  {
+    title: "The Poisoned Signal",
+    optA: { title: "Quarantine Corrupted Subroutine", hook: "Isolate cyber-virus before it infects main systems", consequence: "Protects neural link at cost of sensor degradation" },
+    optB: { title: "Weaponize Malware Back at Source", hook: "Reflect viral packet through feedback loop", consequence: "Fries enemy tracking server but causes personal sensory overload" }
+  },
+  {
+    title: "Midpoint Crisis: Sector Lockdown",
+    optA: { title: "Detonate Main Transformer", hook: "Plunge entire metropolis quarter into pitch blackness", consequence: "Level playing field under night-vision conditions" },
+    optB: { title: "Trigger Fire Suppression Halon Gas", hook: "Displace oxygen in the control atrium", consequence: "Forces all unmasked combatants to choke and surrender" }
+  },
+  // 21-30: Reversals & Moral Dilemmas
+  {
+    title: "Sacrificing Ground for Tactical Time",
+    optA: { title: "Collapse the Viaduct", hook: "Blow explosive pylons beneath the elevated highway", consequence: "Crushes enemy armor column beneath tons of concrete" },
+    optB: { title: "Hold the Choke Point", hook: "Establish heavy suppressing fire line", consequence: "Buys precious extraction seconds but depletes all ammunition" }
+  },
+  {
+    title: "Unlocking the Forbidden Vault",
+    optA: { title: "Shatter Cryo-Stasis Chamber", hook: "Awaken forgotten cybernetic super-soldier", consequence: "Unpredictable powerhouse ally enters the fray" },
+    optB: { title: "Extract Classified Archive", hook: "Secure databanks proving executive conspiracy", consequence: "Provides undeniable evidence to spark planetary rebellion" }
+  },
+  {
+    title: "Aerial Gunship Duel",
+    optA: { title: "Lock-On Stinger Salvo", hook: "Fire remaining guided missiles at gunship rotor hub", consequence: "Downs enemy flagship in spectacular spiraling fireball" },
+    optB: { title: "Grapple Boarding Maneuver", hook: "Fire magnetic cable to board gunship mid-flight", consequence: "High-stakes aerial hijacking over the skyline" }
+  },
+  {
+    title: "Corrupted Telemetry",
+    optA: { title: "Trust Intuition Over Sensors", hook: "Navigate manually through blinding electromagnetic storm", consequence: "Evades radar traps by flying completely dark" },
+    optB: { title: "Recalibrate Array via Beacon", hook: "Pulse active sonar to map terrain contours", consequence: "Provides crystal clear nav-data but alerts nearby patrol boats" }
+  },
+  {
+    title: "The Crucible: Rescue vs Mission",
+    optA: { title: "Evacuate Trapped Civilians", hook: "Guide innocent workers into sealed blast shelter", consequence: "Saves dozens of lives, cements protagonist as true folk hero" },
+    optB: { title: "Pursue Fleeing Syndicate Boss", hook: "Disregard collateral to eliminate target before escape", consequence: "Corners top antagonist before transport shuttles launch" }
+  },
+  {
+    title: "Subterranean Magma Conduits",
+    optA: { title: "Vent Geothermal Pressure", hook: "Release superheated steam into pursuer flank", consequence: "Blocks pursuit corridor with impenetrable thermal wall" },
+    optB: { title: "Cross Rickety Service Gantry", hook: "Sprint across narrow metal catwalk over abyssal drop", consequence: "High adrenaline crossing, cut ropes behind squad" }
+  },
+  {
+    title: "Siphoning the Planetary Grid",
+    optA: { title: "Overcharge Personal Shields", hook: "Absorb megawatt charge directly into combat armor", consequence: "Becomes impervious to small-arms fire for 2 minutes" },
+    optB: { title: "Send Surge to Enemy Network", hook: "Blow terminal motherboards across entire headquarters", consequence: "Blinds all corporate surveillance cameras permanently" }
+  },
+  {
+    title: "Standoff at Sky-Bridge Apex",
+    optA: { title: "Challenge Rival to Single Combat", hook: "Honor-bound duel between champions in pouring rain", consequence: "Focuses all attention, freezes grunts from firing" },
+    optB: { title: "Sniper Cover Crossfire", hook: "Signal hidden sharpshooter to neutralize commander", consequence: "Instant decapitation strike demoralizing enemy ranks" }
+  },
+  {
+    title: "Infiltrating the Master Server",
+    optA: { title: "Upload Autonomous AI Worm", hook: "Release self-replicating logic bomb into core", consequence: "Systematically dismantles corporate network from inside" },
+    optB: { title: "Download Planetary Blacklist", hook: "Copy names of every compromised world leader", consequence: "Gains ultimate political blackmail leverage" }
+  },
+  {
+    title: "The Traitor's Revelation",
+    optA: { title: "Show Cold Merciful Clemency", hook: "Disarm the turncoat and demand their repentance", consequence: "Traitor surrenders master passcode out of remorse" },
+    optB: { title: "Execute Swift Battlefield Justice", hook: "Eliminate the infiltrator before they transmit coordinates", consequence: "Secures tactical silence with uncompromising finality" }
+  },
+  // 31-40: Downward Spiral to Climax
+  {
+    title: "Tactical Counter-Charge",
+    optA: { title: "Lead the Charge with Kinetic Shield", hook: "Advance behind shimmering plasma barrier", consequence: "Breaks enemy defensive perimeter in close-quarters" },
+    optB: { title: "Flank Through Sewage Underpass", hook: "Mud-splattered surprise ambush from rear", consequence: "Catches heavy gunners completely off guard" }
+  },
+  {
+    title: "The EMP Shockwave",
+    optA: { title: "Detonate Core at Ground Zero", hook: "Trigger wide-radius electromagnetic blackout", consequence: "Disables all cyberware and electronics in 5-mile radius" },
+    optB: { title: "Contain Pulse in Directional Beam", hook: "Focus blast solely at the approaching war-mech", consequence: "Fries mechanical titan while preserving personal comms" }
+  },
+  {
+    title: "Piercing the Defense Shield",
+    optA: { title: "Synchronize Resonant Frequency", hook: "Harmonize artifact frequency with shield barrier", consequence: "Walks peacefully through glowing forcefield unscathed" },
+    optB: { title: "Overload Shield with Heavy Ordnance", hook: "Concentrate all rocket fire on single focal nexus", consequence: "Shatters shield in thunderous glass-like explosion" }
+  },
+  {
+    title: "Hijacking the Heavy Transport",
+    optA: { title: "Ram the Fortress Gates", hook: "Use armored carrier as 40-ton kinetic battering ram", consequence: "Punches straight into the inner keep courtyard" },
+    optB: { title: "Divert Carrier to Ammo Depot", hook: "Crash vehicle into enemy ordnance depot", consequence: "Massive chain reaction leveling secondary barracks" }
+  },
+  {
+    title: "The Desperate Beacon",
+    optA: { title: "Boost Transmission to Maximum", hook: "Broadcast planetary awakening message on all bands", consequence: "Sparks riots and uprisings across 12 sectors" },
+    optB: { title: "Targeted Uplink to Resistance Fleet", hook: "Send precise landing coordinates to cloaked fleet", consequence: "Signals dropships for coordinated orbital drop" }
+  },
+  {
+    title: "Command Sanctum Breach",
+    optA: { title: "Blow the Armored Ceiling", hook: "Breach downward from rooftop landing pad", consequence: "Tactical fast-rope descent into throne room" },
+    optB: { title: "Hack the Executive Air-Lock", hook: "Slice cryptographic air-lock controls", consequence: "Silent vacuum decompression flushing hallway guards" }
+  },
+  {
+    title: "Disabling the Orbital Cannon",
+    optA: { title: "Vent Liquid Hydrogen Coolant", hook: "Freeze cannon firing mechanism solid", consequence: "Cannon barrels crack and shatter under pressure" },
+    optB: { title: "Reverse Magnetic Polarity", hook: "Force super-heavy shell to detonate inside chamber", consequence: "Destroys super-weapon at cost of surrounding deck" }
+  },
+  {
+    title: "Confronting the Apex Lieutenant",
+    optA: { title: "Target the Cybernetic Spine", hook: "Precision surgical strike against power couplings", consequence: "Incapacitates cybernetic implants instantaneously" },
+    optB: { title: "Shatter the Visor with Kinetic Blast", hook: "Blind enemy targeting systems with point-blank blast", consequence: "Forces lieutenant into erratic wild blind fire" }
+  },
+  {
+    title: "Overriding the Meltdown Protocol",
+    optA: { title: "Manually Insert Control Rods", hook: "Expose self to radiation to save the metropolis", consequence: "Halts reactor meltdown, heroic sacrifice arc" },
+    optB: { title: "Purge Reactor Core into Ocean", hook: "Eject molten fuel cell into subterranean trench", consequence: "Saves city without personal radiation exposure" }
+  },
+  {
+    title: "Dead-Zone Threshold: The Final Approach",
+    optA: { title: "Enter the Null-Field on Foot", hook: "Walk through anti-energy field relying on raw will", consequence: "Stripped of tech, pure organic endurance test" },
+    optB: { title: "Deploy Insulated Exo-Frame", hook: "Push through using heavy hardened armor plating", consequence: "Shields from null-energy but limits maneuverability" }
+  },
+  // 41-46: Penultimate Crucible
+  {
+    title: "Mobilizing the Underground Fleet",
+    optA: { title: "All-Out Multi-Vector Strike", hook: "Launch all gunships in coordinated final offensive", consequence: "Engages syndicate fleet across three fronts" },
+    optB: { title: "Precision Stealth Insertion", hook: "Slip single strike craft under radar blanket", consequence: "Delivers strike team directly to boss citadel" }
+  },
+  {
+    title: "Severing the Neural Backbone",
+    optA: { title: "Upload Liberation Virus", hook: "Free minds of all enslaved cybernetic citizens", consequence: "Millions awake from corporate trance simultaneously" },
+    optB: { title: "Total Network Erasure", hook: "Wipe all global digital ledgers and debts to zero", consequence: "Complete economic collapse of the corporate empire" }
+  },
+  {
+    title: "Citadel Apex Assault",
+    optA: { title: "Shatter the Panoramic Glass Dome", hook: "Crash gunship directly through penthouse skylight", consequence: "Dramatic glass-shower entrance into inner sanctum" },
+    optB: { title: "Burn Through Security Vault Door", hook: "Thermite lance cutting through 10-inch blast plate", consequence: "Heavy, methodical breach with suppressing fire" }
+  },
+  {
+    title: "Surviving the Last Ambush",
+    optA: { title: "Form Back-to-Back Defensive Ring", hook: "Fight as unified brotherhood against final enforcers", consequence: "Overcomes impossible odds through shared trust" },
+    optB: { title: "Trigger Room Shock Traps", hook: "Electrify the metal flooring to stun all hostiles", consequence: "Clears room in blinding arc of blue sparks" }
+  },
+  {
+    title: "The Penultimate Crucible",
+    optA: { title: "Claim the Master Key", hook: "Seize control of the planetary defense grid", consequence: "Unlocks ultimate power over the future world" },
+    optB: { title: "Destroy the Key Forever", hook: "Smash the artifact so no one can ever rule alone", consequence: "Ensures no tyrant can ever rise again" }
+  },
+  {
+    title: "Threshold of the Mastermind",
+    optA: { title: "Demand Public Confession", hook: "Force mastermind to confess on global holocast", consequence: "Exposes syndicate crimes live to 10 billion people" },
+    optB: { title: "Deliver Final Decisive Blow", hook: "End the tyranny right here with no hesitation", consequence: "Instant, unambiguous elimination of the grand threat" }
+  },
+  // 47-50: Climax & The End
+  {
+    title: "Clash of Ideologies: The Final Duel",
+    optA: { title: "Overpower with Relentless Fury", hook: "Channel every drop of rage into decisive combat strike", consequence: "Overwhelms enemy defenses with savage intensity" },
+    optB: { title: "Exploit Fatal Flaw in Opponent's Armor", hook: "Calculated patient counter-strike targeting exposed core", consequence: "Delivers clean, surgical fatal blow" }
+  },
+  {
+    title: "The Architect's Final Gambit",
+    optA: { title: "Sever the Self-Destruct Line", hook: "Cut the detonator cable before countdown hits zero", consequence: "Saves the citadel and all historical archives" },
+    optB: { title: "Trigger Controlled Demolition", hook: "Let the monolith collapse into the sea", consequence: "Buries the dark regime forever beneath the waves" }
+  },
+  {
+    title: "Dawn of the New Era",
+    optA: { title: "Accept the Mantle of Leadership", hook: "Step forward to guide the shattered world to peace", consequence: "A new democratic council is established" },
+    optB: { title: "Fade Into the Horizon as a Legend", hook: "Vanish into the shadows, leaving humanity to decide", consequence: "Becomes an eternal myth of liberty and courage" }
+  },
+  {
+    title: "The Definitive Epilogue: A New Dawn",
+    optA: { title: "A Triumphant Celebration", hook: "Stand in the sunlight with all surviving comrades", consequence: "The film closes on a radiant, hopeful dawn" },
+    optB: { title: "A Quiet Bittersweet Memorial", hook: "Light an amber candle for those who fell along the way", consequence: "The film closes on a poignant, unforgettable tribute" }
+  }
+];
+
 export async function generateNextStepWithDeepSeek(
   movie: Movie,
   chosenOptionId: 'A' | 'B',
@@ -874,7 +1142,8 @@ ${influenceDirective}`;
         ],
         temperature: 1,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 16384
+        max_tokens: 2500,
+        timeoutMs: 30000
       });
 
       if (parsed) {
@@ -951,7 +1220,7 @@ ${influenceDirective}`;
     }
   }
 
-  // Procedural Mockup Generator: Introduces a new character & its associated prop ONLY at critical narrative turns (e.g. step 4)
+  // ── Procedural Fallback Generator (Non-Repeating, Step-Entropy Driven) ────────
   const char = movie.bible.characters[0] || { 
     name: "Kael Vane", 
     visualTraits: "cyborg detective with cyan eye",
@@ -967,7 +1236,7 @@ ${influenceDirective}`;
   let newCharacter: Character | undefined = undefined;
   let newProp: Prop | undefined = undefined;
 
-  // Trigger introduction of a new character & associated prop specifically when narrative demands (e.g., Step 4 introduces Zack Mercer with his Cyber-Deck)
+  // Trigger introduction of a new character & associated prop specifically at Step 4 if not yet present
   if (nextStepNum === 4 && !movie.bible.characters.some(c => c.id === "char_informant_zack")) {
     newCharacter = {
       id: "char_informant_zack",
@@ -995,158 +1264,122 @@ ${influenceDirective}`;
       icon: "laptop"
     };
   }
-  
-  const stepTitles = [
-    "Quantum Resonance in Shadows",
-    "Monorail Crossfire",
-    "The OmniaTech Breach",
-    "Encounter with Zack Mercer",
-    "Spire Infiltration",
-    "Lyra's Fragmented Signal",
-    "Emergency Cryo-Protocol",
-    "Enforcer Ambush",
-    "Downloading the Forbidden Mesh",
-    "Level Zero Threshold"
-  ];
 
-  const titleIndex = (nextStepNum - 1) % stepTitles.length;
+  // 50 completely unique step dilemmas ensuring zero option repetition
+  const dilemmaIndex = (nextStepNum - 1) % PROCEDURAL_DILEMMAS.length;
+  const dilemma = PROCEDURAL_DILEMMAS[dilemmaIndex];
   const currentTitle = nextStepNum === 4 
     ? "Encounter with Zack Mercer"
-    : `${stepTitles[titleIndex]} (Phase ${Math.ceil(nextStepNum / 10)})`;
+    : `${dilemma.title} (Scene ${nextStepNum})`;
 
-  let synopsis = "";
-  let visualPrompt = "";
-  let optionA: DecisionOption;
-  let optionB: DecisionOption;
-  let subtitles: SubtitleCue[] = [];
-  let cameraMotionPrompt = "Technocrane high-angle descent transitioning into smooth eye-level Steadicam tracking, fluid cinematic motion, 24fps motion cadence";
+  let optATitle = dilemma.optA.title;
+  let optAText = `${char.name} acts to ${dilemma.optA.title.toLowerCase()}, leveraging ${prop.name} to seize the tactical advantage.`;
+  let optAHook = dilemma.optA.hook;
+  let optAConsequence = dilemma.optA.consequence;
+
+  let optBTitle = dilemma.optB.title;
+  let optBText = `${char.name} executes an alternate maneuver to ${dilemma.optB.title.toLowerCase()}, adapting to shifting combat conditions.`;
+  let optBHook = dilemma.optB.hook;
+  let optBConsequence = dilemma.optB.consequence;
+
+  // Weave community comment influence into the targeted option
+  if (commentInfluence) {
+    if (commentInfluence.optionId === 'A') {
+      optATitle = `@${commentInfluence.userName}'s Gambit: ${dilemma.optA.title}`;
+      optAText = `${char.name} implements the tactical strategy proposed by @${commentInfluence.userName}: "${commentInfluence.text}".`;
+      optAHook = `Conceived directly from viewer @${commentInfluence.userName}'s suggestion.`;
+      optAConsequence = `The narrative dramatically branches according to the audience idea.`;
+    } else {
+      optBTitle = `@${commentInfluence.userName}'s Gambit: ${dilemma.optB.title}`;
+      optBText = `${char.name} implements the tactical strategy proposed by @${commentInfluence.userName}: "${commentInfluence.text}".`;
+      optBHook = `Conceived directly from viewer @${commentInfluence.userName}'s suggestion.`;
+      optBConsequence = `The narrative dramatically branches according to the audience idea.`;
+    }
+  }
+
+  let optionA: DecisionOption = {
+    id: "A",
+    title: optATitle,
+    text: optAText,
+    dramaticHook: optAHook,
+    expectedConsequence: optAConsequence,
+    votes: 0
+  };
+
+  let optionB: DecisionOption = {
+    id: "B",
+    title: optBTitle,
+    text: optBText,
+    dramaticHook: optBHook,
+    expectedConsequence: optBConsequence,
+    votes: 0
+  };
+
+  let synopsis = `Following the choice to "${chosenOption.title}" in Step ${previousStep.stepNumber}, ${char.name} reaches a critical juncture in ${dilemma.title.toLowerCase()}. As the ${prop.name} pulses with vital energy, a decisive fork in the mission emerges.`;
+  let visualPrompt = `Cinematic medium two-shot / tracking frame: ${char.name} (${char.visualTraits}) navigates the tense environment with ${prop.name} (${prop.visualAppearance}) active. Low-key chiaroscuro lighting, 3200K amber incandescent practicals contrasting against deep midnight shadows, Panavision C-Series anamorphic lens, oval bokeh, atmospheric volumetric haze, Kodak Vision3 500T 35mm grain, 16:9 cinematic master still.`;
+  let cameraMotionPrompt = "Technocrane low-angle tracking push-in with subtle kinetic inertia, smoothly arcing 45 degrees around subject, 24fps motion cadence";
+  let subtitles: SubtitleCue[] = [
+    {
+      start: 1.0,
+      end: 7.0,
+      speaker: char.name,
+      text: `We committed to "${chosenOption.title}" — now the perimeter is shifting fast.`,
+      textEs: `Nos comprometimos con "${chosenOption.title}" — ahora el perímetro está cambiando rápido.`
+    },
+    {
+      start: 7.5,
+      end: 14.0,
+      speaker: char.name,
+      text: `Next move: ${optionA.title} or ${optionB.title}?`,
+      textEs: `Siguiente movimiento: ¿${optionA.title} o ${optionB.title}?`
+    }
+  ];
 
   if (newCharacter && newProp) {
     synopsis = `In this critical junction, ${char.name} meets in the steam-choked shadows with ${newCharacter.name}, who boots up his ${newProp.name} to decipher the orbital spire telemetry.`;
-    visualPrompt = `Medium two-shot / low-angle cowboy framing: ${char.name} (${char.visualTraits}) meets ${newCharacter.name} (${newCharacter.visualTraits}) in a rain-slicked industrial ventilation conduit. Motivated chiaroscuro with 3200K amber incandescent practicals cutting through thick atmospheric haze and cyan neon backlighting. ${newCharacter.name} boots up ${newProp.name} (${newProp.visualAppearance}), its holographic prism casting vibrant volumetric caustics across their faces. Cooke Anamorphic /i Prime 40mm T2.3, shallow depth of field with oval bokeh, subtle anamorphic flare, Kodak Vision3 500T 5219 texture with organic 35mm grain, photorealistic 16:9 cinematic master.`;
+    visualPrompt = `Medium two-shot / low-angle cowboy framing: ${char.name} (${char.visualTraits}) meets ${newCharacter.name} (${newCharacter.visualTraits}) in a rain-slicked industrial conduit. Motivated chiaroscuro with 3200K amber incandescent practicals cutting through atmospheric haze. ${newCharacter.name} boots up ${newProp.name} (${newProp.visualAppearance}), casting vibrant volumetric caustics across their faces. Cooke Anamorphic 40mm, shallow depth of field with oval bokeh, subtle flare, Kodak Vision3 500T grain, photorealistic 16:9 master.`;
     cameraMotionPrompt = "Lateral dolly track at eye level slowly arcing around the two characters, subtle push-in tightening framing as the device activates, 24fps cinematic cadence";
     subtitles = [
       {
         start: 1.0,
         end: 7.0,
         speaker: newCharacter.name,
-        text: `If OmniaTech catches me with this ${newProp.name}, my life is forfeit before dawn.`,
-        textEs: `Si OmniaTech me atrapa con este ${newProp.name}, mi vida no vale nada antes del amanecer.`
+        text: `If the syndicates catch me with this ${newProp.name}, my life is forfeit before dawn.`,
+        textEs: `Si los sindicatos me atrapan con este ${newProp.name}, mi vida no vale nada antes del amanecer.`
       },
       {
         start: 8.0,
         end: 14.0,
         speaker: char.name,
-        text: "Sync the prism. We have less than ten seconds.",
-        textEs: "Sincroniza el prisma. Nos quedan menos de diez segundos."
+        text: "Sync the telemetry. We have less than ten seconds.",
+        textEs: "Sincroniza la telemetría. Nos quedan menos de diez segundos."
       }
     ];
     optionA = {
       id: "A",
       title: `Trust ${newCharacter.name}`,
-      text: `${char.name} hands over the prism to ${newCharacter.name} to interface directly with his ${newProp.name}.`,
-      dramaticHook: "Is Zack a genuine ally or a deep-cover corporate mole?",
-      expectedConsequence: "Immediate cryptographic access to the orbital freight elevator.",
+      text: `${char.name} hands over ${prop.name} to ${newCharacter.name} to interface directly with his ${newProp.name}.`,
+      dramaticHook: "Is the contact a genuine ally or an embedded corporate infiltrator?",
+      expectedConsequence: "Immediate cryptographic access to the sector bypass elevator.",
       votes: 0
     };
     optionB = {
       id: "B",
       title: "Maintain Tactical Leverage",
-      text: `${char.name} refuses to surrender the artifact and demands that Zack unlock the blast doors first.`,
-      dramaticHook: "Armed Mexican standoff in the tight ventilation shaft.",
-      expectedConsequence: "Zack complies under duress, but fragile trust is shattered.",
-      votes: 0
-    };
-  } else if (chosenOptionId === 'A') {
-    synopsis = `Following the decision to ${chosenOption.title.toLowerCase()}, ${char.name} gains a temporary tactical edge. Biometric telemetry exposes a hidden conduit as the ${prop.name} emits an ultrasonic pulse.`;
-    visualPrompt = `Dutch angle medium close-up tracking shot: ${char.name} (${char.visualTraits}) interfaces urgently with ${prop.name} (${prop.visualAppearance}) against a heavy titanium blast bulkhead. Volumetric cyan light shafts pierce through cascading steam and electric sparks, rimming character silhouettes with razor-sharp edge contrast. ARRI Master Anamorphic 50mm, f/2.0 wide open, high optical contrast, controlled blue horizontal streak flares, deep midnight-teal shadows and warm amber highlights, 35mm film grain, 16:9 cinematic render.`;
-    cameraMotionPrompt = "Dynamic handheld Steadicam with subtle camera micro-jitter simulating tension, slow forward push-in toward the terminal interface, 24fps film cadence";
-    subtitles = [
-      {
-        start: 1.0,
-        end: 7.0,
-        speaker: char.name,
-        text: "The data matrix is unlocking... It's pointing straight to the orbital relay.",
-        textEs: "La matriz de datos se está desbloqueando... Apunta directo al enlace orbital."
-      },
-      {
-        start: 7.5,
-        end: 14.0,
-        speaker: char.name,
-        text: "Security grid triggered. Time to make our move.",
-        textEs: "Red de seguridad activada. Es hora de movernos."
-      }
-    ];
-    optionA = {
-      id: "A",
-      title: "Override the Blast Gate",
-      text: `${char.name} overcharges the access junction to force entry before the biometric scanner locks down.`,
-      dramaticHook: "Full alarm broadcast across the sector or ghost entry into the sub-grid.",
-      expectedConsequence: "Rapid breach with imminent lockdown risk.",
-      votes: 0
-    };
-    optionB = {
-      id: "B",
-      title: "Deploy Diversionary Pulse",
-      text: `${char.name} hurls an electromagnetic pulse canister at the transformer to blackout three city blocks.`,
-      dramaticHook: "Plunges the district into pitch blackness, blinding patrol gunships.",
-      expectedConsequence: "Provides silent stealth evacuation through shadows.",
-      votes: 0
-    };
-  } else {
-    synopsis = `Following the choice to ${chosenOption.title.toLowerCase()}, armed confrontation erupts. Hunter-killer drones saturate the alley with targeting lasers as the squad scrambles for cover.`;
-    visualPrompt = `High-angle wide shot transitioning to rapid ground-level tracking: ${char.name} (${char.visualTraits}) performs an evasive tactical slide across rain-slicked asphalt while neon tracer rounds ricochet off rusted scaffolding. High-speed shutter 45-degree angle capturing crisp droplet impacts and violent muzzle flashes. Rembrandt key lighting mixed with crimson warning strobes and sodium-vapor street lamps. Panavision C-Series Anamorphic 35mm, barrel distortion at frame edges, anamorphic blue horizontal streaks, Kodak Vision3 250D daylight stock, 16:9 cinematic action frame.`;
-    cameraMotionPrompt = "High-velocity whip pan following the ricocheting tracers into a rapid low-angle camera chase, dynamic camera tilt with realistic kinetic inertia, 24fps motion blur";
-    subtitles = [
-      {
-        start: 1.0,
-        end: 7.0,
-        speaker: char.name,
-        text: "They've got us pinned! Cover the crossfire corridor!",
-        textEs: "¡Nos tienen acorralados! ¡Cubran el pasillo de fuego cruzado!"
-      },
-      {
-        start: 7.5,
-        end: 14.0,
-        speaker: char.name,
-        text: "Decide: extraction ship or subterranean tunnels?",
-        textEs: "Decidan: ¿nave de extracción o túneles subterráneos?"
-      }
-    ];
-    optionA = {
-      id: "A",
-      title: "Call Clandestine Extraction",
-      text: `Transmit an encrypted distress beacon to Dr. Lyra Chen for immediate aerial extraction.`,
-      dramaticHook: "Can Lyra arrive before the gunships deliver a lethal barrage?",
-      expectedConsequence: "Arrival of a low-altitude stealth dropship.",
-      votes: 0
-    };
-    optionB = {
-      id: "B",
-      title: "Descend into Cryo-Tunnels",
-      text: `Slide down the liquid coolant conduit into the decommissioned Cold War service catacombs.`,
-      dramaticHook: "Sub-zero temperatures and uncharted bio-mechanical mutations.",
-      expectedConsequence: "Thermal-shielded escape route evading all drone sensors.",
+      text: `${char.name} refuses to surrender the artifact and demands that ${newCharacter.name} unlock the conduit first.`,
+      dramaticHook: "Armed Mexican standoff in the tight ventilation corridor.",
+      expectedConsequence: "Compliance under duress, but fragile trust is deeply fractured.",
       votes: 0
     };
   }
 
   // Pass ONLY the props strictly necessary for this specific 15-second scene
-  let activeProps: string[] = [];
-  let activePropImages: string[] = [];
+  let activeProps: string[] = [prop.id];
+  let activePropImages: string[] = [prop.imageUrl].filter(Boolean) as string[];
 
   if (newCharacter && newProp) {
-    // Only Zack's custom cyberdeck is actively on screen and manipulated
     activeProps = [newProp.id];
     activePropImages = [newProp.imageUrl].filter(Boolean) as string[];
-  } else if (chosenOptionId === 'A') {
-    // Only the neural prism is actively interacting with the biometric lock
-    activeProps = [prop.id];
-    activePropImages = [prop.imageUrl].filter(Boolean) as string[];
-  } else {
-    // Tactical evasion / shootout in shadows: No specific gadget on screen
-    activeProps = [];
-    activePropImages = [];
   }
 
   // ── NARRATIVE ARC OVERRIDE: Denouement steps converge into the epic ending (step 50 = THE END) ──
@@ -1228,8 +1461,8 @@ ${influenceDirective}`;
     title: currentTitle,
     synopsis,
     dialogueSnippet: newCharacter 
-      ? `${newCharacter.name}: 'If OmniaTech catches me with this ${newProp?.name}, my life is forfeit before dawn.'`
-      : `${char.name}: 'The choices made right here are rewriting the city's living code.'`,
+      ? `${newCharacter.name}: 'If the syndicates catch me with this ${newProp?.name}, my life is forfeit before dawn.'`
+      : `${char.name}: 'We committed to "${chosenOption.title}" — now the perimeter is shifting fast.'`,
     subtitles,
     voiceDirection: newCharacter ? newCharacter.voicePrompt : char.voicePrompt,
     visualPrompt,
