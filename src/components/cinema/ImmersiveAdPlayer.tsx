@@ -8,14 +8,14 @@ import { audioCues } from '@/lib/audio-cues';
 
 interface ImmersiveAdPlayerProps {
   ad: ImmersiveAd;
-  timeRemaining: number;
+  timeRemaining?: number;
   onAdCompleted?: () => void;
   onOpenBuyAds?: () => void;
 }
 
 export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   ad,
-  timeRemaining,
+  timeRemaining = 0,
   onAdCompleted,
   onOpenBuyAds
 }) => {
@@ -25,6 +25,17 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   const [adSeconds, setAdSeconds] = useState(ad.duration || 15);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasCompletedRef = useRef<boolean>(false);
+  const graceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Resolve the best available video source:
+  //  1. generatedAdVideoUrl — fal.ai cinematic ad clip (visual continuation of the film)
+  //  2. videoUrl            — static fallback while fal.ai is still generating
+  const activeVideoSrc = ad.generatedAdVideoUrl || ad.videoUrl;
+  const isCinematicAd = !!ad.generatedAdVideoUrl;
+
+  // Keeps the countdown interval reading the CURRENT video source without
+  // restarting the break window when the fal.ai clip arrives mid-break.
+  const activeVideoSrcRef = useRef<string | undefined>(activeVideoSrc);
 
   useEffect(() => {
     hasCompletedRef.current = false;
@@ -39,6 +50,25 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   };
 
   useEffect(() => {
+    return () => {
+      if (graceTimeoutRef.current) clearTimeout(graceTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    activeVideoSrcRef.current = activeVideoSrc;
+    // A new clip arriving mid-break restarts the video from 0: refresh any pending
+    // grace timer so a "never ended" fallback cannot cut the new clip short.
+    if (graceTimeoutRef.current) {
+      clearTimeout(graceTimeoutRef.current);
+      graceTimeoutRef.current = setTimeout(() => {
+        console.warn('[ImmersiveAdPlayer] Ad video never ended after source swap — completing with grace.');
+        triggerCompleted();
+      }, 12000);
+    }
+  }, [activeVideoSrc]);
+
+  useEffect(() => {
     setAdSeconds(ad.duration || 15);
     const start = performance.now();
     const total = ad.duration || 15;
@@ -47,18 +77,25 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
       const remaining = Math.max(0, total - elapsed);
       setAdSeconds(prev => Math.min(prev, remaining));
       if (remaining <= 0) {
-        triggerCompleted();
+        clearInterval(timer);
+        const video = videoRef.current;
+        const hasVideo = Boolean(activeVideoSrcRef.current);
+        // NEVER cut an ad video short: completion waits for the video's 'ended'
+        // event. Image-only ads (no video element) complete on the countdown.
+        if (!hasVideo || (video && video.ended)) {
+          triggerCompleted();
+        } else if (!graceTimeoutRef.current) {
+          // Safety net: stalled/broken media that never fires 'ended'.
+          graceTimeoutRef.current = setTimeout(() => {
+            console.warn('[ImmersiveAdPlayer] Ad countdown finished but video never ended — completing with grace.');
+            triggerCompleted();
+          }, 12000);
+        }
       }
     }, 250);
 
     return () => clearInterval(timer);
   }, [ad.id, ad.duration]);
-
-  // Resolve the best available video source:
-  //  1. generatedAdVideoUrl — fal.ai cinematic ad clip (visual continuation of the film)
-  //  2. videoUrl            — static fallback while fal.ai is still generating
-  const activeVideoSrc = ad.generatedAdVideoUrl || ad.videoUrl;
-  const isCinematicAd = !!ad.generatedAdVideoUrl;
 
   // Auto-play video on mount and whenever the source changes (e.g. fal.ai clip arrives).
   // Ads are NOT muted: attempt sound-first playback, and only fall back to muted when
@@ -161,12 +198,12 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
       )}
 
       {/* Top HUD: Commercial Break Badge & Countdown */}
-      <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-50">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 bg-amber-500/20 border border-amber-400/40 px-3.5 py-1.5 rounded-full backdrop-blur-xl shadow-[0_0_20px_rgba(245,158,11,0.25)]">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
-            <span className="text-[11px] font-mono font-bold tracking-widest text-amber-300 uppercase flex items-center gap-1.5">
-              <Radio className="w-3.5 h-3.5" /> SPONSORED HOLO-BROADCAST
+      <div className="absolute top-3 left-3 right-3 md:top-6 md:left-6 md:right-6 flex items-center justify-between z-50">
+        <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
+          <div className="flex items-center space-x-1.5 md:space-x-2 bg-amber-500/20 border border-amber-400/40 px-2.5 py-1 md:px-3.5 md:py-1.5 rounded-full backdrop-blur-xl shadow-[0_0_20px_rgba(245,158,11,0.25)]">
+            <span className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+            <span className="text-[9px] md:text-[11px] font-mono font-bold tracking-widest text-amber-300 uppercase flex items-center gap-1 md:gap-1.5 truncate">
+              <Radio className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0" /> SPONSORED HOLO-BROADCAST
             </span>
           </div>
 
@@ -176,11 +213,11 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
         </div>
 
         {/* Right side: Countdown Timer & Audio Toggle */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2 md:space-x-3 shrink-0">
           {/* Circular Countdown Badge */}
-          <div className="flex items-center space-x-2 bg-neutral-900/90 border border-white/15 px-3 py-1.5 rounded-full backdrop-blur-md font-mono text-xs text-neutral-200 shadow-xl">
+          <div className="flex items-center space-x-1.5 md:space-x-2 bg-neutral-900/90 border border-white/15 px-2.5 py-1 md:px-3 md:py-1.5 rounded-full backdrop-blur-md font-mono text-[10px] md:text-xs text-neutral-200 shadow-xl">
             <span className="text-neutral-400">RESUMES IN</span>
-            <span className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 font-bold flex items-center justify-center text-xs">
+            <span className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 font-bold flex items-center justify-center text-[10px] md:text-xs">
               {adSeconds}s
             </span>
           </div>
@@ -204,94 +241,89 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
         </div>
       </div>
 
-      {/* Main Content Floating Glass Card */}
+      {/* Main Content Floating Minicard */}
       <motion.div
         initial={{ opacity: 0, y: 30, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-50 max-w-xl mx-4 p-6 sm:p-8 rounded-3xl bg-neutral-950/80 border border-white/15 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex flex-col space-y-4"
+        className="relative z-50 w-[min(92%,22rem)] p-3 sm:p-4 rounded-2xl bg-neutral-950/85 border border-white/15 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex flex-col space-y-2 sm:space-y-2.5"
       >
         {/* Brand Header */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
-          <div className="flex items-center space-x-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.8)]" />
-            <h4 className="text-xs font-mono font-bold tracking-widest text-amber-400 uppercase">
+        <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+          <div className="flex items-center space-x-1.5 min-w-0">
+            <div className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.8)] shrink-0" />
+            <h4 className="text-[10px] font-mono font-bold tracking-widest text-amber-400 uppercase truncate">
               {ad.brandName}
             </h4>
           </div>
 
-          <div className="flex items-center space-x-1 text-[10px] font-mono text-neutral-400 uppercase tracking-wider">
-            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Official Cinema Partner</span>
+          <div className="hidden sm:flex items-center space-x-1 text-[9px] font-mono text-neutral-400 uppercase tracking-wider shrink-0">
+            <ShieldCheck className="w-3 h-3 text-cyan-400" />
+            <span>Official Partner</span>
           </div>
         </div>
 
         {/* Title and Tagline */}
-        <div className="space-y-1">
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-tight">
+        <div className="space-y-0.5 min-w-0">
+          <h2 className="text-sm sm:text-base font-black text-white tracking-tight leading-tight line-clamp-2">
             {ad.title}
           </h2>
           {ad.tagline && (
-            <p className="text-xs sm:text-sm font-medium text-neutral-300 italic">
+            <p className="text-[10px] sm:text-[11px] font-medium text-neutral-300 italic truncate">
               "{ad.tagline}"
             </p>
           )}
         </div>
 
-        {/* Description */}
+        {/* Description (desktop only, clamped) */}
         {ad.description && (
-          <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed font-sans">
+          <p className="hidden sm:block text-[10px] text-neutral-400 leading-relaxed font-sans line-clamp-2">
             {ad.description}
           </p>
         )}
 
         {/* Sponsor Audience Perk (if available) */}
         {ad.perkReward && (
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-500/10 via-cyan-500/10 to-transparent border border-amber-400/20 flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300">
-              <Gift className="w-4 h-4" />
+          <div className="p-2 rounded-xl bg-gradient-to-r from-amber-500/10 via-cyan-500/10 to-transparent border border-amber-400/20 flex items-center space-x-2">
+            <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 shrink-0">
+              <Gift className="w-3 h-3" />
             </div>
-            <div className="text-xs">
-              <span className="font-bold text-amber-300 uppercase tracking-wider font-mono block text-[10px]">
-                Audience Sponsor Reward
-              </span>
-              <span className="text-neutral-200 font-medium">
-                {ad.perkReward}
-              </span>
-            </div>
+            <span className="text-[10px] text-neutral-200 font-medium truncate">
+              {ad.perkReward}
+            </span>
           </div>
         )}
 
         {/* Interactive Call to Action */}
-        <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
+        <div className="pt-1 flex items-center gap-2">
           <button
             onClick={handleCtaClick}
-            className="w-full py-3 px-6 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_25px_rgba(245,158,11,0.4)]"
+            className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black font-mono font-bold text-[10px] uppercase tracking-widest flex items-center justify-center space-x-1.5 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_25px_rgba(245,158,11,0.4)]"
           >
-            <Sparkles className="w-4 h-4 text-black" />
-            <span>{ad.ctaText || 'Access Sponsor Terminal'}</span>
-            <ExternalLink className="w-4 h-4 text-black ml-1" />
+            <Sparkles className="w-3 h-3 text-black shrink-0" />
+            <span className="truncate">{ad.ctaText || 'Access Sponsor Terminal'}</span>
+            <ExternalLink className="w-3 h-3 text-black ml-1 shrink-0" />
           </button>
 
           {hasInteracted && (
-            <span className="text-[11px] font-mono text-green-400 font-semibold animate-pulse text-center">
-              ✓ Reward Activated!
+            <span className="text-[10px] font-mono text-green-400 font-semibold animate-pulse whitespace-nowrap shrink-0">
+              ✓ Activated!
             </span>
           )}
-
-          {onOpenBuyAds && (
-            <button
-              type="button"
-              onClick={() => {
-                audioCues.playClick();
-                onOpenBuyAds();
-              }}
-              className="text-[10px] font-mono text-neutral-400 hover:text-amber-300 underline underline-offset-4 transition-colors text-center w-full block pt-1"
-            >
-              Want to feature your brand in this infinite film? Buy Ad Showcase
-            </button>
-          )}
         </div>
+
+        {onOpenBuyAds && (
+          <button
+            type="button"
+            onClick={() => {
+              audioCues.playClick();
+              onOpenBuyAds();
+            }}
+            className="text-[9px] font-mono text-neutral-400 hover:text-amber-300 underline underline-offset-4 transition-colors text-center w-full"
+          >
+            Want your brand here? Buy Ad Showcase
+          </button>
+        )}
       </motion.div>
 
       {/* Bottom Progress Bar for Ad with Initial-to-Final State Animation */}

@@ -983,7 +983,7 @@ class CinemaOrchestrator {
           stepNumber: replayStepNumber,
           title: chosenTitle,
           synopsis: chosenSynopsis,
-          dialogueSnippet: "Continuing scene sequence...",
+          dialogueSnippet: "",
           visualPrompt: "Archived cinematic clip playback.",
           cameraMotionPrompt: "Smooth cinematic hold.",
           videoUrl: chosenVideoUrl,

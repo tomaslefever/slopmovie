@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { CinemaState, ChatMessage, PlaybackPhase, MovieStep } from '@/types/cinema';
+import { CinemaState, ChatMessage, PlaybackPhase, MovieStep, ImmersiveAd } from '@/types/cinema';
 import { CinemaPlayer } from '@/components/cinema/CinemaPlayer';
 import { VotingOverlay } from '@/components/cinema/VotingOverlay';
 import { BlockbusterVoting } from '@/components/cinema/BlockbusterVoting';
@@ -10,6 +10,24 @@ import { GalleryView } from '@/components/gallery/GalleryView';
 import { Navbar } from '@/components/layout/Navbar';
 import { BuyAdsModal } from '@/components/cinema/BuyAdsModal';
 import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
+import { isRealGeneratedVideoUrl } from '@/lib/fal-video';
+
+// Stable module-level fallback ad (identity must not change between renders,
+// otherwise CinemaPlayer's memoization is defeated every render).
+const FALLBACK_IN_SCENE_AD: ImmersiveAd = {
+  id: "ad_suntory_reserve",
+  brandName: "Suntory Orbital",
+  title: "Zero-Gravity Single Malt",
+  tagline: "Distilled aboard the Lunar Spire",
+  type: "in_scene_overlay",
+  imageUrl: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=800&auto=format&fit=crop&q=80",
+  ctaText: "Inspect Vintage",
+  ctaUrl: "https://example.com/suntory",
+  duration: 15,
+  isActive: true,
+  impressions: 0,
+  clicks: 0
+};
 
 export default function CinemaStreamingPage() {
   const [cinemaState, setCinemaState] = useState<CinemaState | null>(null);
@@ -25,6 +43,8 @@ export default function CinemaStreamingPage() {
   const [isGalleryOpen, setIsGalleryOpen] = useState<boolean>(false);
   const [isBuyAdsModalOpen, setIsBuyAdsModalOpen] = useState<boolean>(false);
   const [topVotedMessages, setTopVotedMessages] = useState<ChatMessage[]>([]);
+  // Wraps CinemaPlayer + voting overlays so fullscreen keeps the vote cards visible
+  const stageContainerRef = useRef<HTMLDivElement>(null);
 
   // On mobile the chat starts collapsed (the video needs the full width)
   useEffect(() => {
@@ -93,6 +113,10 @@ export default function CinemaStreamingPage() {
   // Stage completion handler: requests to Supabase/API happen ONLY when an actual stage finishes in the client.
   // This eliminates arbitrary periodic polling and prevents scene cutting/overlap.
   const isCompletingStageRef = useRef<boolean>(false);
+  // Set by CinemaPlayer's onPlaybackEnded when the scene clip actually reaches
+  // its end. The stage timer must NEVER advance while this is false (the video
+  // is still playing), except for the stalled-media grace fallback.
+  const videoEndedRef = useRef<boolean>(false);
 
   // Compute the REAL remaining seconds of the current phase from the server's
   // phaseEndsAt. Falls back to the fixed duration when the timestamp is missing
@@ -241,13 +265,16 @@ export default function CinemaStreamingPage() {
   };
 
   // 1. Fixed 15-second timeout for PLAYING stage.
-  // Triggers when a scene begins (or step changes), counts down 15s locally, and requests transition to VOTING.
-  // This guarantees clips shorter than 15s don't advance early.
+  // The counter only tracks the scene window; the ACTUAL transition waits for
+  // the video's 'ended' event (onPlaybackEnded) so the clip is never cut short.
+  // This also guarantees clips shorter than 15s don't advance early.
   useEffect(() => {
     if (!cinemaState || cinemaState.phase !== 'PLAYING' || cinemaState.isPaused) return;
 
     const stepNum = cinemaState.movie?.currentStep;
     console.log(`[CinemaPage] Scene started (Step ${stepNum}). Running playback timeout...`);
+
+    videoEndedRef.current = false;
 
     const startTime = Date.now();
     // Sync to the server's real remaining time; fall back to 15s when unknown
@@ -255,23 +282,50 @@ export default function CinemaStreamingPage() {
 
     setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
 
+    let graceInterval: ReturnType<typeof setInterval> | null = null;
+
+    const finishScene = (force: boolean) => {
+      if (graceInterval) clearInterval(graceInterval);
+      console.log(`[CinemaPage] Playback window elapsed for Step ${stepNum}${force ? ' (video never ended — grace)' : ''}. Transitioning...`);
+      handleStageComplete('PLAYING');
+    };
+
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       const remaining = Math.max(0, durationSec - elapsed);
 
       setCinemaState(prev => {
         if (!prev || prev.phase !== 'PLAYING') return prev;
+        // 1-second resolution: bail out when unchanged so the page (and the
+        // video stage) does not re-render between whole seconds.
+        if (prev.timeRemaining === remaining) return prev;
         return { ...prev, timeRemaining: remaining };
       });
 
       if (remaining <= 0) {
         clearInterval(timer);
-        console.log(`[CinemaPage] Playback window elapsed for Step ${stepNum}. Transitioning to VOTING...`);
-        handleStageComplete('PLAYING');
+        if (videoEndedRef.current) {
+          finishScene(false);
+        } else {
+          // The window is over but the clip is still playing: wait for it to
+          // actually end instead of cutting it mid-frame.
+          console.log(`[CinemaPage] Countdown finished for Step ${stepNum} but the video is still playing — waiting for it to end.`);
+          const graceStart = Date.now();
+          graceInterval = setInterval(() => {
+            if (videoEndedRef.current) {
+              finishScene(false);
+            } else if (Date.now() - graceStart >= 12000) {
+              finishScene(true);
+            }
+          }, 250);
+        }
       }
-    }, 250);
+    }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      if (graceInterval) clearInterval(graceInterval);
+    };
   }, [cinemaState?.phase, cinemaState?.movie?.currentStep, cinemaState?.isPaused]);
 
   // 2. Fixed 10-second timeout for VOTING stage.
@@ -292,6 +346,7 @@ export default function CinemaStreamingPage() {
 
       setCinemaState(prev => {
         if (!prev || prev.phase !== 'VOTING') return prev;
+        if (prev.timeRemaining === remaining) return prev;
         return { ...prev, timeRemaining: remaining };
       });
 
@@ -300,13 +355,15 @@ export default function CinemaStreamingPage() {
         console.log('[CinemaPage] 10s voting window elapsed. Transitioning to GENERATING...');
         handleStageComplete('VOTING');
       }
-    }, 250);
+    }, 1000);
 
     return () => clearInterval(timer);
   }, [cinemaState?.phase, cinemaState?.isPaused]);
 
   // 3. Fixed 15-second timeout for COMMERCIAL_BREAK stage.
-  // Triggers when COMMERCIAL_BREAK starts, counts down 15s locally, and requests transition to VOTING.
+  // The ad player notifies completion when its video ends (or the countdown for
+  // image-only ads). This timer only drives the HUD countdown and acts as a
+  // last-resort fallback when the ad never completes (stalled/broken media).
   useEffect(() => {
     if (!cinemaState || cinemaState.phase !== 'COMMERCIAL_BREAK' || cinemaState.isPaused) return;
 
@@ -317,23 +374,32 @@ export default function CinemaStreamingPage() {
 
     setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
 
+    let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
+
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       const remaining = Math.max(0, durationSec - elapsed);
 
       setCinemaState(prev => {
         if (!prev || prev.phase !== 'COMMERCIAL_BREAK') return prev;
+        if (prev.timeRemaining === remaining) return prev;
         return { ...prev, timeRemaining: remaining };
       });
 
-      if (remaining <= 0) {
-        clearInterval(timer);
-        console.log('[CinemaPage] 15s commercial break elapsed. Transitioning to VOTING...');
-        handleStageComplete('COMMERCIAL_BREAK');
+      // Never cut the ad video short: the transition is driven by onAdCompleted
+      // (ad video 'ended'). Fall back only if nothing completes well past the window.
+      if (remaining <= 0 && !fallbackTimeout) {
+        fallbackTimeout = setTimeout(() => {
+          console.log('[CinemaPage] Commercial break window exceeded without ad completion — advancing with grace.');
+          handleStageComplete('COMMERCIAL_BREAK');
+        }, 12000);
       }
-    }, 250);
+    }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      if (fallbackTimeout) clearTimeout(fallbackTimeout);
+    };
   }, [cinemaState?.phase, cinemaState?.isPaused]);
 
   // 3b. Fixed 60-second timeout for BLOCKBUSTER_VOTING stage.
@@ -356,6 +422,7 @@ export default function CinemaStreamingPage() {
 
       setCinemaState(prev => {
         if (!prev || prev.phase !== 'BLOCKBUSTER_VOTING') return prev;
+        if (prev.timeRemaining === remaining) return prev;
         return { ...prev, timeRemaining: remaining };
       });
 
@@ -364,10 +431,26 @@ export default function CinemaStreamingPage() {
         console.log('[CinemaPage] 60s blockbuster vote elapsed. Resolving winner...');
         handleStageComplete('BLOCKBUSTER_VOTING');
       }
-    }, 250);
+    }, 1000);
 
     return () => clearInterval(timer);
   }, [cinemaState?.phase, cinemaState?.isPaused]);
+
+  // 3c. Preload the NEXT known scene's video in the background so the cut at
+  // scene start doesn't stall buffering on mid-range devices (helps the
+  // first-shot prologue and any step whose URL is already known). Only real
+  // generated clips are preloaded — the giant sample mocks would waste data.
+  useEffect(() => {
+    const currentStepNum = cinemaState?.activeStep?.stepNumber;
+    const nextStep = cinemaState?.movie?.steps?.find(s => s.stepNumber === (currentStepNum ?? -1) + 1);
+    if (!nextStep?.videoUrl || !isRealGeneratedVideoUrl(nextStep.videoUrl)) return;
+
+    const preloader = document.createElement('video');
+    preloader.preload = 'auto';
+    preloader.muted = true;
+    preloader.src = nextStep.videoUrl;
+    preloader.load();
+  }, [cinemaState?.movie?.steps, cinemaState?.activeStep?.stepNumber]);
 
   // 4. Dedicated polling ONLY while in GENERATING state until the next scene is synthesized and ready.
   // Stops immediately as soon as the response carries the new generated video link (or the phase leaves GENERATING).
@@ -482,11 +565,19 @@ export default function CinemaStreamingPage() {
           if (!prev) return prev;
           // In client-driven mode, scene video & voting timers run on the client.
           // time_tick only updates live audience and votes counters without disrupting playback.
+          // Bail out when nothing changed — otherwise the whole page re-renders every second
+          // (noticeable frame drops on mobile).
+          const votesA = payload.payload.votesA ?? prev.votesA;
+          const votesB = payload.payload.votesB ?? prev.votesB;
+          const totalAudience = payload.payload.totalAudience ?? prev.totalAudience;
+          if (votesA === prev.votesA && votesB === prev.votesB && totalAudience === prev.totalAudience) {
+            return prev;
+          }
           return {
             ...prev,
-            votesA: payload.payload.votesA ?? prev.votesA,
-            votesB: payload.payload.votesB ?? prev.votesB,
-            totalAudience: payload.payload.totalAudience ?? prev.totalAudience
+            votesA,
+            votesB,
+            totalAudience
           };
         });
       })
@@ -914,13 +1005,12 @@ export default function CinemaStreamingPage() {
         ) : (
           <>
             {/* Screen Video Stage */}
-            <div className="flex-1 relative h-full flex items-center justify-center overflow-hidden">
+            <div ref={stageContainerRef} className="flex-1 relative h-full flex items-center justify-center overflow-hidden">
               <CinemaPlayer
                 movieTitle={cinemaState.movie.title}
                 genre={cinemaState.movie.genre}
                 activeStep={cinemaState.activeStep}
                 phase={cinemaState.phase}
-                timeRemaining={cinemaState.timeRemaining}
                 totalSteps={cinemaState.movie.totalSteps}
                 activeAd={cinemaState.activeAd}
                 isPaused={cinemaState.isPaused}
@@ -930,23 +1020,14 @@ export default function CinemaStreamingPage() {
                 onToggleSubtitles={handleToggleSubtitles}
                 onChangeSubtitleLanguage={handleChangeSubtitleLanguage}
                 onAdCompleted={() => handleStageComplete('COMMERCIAL_BREAK')}
+                onPlaybackEnded={() => {
+                  videoEndedRef.current = true;
+                }}
+                fullscreenContainerRef={stageContainerRef}
                 inSceneAd={
                   cinemaState.activeAd?.type === 'in_scene_overlay'
                     ? cinemaState.activeAd
-                    : (cinemaState.movie.currentStep % 2 === 0 ? {
-                        id: "ad_suntory_reserve",
-                        brandName: "Suntory Orbital",
-                        title: "Zero-Gravity Single Malt",
-                        tagline: "Distilled aboard the Lunar Spire",
-                        type: "in_scene_overlay",
-                        imageUrl: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=800&auto=format&fit=crop&q=80",
-                        ctaText: "Inspect Vintage",
-                        ctaUrl: "https://example.com/suntory",
-                        duration: 15,
-                        isActive: true,
-                        impressions: 0,
-                        clicks: 0
-                      } : null)
+                    : (cinemaState.movie.currentStep % 2 === 0 ? FALLBACK_IN_SCENE_AD : null)
                 }
                 onOpenBuyAds={() => setIsBuyAdsModalOpen(true)}
               />

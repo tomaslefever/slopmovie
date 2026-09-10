@@ -141,7 +141,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.98 }}
         transition={{ duration: 0.35 }}
-        className="absolute inset-0 z-40 bg-black/65 backdrop-blur-[6px] flex flex-col items-center justify-center p-3 md:p-6 overflow-y-auto"
+        className="absolute inset-0 z-40 bg-black/75 md:bg-black/65 md:backdrop-blur-[6px] flex flex-col items-center justify-center p-3 md:p-6 overflow-y-auto"
       >
         <AnimatePresence mode="wait">
           {!isVotingEnded ? (
@@ -191,11 +191,6 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   </div>
                 </div>
 
-                <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/30 text-[10px] font-mono font-bold tracking-widest text-cyan-300 uppercase mb-2 backdrop-blur-md">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                  Repetición de escena (sin sonido) • Música de tensión
-                </div>
-
                 <div className="flex items-center space-x-2">
                   <Timer className="w-3.5 h-3.5 md:w-4 md:h-4 text-cyan-400" />
                   <h2 className="text-lg md:text-2xl font-black uppercase tracking-widest text-white">
@@ -215,7 +210,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleCastVote('A')}
-                  className={`relative p-3 md:p-6 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
+                  className={`relative p-3 md:p-4 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
                     userVoted === 'A'
                       ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_30px_rgba(0,240,255,0.3)]'
                       : 'bg-neutral-900/60 hover:bg-neutral-900/80 border-white/10 hover:border-cyan-500/50'
@@ -236,7 +231,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                     </span>
                   </div>
 
-                  <h3 className="text-sm md:text-lg font-bold text-white mb-1 md:mb-2 group-hover:text-cyan-300 transition-colors">
+                  <h3 className="text-sm md:text-base font-bold text-white mb-1 md:mb-2 group-hover:text-cyan-300 transition-colors">
                     {options[0].title}
                   </h3>
 
@@ -279,7 +274,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleCastVote('B')}
-                  className={`relative p-3 md:p-6 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
+                  className={`relative p-3 md:p-4 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
                     userVoted === 'B'
                       ? 'bg-amber-950/40 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.3)]'
                       : 'bg-neutral-900/60 hover:bg-neutral-900/80 border-white/10 hover:border-amber-500/50'
@@ -300,7 +295,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                     </span>
                   </div>
 
-                  <h3 className="text-sm md:text-lg font-bold text-white mb-1 md:mb-2 group-hover:text-amber-300 transition-colors">
+                  <h3 className="text-sm md:text-base font-bold text-white mb-1 md:mb-2 group-hover:text-amber-300 transition-colors">
                     {options[1].title}
                   </h3>
 

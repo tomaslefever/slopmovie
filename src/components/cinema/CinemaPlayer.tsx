@@ -13,7 +13,6 @@ interface CinemaPlayerProps {
   genre: string;
   activeStep: MovieStep;
   phase: PlaybackPhase;
-  timeRemaining: number;
   totalSteps: number;
   activeAd?: ImmersiveAd | null;
   inSceneAd?: ImmersiveAd | null;
@@ -26,6 +25,12 @@ interface CinemaPlayerProps {
   onPlaybackEnded?: () => void;
   onAdCompleted?: () => void;
   onOpenBuyAds?: () => void;
+  /**
+   * Optional outer container to fullscreen (e.g. the stage wrapper that also
+   * holds the voting overlays). When provided, fullscreen targets it so the
+   * vote cards remain visible in fullscreen mode.
+   */
+  fullscreenContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const CINEMA_FALLBACK_VIDEOS = [
@@ -36,12 +41,11 @@ const CINEMA_FALLBACK_VIDEOS = [
   "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
 ];
 
-export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
+const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   movieTitle,
   genre,
   activeStep,
   phase,
-  timeRemaining,
   totalSteps,
   activeAd,
   inSceneAd,
@@ -53,13 +57,13 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   onChangeSubtitleLanguage,
   onPlaybackEnded,
   onAdCompleted,
-  onOpenBuyAds
+  onOpenBuyAds,
+  fullscreenContainerRef
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isMuted, setIsMuted] = useState(() => audioCues.getMuted());
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [, setIsVideoLoading] = useState(false);
 
   // Reliable Video Source Resolution (Fallbacks guarantee a video ALWAYS plays)
   const fallbackUrl = CINEMA_FALLBACK_VIDEOS[Math.abs((activeStep.stepNumber || 1) - 1) % CINEMA_FALLBACK_VIDEOS.length];
@@ -129,6 +133,13 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
 
   const lastPlayedStepRef = useRef<number>(activeStep.stepNumber);
   const lastVideoSrcRef = useRef<string>(currentVideoSrc);
+  // Only re-render on whole-second changes: onTimeUpdate fires ~4x per second,
+  // and each setState re-renders the player on top of video decode (dropped
+  // frames on mid-range devices).
+  const lastEmittedSecondRef = useRef<number>(-1);
+  // Fired exactly once per scene clip: the page advances the stage only after
+  // the video truly ended (never while it is still playing).
+  const playbackEndedNotifiedRef = useRef<boolean>(false);
 
   // Auto-play and handle video src change ONLY when step number or video src actually transitions
   useEffect(() => {
@@ -141,7 +152,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
     if (isDifferentStep || isDifferentSrc) {
       lastPlayedStepRef.current = activeStep.stepNumber;
       lastVideoSrcRef.current = currentVideoSrc;
-      setIsVideoLoading(true);
+      playbackEndedNotifiedRef.current = false;
       video.currentTime = 0;
       setVideoCurrentTime(0);
       video.muted = phase === 'VOTING' ? true : isMuted;
@@ -169,6 +180,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
       }
     } else if (phase === 'PLAYING') {
       // Restore user sound preference during movie playback
+      video.loop = false;
       video.muted = isMuted;
       if (video.paused && !isPaused) {
         video.play().catch(() => {});
@@ -190,18 +202,37 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
     }
   }, [isPaused, phase]);
 
-  const hasEndedRef = useRef<boolean>(false);
-
   const handleEnded = () => {
+    if (phase === 'PLAYING') {
+      // The scene clip truly ended: notify the page so the stage advances only
+      // now — never while the video is still playing. Keep looping seamlessly
+      // for clips shorter than the scene window.
+      if (!playbackEndedNotifiedRef.current) {
+        playbackEndedNotifiedRef.current = true;
+        onPlaybackEnded?.();
+      }
+      if (videoRef.current) {
+        videoRef.current.currentTime = 0;
+        videoRef.current.play().catch(() => {});
+      }
+      return;
+    }
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
       videoRef.current.play().catch(() => {});
     }
   };
 
+  // Only re-render on whole-second changes: onTimeUpdate fires ~4x per second,
+  // and each setState re-renders the player on top of video decode (dropped
+  // frames on mid-range devices).
   const handleTimeUpdate = () => {
-    if (videoRef.current) {
-      setVideoCurrentTime(videoRef.current.currentTime);
+    const video = videoRef.current;
+    if (!video) return;
+    const sec = Math.floor(video.currentTime);
+    if (sec !== lastEmittedSecondRef.current) {
+      lastEmittedSecondRef.current = sec;
+      setVideoCurrentTime(sec);
     }
   };
 
@@ -221,22 +252,40 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
 
   const toggleFullscreen = () => {
     audioCues.playClick();
+    const target = fullscreenContainerRef?.current ?? containerRef.current;
     if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      const enterFullscreen = target?.requestFullscreen?.();
+      if (enterFullscreen) {
+        enterFullscreen
+          .then(() => setIsFullscreen(true))
+          .catch(() => {
+            // iOS Safari only allows fullscreen on the video element itself
+            const video = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+            if (video?.requestFullscreen) {
+              video.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+            } else if (video?.webkitEnterFullscreen) {
+              video.webkitEnterFullscreen();
+              setIsFullscreen(true);
+            }
+          });
+      }
     } else {
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
   };
 
-  // Progress of the fixed 15-second scene window
-  const progressPercent = phase === 'PLAYING' 
-    ? Math.max(0, Math.min(100, ((15 - timeRemaining) / 15) * 100))
-    : 100;
+  // Keep the icon in sync when fullscreen exits via Esc or platform UI
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const target = fullscreenContainerRef?.current ?? containerRef.current;
+      setIsFullscreen(Boolean(document.fullscreenElement) && document.fullscreenElement === target);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [fullscreenContainerRef]);
 
-  // Active Subtitle Resolution
-  const currentPlaybackSecond = videoCurrentTime > 0 
-    ? videoCurrentTime 
-    : Math.max(0, 15 - timeRemaining);
+  // Active Subtitle Resolution (driven purely by video playback time)
+  const currentPlaybackSecond = videoCurrentTime;
 
   const activeCue: SubtitleCue | undefined = activeStep.subtitles?.find(
     cue => currentPlaybackSecond >= cue.start && currentPlaybackSecond <= cue.end
@@ -256,32 +305,43 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
       {/* Ambient background glow */}
       <div className="absolute inset-0 bg-radial from-cyan-950/20 via-transparent to-black pointer-events-none" />
 
+      {/* Top-Edge Playback Progress Bar (square, flush with the header) */}
+      <div className="absolute top-0 left-0 right-0 h-1.5 z-30 bg-neutral-900/95 overflow-hidden">
+        <div 
+          key={`cinema_prog_top_${activeStep.stepNumber}_${phase}_${isPaused ? 'p' : 'r'}`}
+          className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-amber-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]"
+          style={{ 
+            animation: (phase === 'PLAYING' && !isPaused) ? `cinema-progress ${activeStep.duration || 15}s linear forwards` : undefined,
+            width: phase === 'PLAYING' ? undefined : '100%'
+          }}
+        />
+      </div>
+
       {/* Main Video Element (Always rendered with verified or fallback video) */}
       <video
         ref={videoRef}
         key={currentVideoSrc}
         src={currentVideoSrc}
         poster={activeStep.thumbnailUrl}
+        preload="auto"
         autoPlay
         playsInline
-        loop={true}
+        loop={phase === 'VOTING'}
         muted={phase === 'VOTING' || phase === 'COMMERCIAL_BREAK' ? true : isMuted}
         onTimeUpdate={handleTimeUpdate}
         onError={handleVideoError}
         onEnded={handleEnded}
         onCanPlay={() => {
           errorStreakRef.current = 0;
-          setIsVideoLoading(false);
         }}
-        onWaiting={() => setIsVideoLoading(true)}
         className={`w-full h-full object-cover object-center transition-opacity duration-300 ${
           phase === 'COMMERCIAL_BREAK' ? 'opacity-0 invisible pointer-events-none' : 'opacity-100 visible'
         }`}
       />
 
-      {/* Subtle Grain Overlay */}
+      {/* Subtle Grain Overlay (desktop only — blend compositing over video is costly on mobile GPUs) */}
       <div 
-        className="absolute inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay"
+        className="absolute inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay hidden md:block"
         style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '4px 4px' }}
       />
 
@@ -306,25 +366,24 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
             impressions: 0,
             clicks: 0
           }} 
-          timeRemaining={timeRemaining} 
           onAdCompleted={onAdCompleted} 
           onOpenBuyAds={onOpenBuyAds}
         />
       )}
 
       {/* Top Cinema HUD */}
-      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-20 bg-gradient-to-b from-black/80 via-black/30 to-transparent">
+      <div className="absolute top-0 left-0 right-0 p-6 pt-3 flex items-center justify-between z-20 bg-gradient-to-b from-black/80 via-black/30 to-transparent">
         <div className="flex items-center space-x-3">
           {/* Live / Paused Indicator */}
           {isPaused ? (
-            <div className="flex items-center space-x-2 bg-amber-950/80 border border-amber-500/40 px-3 py-1 rounded-full backdrop-blur-md shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse">
+            <div className="flex items-center space-x-2 bg-amber-950/80 border border-amber-500/40 px-3 py-1 rounded-full md:backdrop-blur-md shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse">
               <Clock className="w-3 h-3 text-amber-400" />
               <span className="text-[11px] font-bold text-amber-300 uppercase tracking-widest font-mono">
                 PAUSED // DIRECTOR HOLD
               </span>
             </div>
           ) : (
-            <div className="flex items-center space-x-2 bg-red-950/60 border border-red-500/30 px-3 py-1 rounded-full backdrop-blur-md">
+            <div className="flex items-center space-x-2 bg-red-950/60 border border-red-500/30 px-3 py-1 rounded-full md:backdrop-blur-md">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
               <span className="text-[11px] font-bold text-red-400 uppercase tracking-widest flex items-center gap-1">
                 <Radio className="w-3 h-3" /> LIVE
@@ -347,7 +406,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
                 audioCues.playClick();
                 setShowSubtitleMenu(!showSubtitleMenu);
               }}
-              className={`px-2.5 py-2 rounded-full border text-xs font-mono font-bold flex items-center space-x-1.5 backdrop-blur-md transition-all hover:scale-105 active:scale-95 ${
+              className={`px-2.5 py-2 rounded-full border text-xs font-mono font-bold flex items-center space-x-1.5 md:backdrop-blur-md transition-all hover:scale-105 active:scale-95 ${
                 subtitlesEnabled 
                   ? 'bg-cyan-500/20 text-cyan-400 border-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.3)]' 
                   : 'bg-black/60 hover:bg-neutral-800 text-neutral-400 border-white/10'
@@ -368,7 +427,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-48 bg-[#0b0c12]/95 border border-white/15 rounded-xl shadow-2xl p-2 z-50 backdrop-blur-xl space-y-1 font-sans text-xs"
+                  className="absolute right-0 mt-2 w-48 bg-[#0b0c12]/95 border border-white/15 rounded-xl shadow-2xl p-2 z-50 md:backdrop-blur-xl space-y-1 font-sans text-xs"
                 >
                   <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-widest text-neutral-400 border-b border-white/5">
                     Subtitle Settings
@@ -417,7 +476,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
           {/* Mute Button */}
           <button
             onClick={toggleMute}
-            className="p-2.5 rounded-full bg-black/60 hover:bg-neutral-800 text-neutral-200 border border-white/10 backdrop-blur-md transition-all hover:scale-105 active:scale-95"
+            className="p-2.5 rounded-full bg-black/70 hover:bg-neutral-800 text-neutral-200 border border-white/10 md:backdrop-blur-md transition-all hover:scale-105 active:scale-95"
             title={isMuted ? "Unmute" : "Mute"}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
@@ -426,7 +485,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
           {/* Fullscreen Button */}
           <button
             onClick={toggleFullscreen}
-            className="p-2.5 rounded-full bg-black/60 hover:bg-neutral-800 text-neutral-200 border border-white/10 backdrop-blur-md transition-all hover:scale-105 active:scale-95"
+            className="p-2.5 rounded-full bg-black/70 hover:bg-neutral-800 text-neutral-200 border border-white/10 md:backdrop-blur-md transition-all hover:scale-105 active:scale-95"
             title="Fullscreen"
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -445,7 +504,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.98 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="mb-4 px-6 py-2.5 rounded-2xl bg-black/85 border border-white/15 backdrop-blur-md max-w-3xl text-center shadow-[0_10px_40px_rgba(0,0,0,0.9)] select-none"
+              className="mb-4 px-6 py-2.5 rounded-2xl bg-black/85 border border-white/15 md:backdrop-blur-md max-w-3xl text-center shadow-[0_10px_40px_rgba(0,0,0,0.9)] select-none"
             >
               <p className="text-sm sm:text-base font-medium text-white tracking-wide leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 {currentSpeaker && (
@@ -470,23 +529,11 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
             {movieTitle} — {activeStep.title}
           </span>
         </div>
-
-        {/* 15s Progress Bar with Initial and Final State Animation (Zero 1-second jumps) */}
-        <div className="w-full h-1.5 bg-neutral-900/90 rounded-full overflow-hidden border border-white/5 backdrop-blur-sm">
-          <div 
-            key={`cinema_prog_${activeStep.stepNumber}_${phase}_${isPaused ? 'p' : 'r'}`}
-            className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-amber-400 rounded-full shadow-[0_0_8px_rgba(6,182,212,0.8)]"
-            style={{ 
-              animation: (phase === 'PLAYING' && !isPaused) ? `cinema-progress ${activeStep.duration || 15}s linear forwards` : undefined,
-              width: phase === 'PLAYING' ? undefined : '100%'
-            }}
-          />
-        </div>
       </div>
 
       {/* Stream Paused Director Hold Overlay */}
       {isPaused && (
-        <div className="absolute inset-0 z-30 bg-black/60 backdrop-blur-sm flex items-center justify-center select-none pointer-events-none">
+        <div className="absolute inset-0 z-30 bg-black/75 md:bg-black/60 md:backdrop-blur-sm flex items-center justify-center select-none pointer-events-none">
           <div className="p-6 rounded-2xl bg-neutral-950/90 border border-amber-500/40 text-center space-y-2 shadow-[0_0_40px_rgba(245,158,11,0.25)]">
             <div className="inline-flex p-3 rounded-full bg-amber-500/20 text-amber-400 border border-amber-400/40 animate-pulse">
               <Clock className="w-6 h-6" />
@@ -503,3 +550,25 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
     </div>
   );
 };
+
+/**
+ * Memoized so the parent's per-second countdown re-renders skip the video
+ * stage entirely. Only scene/phase-relevant props are compared — callbacks are
+ * ignored (the parent re-creates them each render; the component uses the ones
+ * from the render where the scene/phase changed, which is safe because their
+ * closures read latest state via the parent's handlers).
+ */
+export const CinemaPlayer = React.memo(CinemaPlayerBase, (prev, next) =>
+  prev.activeStep === next.activeStep &&
+  prev.phase === next.phase &&
+  prev.isPaused === next.isPaused &&
+  prev.isGenerationPaused === next.isGenerationPaused &&
+  prev.movieTitle === next.movieTitle &&
+  prev.genre === next.genre &&
+  prev.activeAd === next.activeAd &&
+  prev.inSceneAd === next.inSceneAd &&
+  prev.subtitlesEnabled === next.subtitlesEnabled &&
+  prev.subtitleLanguage === next.subtitleLanguage &&
+  prev.totalSteps === next.totalSteps &&
+  prev.fullscreenContainerRef === next.fullscreenContainerRef
+);
