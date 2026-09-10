@@ -80,7 +80,7 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
         temperature: params.temperature ?? 1,
         top_p: params.top_p ?? 0.95,
         max_tokens: params.max_tokens ?? 16384,
-        seed: params.seed ?? 42,
+        seed: params.seed ?? Math.floor(Math.random() * 2147483647),
         chat_template_kwargs: { thinking: false },
         response_format: params.response_format ?? { type: "json_object" },
         stream: false
@@ -539,9 +539,15 @@ Respond ONLY with a valid JSON object matching this schema:
   ]
 }`;
 
-      const userMessage = customPrompt 
-        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${customPrompt}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH.`
-        : `Create a high-tension interactive sci-fi cyberpunk noir thriller master bible and the 4 opening scenes (1-minute continuous first-shot). Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH.`;
+      const isRealCustom = Boolean(customPrompt && !customPrompt.startsWith('force_reset_') && customPrompt.trim().length > 3);
+      const dynamicGenre = sampleRandom(CREATIVE_GENRES);
+      const dynamicProtagonist = sampleRandom(CREATIVE_PROTAGONISTS);
+      const dynamicCatalyst = sampleRandom(CREATIVE_CATALYSTS);
+      const dynamicAesthetic = sampleRandom(CREATIVE_AESTHETICS);
+
+      const userMessage = isRealCustom 
+        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${customPrompt}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        : `Create a high-tension interactive ${dynamicGenre} master bible featuring ${dynamicProtagonist} facing ${dynamicCatalyst} with visual aesthetic of ${dynamicAesthetic}, and the 4 opening scenes (1-minute continuous first-shot). Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
       const parsed = await callLlmJson<any>({
         label: 'story-bible',
@@ -550,6 +556,7 @@ Respond ONLY with a valid JSON object matching this schema:
           { role: "user", content: userMessage }
         ],
         temperature: 1,
+        seed: Math.floor(Math.random() * 2147483647),
         max_tokens: 16384
       });
 
@@ -861,6 +868,7 @@ ${influenceDirective}`;
           { role: "user", content: userContext }
         ],
         temperature: 1,
+        seed: Math.floor(Math.random() * 2147483647),
         max_tokens: 16384
       });
 
@@ -1479,9 +1487,10 @@ MANDATORY RULES:
         label: 'blockbuster-candidates',
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Generate 4 wildly different, fresh and compelling blockbuster candidate pitches now. Timestamp entropy: ${Date.now()}` }
+          { role: "user", content: `Generate 4 wildly different, fresh and compelling blockbuster candidate pitches now. Unique session entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }
         ],
         temperature: 1.0,
+        seed: Math.floor(Math.random() * 2147483647),
         max_tokens: 16384
       });
 
