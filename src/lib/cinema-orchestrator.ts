@@ -1,6 +1,6 @@
 import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig } from '@/types/cinema';
 import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek } from './deepseek';
-import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoModel, isKnownVideoResolution } from './fal-video';
+import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel } from './fal-video';
 import type { VideoModelId, VideoResolution } from './fal-video';
 
 declare global {
@@ -259,8 +259,9 @@ class CinemaOrchestrator {
           }
 
           // Restore director-selected generative video model
-          if (isKnownVideoModel((savedMovie.bible as any)?.videoModel)) {
-            this.videoModel = (savedMovie.bible as any).videoModel;
+          const restoredModel = resolveVideoModel((savedMovie.bible as any)?.videoModel);
+          if (restoredModel) {
+            this.videoModel = restoredModel;
           }
 
           // Restore director-selected video resolution
@@ -414,7 +415,8 @@ class CinemaOrchestrator {
         this.isGenerationPaused = liveState.isGenerationPaused ?? false;
         if (liveState.adsConfig) this.adsConfig = liveState.adsConfig;
         if (liveState.activeAd) this.activeAd = liveState.activeAd;
-        if (isKnownVideoModel(liveState.videoModel)) this.videoModel = liveState.videoModel;
+        const syncedModel = resolveVideoModel(liveState.videoModel);
+        if (syncedModel) this.videoModel = syncedModel;
         if (isKnownVideoResolution(liveState.videoResolution)) this.videoResolution = liveState.videoResolution;
         if (liveState.currentStep && this.movie) {
           this.movie.currentStep = liveState.currentStep;
@@ -1435,8 +1437,9 @@ class CinemaOrchestrator {
    * Silently adopt a persisted video model read from the database (no broadcast/persist).
    */
   public adoptVideoModel(model: string | null | undefined): void {
-    if (isKnownVideoModel(model)) {
-      this.videoModel = model;
+    const resolved = resolveVideoModel(model);
+    if (resolved) {
+      this.videoModel = resolved;
     }
   }
 
@@ -1481,16 +1484,17 @@ class CinemaOrchestrator {
    * Persisted in the movie bible so it survives restarts and movie rotations.
    */
   public setVideoModel(model: string): boolean {
-    if (!isKnownVideoModel(model)) return false;
-    if (this.videoModel === model) return true;
+    const resolved = resolveVideoModel(model);
+    if (!resolved) return false;
+    if (this.videoModel === resolved) return true;
 
-    this.videoModel = model;
+    this.videoModel = resolved;
     if (this.movie) {
-      (this.movie.bible as any).videoModel = model;
+      (this.movie.bible as any).videoModel = resolved;
       persistMovie(this.movie);
     }
-    this.addSystemMessage(`🎞️ Director switched generative video model to ${model}.`);
-    broadcastCinemaEvent('video_model_changed', { videoModel: model });
+    this.addSystemMessage(`🎞️ Director switched generative video model to ${resolved}.`);
+    broadcastCinemaEvent('video_model_changed', { videoModel: resolved });
     this.broadcastStateSnapshot();
     return true;
   }

@@ -32,13 +32,13 @@ import { audioCues } from '@/lib/audio-cues';
 
 const VIDEO_MODEL_CHOICES = [
   { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (con referencias)' },
-  { id: 'minimax/h3-max-turbo', label: 'MiniMax H3-Max Turbo — Text-to-Video (16:9 · sin referencias)' }
+  { id: 'minimax/h3-max/text-to-video', label: 'MiniMax H3-Max Turbo — Text-to-Video (16:9 · sin referencias)' },
+  { id: 'minimax/h3-max/image-to-video', label: 'MiniMax H3-Max — Image-to-Video (keyframe Flux · continuidad)' }
 ];
 
 const VIDEO_RESOLUTION_CHOICES = [
   { id: '', label: 'Auto (por defecto del modelo)' },
   { id: '480P', label: '480P' },
-  { id: '720P', label: '720P' },
   { id: '768P', label: '768P' },
   { id: '1080P', label: '1080P' }
 ];
@@ -1292,7 +1292,7 @@ export default function AdminDashboardPage() {
                   </h3>
                 </div>
                 <p className="text-xs text-neutral-400 max-w-xl">
-                  Selecciona el modelo de fal.ai que generará las escenas y los comerciales, y la resolución de salida. H3-Max Turbo solo soporta texto a video: se descartan las referencias (escena previa, imágenes de props y audio).
+                  Selecciona el modelo de fal.ai que generará las escenas y los comerciales, y la resolución de salida. H3-Max Turbo e Image-to-Video no aceptan referencias directas (escena previa, props y audio); Image-to-Video compensa animando un keyframe de continuidad generado con Flux.
                 </p>
               </div>
 
@@ -1312,9 +1312,11 @@ export default function AdminDashboardPage() {
                     ))}
                   </select>
                   <span className="text-[10px] font-mono text-neutral-500">
-                    {videoModel === 'minimax/h3-max-turbo'
-                      ? 'Text-to-Video: continuidad visual solo vía prompt, sin clips/imágenes de referencia.'
-                      : 'Reference-to-Video: mantiene continuidad con el clip previo y las imágenes de props.'}
+                    {videoModel === 'minimax/h3-max/image-to-video'
+                      ? 'Image-to-Video: Flux genera un keyframe de la escena y el video lo anima (mejor consistencia que texto puro).'
+                      : videoModel === 'minimax/h3-max/text-to-video'
+                        ? 'Text-to-Video: continuidad visual solo vía prompt, sin clips/imágenes de referencia.'
+                        : 'Reference-to-Video: mantiene continuidad con el clip previo y las imágenes de props.'}
                   </span>
                 </div>
 
@@ -1335,7 +1337,7 @@ export default function AdminDashboardPage() {
                   <span className="text-[10px] font-mono text-neutral-500">
                     {videoResolution
                       ? `Forzada a ${videoResolution} para el modelo activo.`
-                      : 'Usa la resolución por defecto del modelo (H3-Max: 768P · Turbo: 480P).'}
+                      : 'Usa la resolución por defecto del modelo (Reference/Image: 768P · Turbo: 480P).'}
                   </span>
                 </div>
               </div>

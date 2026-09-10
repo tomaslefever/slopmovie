@@ -36,22 +36,44 @@ export function isFalGenerationPaused(): boolean {
 }
 
 // Registro de modelos generativos de video disponibles en fal.ai
-export type VideoModelId = 'minimax/h3-max/reference-to-video' | 'minimax/h3-max-turbo';
+// minimax/h3-max/text-to-video es el endpoint "Text To Video Turbo" de fal.ai
+// minimax/h3-max/image-to-video es el endpoint "Image to Video Max" de fal.ai
+export type VideoModelId =
+  | 'minimax/h3-max/reference-to-video'
+  | 'minimax/h3-max/text-to-video'
+  | 'minimax/h3-max/image-to-video';
 
 export const DEFAULT_VIDEO_MODEL: VideoModelId = 'minimax/h3-max/reference-to-video';
 
-// Resoluciones soportadas por la familia MiniMax H3-Max en fal.ai
-export const VIDEO_RESOLUTIONS = ['480P', '720P', '768P', '1080P'] as const;
+// Alias de ids antiguos persistidos en bibles de películas existentes
+const LEGACY_VIDEO_MODEL_ALIASES: Record<string, VideoModelId> = {
+  'minimax/h3-max-turbo': 'minimax/h3-max/text-to-video'
+};
+
+// Resoluciones soportadas por la familia MiniMax H3-Max en fal.ai (schema oficial: 480P, 768P, 1080P)
+export const VIDEO_RESOLUTIONS = ['480P', '768P', '1080P'] as const;
 export type VideoResolution = (typeof VIDEO_RESOLUTIONS)[number];
 
 export function isKnownVideoResolution(resolution: string | undefined | null): resolution is VideoResolution {
   return (VIDEO_RESOLUTIONS as readonly string[]).includes(resolution || '');
 }
 
+/**
+ * Resuelve un id de modelo (actual o alias legacy) a un id válido, o null si no es reconocible.
+ */
+export function resolveVideoModel(model: string | undefined | null): VideoModelId | null {
+  if (!model) return null;
+  if (VIDEO_MODEL_OPTIONS.some(m => m.id === model)) return model as VideoModelId;
+  return LEGACY_VIDEO_MODEL_ALIASES[model] || null;
+}
+
+export type VideoModelKind = 'reference-to-video' | 'text-to-video' | 'image-to-video';
+
 export interface VideoModelOption {
   id: VideoModelId;
   label: string;
   description: string;
+  kind: VideoModelKind;
   supportsReferences: boolean;
   resolution: string;
   aspectRatio: string;
@@ -62,16 +84,27 @@ export const VIDEO_MODEL_OPTIONS: VideoModelOption[] = [
     id: 'minimax/h3-max/reference-to-video',
     label: 'MiniMax H3-Max — Reference-to-Video',
     description: 'Video con referencias (video previo, imágenes de props y audio). 768P adaptativo por defecto.',
+    kind: 'reference-to-video',
     supportsReferences: true,
     resolution: '768P',
     aspectRatio: 'adaptive'
   },
   {
-    id: 'minimax/h3-max-turbo',
+    id: 'minimax/h3-max/text-to-video',
     label: 'MiniMax H3-Max Turbo — Text-to-Video',
     description: 'Solo texto a video. Sin referencias. 480P 16:9 por defecto.',
+    kind: 'text-to-video',
     supportsReferences: false,
     resolution: '480P',
+    aspectRatio: '16:9'
+  },
+  {
+    id: 'minimax/h3-max/image-to-video',
+    label: 'MiniMax H3-Max — Image-to-Video',
+    description: 'Anima un keyframe de continuidad generado con Flux. Sin referencias directas. 768P por defecto.',
+    kind: 'image-to-video',
+    supportsReferences: false,
+    resolution: '768P',
     aspectRatio: '16:9'
   }
 ];
@@ -103,6 +136,41 @@ export interface VideoGenerationResult {
   propImagesReferences?: string[];
 }
 
+/**
+ * Genera un keyframe de continuidad con Flux Schnell a partir del prompt de la escena.
+ * Devuelve la URL pública del archivo generado en fal, o null si falla.
+ */
+export async function generateContinuityKeyframeWithFlux(prompt: string): Promise<string | null> {
+  const falKey = process.env.FAL_KEY;
+  if (!falKey) return null;
+
+  try {
+    fal.config({ credentials: falKey });
+
+    const keyframePrompt = `Cinematic film still, first frame of a scene, faithful to the following shot description — characters, costumes, props, environment, lighting and color grade must match exactly: ${prompt}. 35mm anamorphic framing, high detail, photorealistic.`;
+
+    console.log('[fal.ai] Generating continuity keyframe with Flux Schnell...');
+    const response: any = await fal.subscribe('fal-ai/flux/schnell', {
+      input: {
+        prompt: keyframePrompt,
+        image_size: 'landscape_16_9',
+        num_inference_steps: 4,
+        enable_safety_checker: true
+      }
+    });
+
+    const imageUrl = response.data?.images?.[0]?.url;
+    if (imageUrl) {
+      console.log('[fal.ai] Continuity keyframe generated:', imageUrl);
+      return imageUrl;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[fal.ai] Continuity keyframe generation failed, falling back to text-only image-to-video:', err);
+    return null;
+  }
+}
+
 export async function generateVideoWithFal({
   prompt,
   cameraMotion,
@@ -114,9 +182,10 @@ export async function generateVideoWithFal({
   model = DEFAULT_VIDEO_MODEL,
   resolution
 }: VideoGenerationParams): Promise<VideoGenerationResult> {
-  const videoModel: VideoModelId = isKnownVideoModel(model) ? model : DEFAULT_VIDEO_MODEL;
+  const videoModel: VideoModelId = resolveVideoModel(model) || DEFAULT_VIDEO_MODEL;
   const modelOption = VIDEO_MODEL_OPTIONS.find(m => m.id === videoModel)!;
-  const isTurbo = videoModel === 'minimax/h3-max-turbo';
+  const isTurbo = videoModel === 'minimax/h3-max/text-to-video';
+  const isImageToVideo = videoModel === 'minimax/h3-max/image-to-video';
   // Resolución elegida por el Director; si no hay una válida se usa la del modelo
   const effectiveResolution: string = isKnownVideoResolution(resolution) ? resolution : modelOption.resolution;
 
@@ -159,28 +228,43 @@ export async function generateVideoWithFal({
         credentials: falKey
       });
 
-      // H3-Max Turbo: solo text-to-video — se descartan todas las referencias
+      // H3-Max Turbo (text-to-video): solo texto — se descartan todas las referencias
       // H3-Max Reference-to-Video: mantiene el comportamiento actual con referencias
-      const inputPayload = isTurbo
-        ? {
-            prompt: fullPrompt,
-            duration: duration || 15,
-            resolution: effectiveResolution,
-            enable_safety_checker: true,
-            prompt_expansion_mode: "balanced",
-            aspect_ratio: "16:9"
-          }
-        : {
-            prompt: fullPrompt,
-            duration: duration || 15,
-            resolution: effectiveResolution,
-            enable_safety_checker: true,
-            prompt_expansion_mode: "balanced",
-            aspect_ratio: "adaptive",
-            reference_image_urls: propReferenceImages.length > 0 ? propReferenceImages : [],
-            reference_audio_urls: [],
-            reference_video_urls: previousVideoUrl ? [previousVideoUrl] : []
-          };
+      // H3-Max Image-to-Video: anima un keyframe de continuidad generado con Flux (image_url = primer frame)
+      let inputPayload: Record<string, any>;
+
+      if (isImageToVideo) {
+        const keyframeUrl = await generateContinuityKeyframeWithFlux(fullPrompt);
+        inputPayload = {
+          prompt: fullPrompt,
+          duration: duration || 15,
+          resolution: effectiveResolution,
+          enable_safety_checker: true,
+          prompt_expansion_mode: "balanced",
+          ...(keyframeUrl ? { image_url: keyframeUrl } : {})
+        };
+      } else if (isTurbo) {
+        inputPayload = {
+          prompt: fullPrompt,
+          duration: duration || 15,
+          resolution: effectiveResolution,
+          enable_safety_checker: true,
+          prompt_expansion_mode: "balanced",
+          aspect_ratio: "16:9"
+        };
+      } else {
+        inputPayload = {
+          prompt: fullPrompt,
+          duration: duration || 15,
+          resolution: effectiveResolution,
+          enable_safety_checker: true,
+          prompt_expansion_mode: "balanced",
+          aspect_ratio: "adaptive",
+          reference_image_urls: propReferenceImages.length > 0 ? propReferenceImages : [],
+          reference_audio_urls: [],
+          reference_video_urls: previousVideoUrl ? [previousVideoUrl] : []
+        };
+      }
 
       console.log(`[fal.ai/Kie] Generating video for Step ${stepNumber} using ${videoModel} with payload:`, JSON.stringify(inputPayload, null, 2));
       const response: any = await fal.subscribe(videoModel, {
