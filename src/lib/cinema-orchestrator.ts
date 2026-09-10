@@ -649,13 +649,15 @@ class CinemaOrchestrator {
         totalAudience: this.totalAudience
       });
     } else {
-      // Duration expired.
-      // In client-driven mode, the client's end-of-stage event triggers the transition.
-      // The background worker acts only as a safety watchdog if no clients are connected after a grace period.
-      const gracePeriodExpired = Date.now() > (this.phaseEndsAt + 15000);
-      if (gracePeriodExpired && !this.isAdvancing) {
-        console.log(`[CinemaEngine] Watchdog timer: stage ${this.phase} grace period expired. Advancing...`);
-        await this.handlePhaseTransition(workerId);
+      // Authoritative time engine: phase timer expired. Advance immediately.
+      if (!this.isAdvancing) {
+        console.log(`[CinemaWorker] ⏱️ Authoritative timer elapsed for phase '${this.phase}' (Step ${this.movie.currentStep}). Transitioning to next stage...`);
+        this.isAdvancing = true;
+        try {
+          await this.handlePhaseTransition(workerId);
+        } finally {
+          this.isAdvancing = false;
+        }
       }
     }
   }

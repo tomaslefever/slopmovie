@@ -115,338 +115,12 @@ export default function CinemaStreamingPage() {
     fetchInitialState();
   }, []);
 
-  // Stage completion handler: requests to Supabase/API happen ONLY when an actual stage finishes in the client.
-  // This eliminates arbitrary periodic polling and prevents scene cutting/overlap.
-  const isCompletingStageRef = useRef<boolean>(false);
-  // Set by CinemaPlayer's onPlaybackEnded when the scene clip actually reaches
-  // its end. The stage timer must NEVER advance while this is false (the video
-  // is still playing), except for the stalled-media grace fallback.
-  const videoEndedRef = useRef<boolean>(false);
-  const videoStartedRef = useRef<boolean>(false);
-  const currentStepRef = useRef<number>(-1);
+  // ── SERVER-AUTHORITATIVE ARCHITECTURE ─────────────────────────────────────────
+  // The backend CinemaWorker (with leader election) is the SOLE authoritative
+  // time engine. The browser client is a 100% reactive receiver of Supabase
+  // Realtime broadcasts (time_tick, phase_change, new_step, state_snapshot).
+  // The client NEVER sends complete_stage or runs independent state timers.
 
-  // Compute the REAL remaining seconds of the current phase from the server's
-  // phaseEndsAt. Falls back to the fixed duration when the timestamp is missing
-  // or already expired (optimistic local transitions, fresh states, restarts).
-  // A late-joining viewer then syncs to the true counter instead of restarting
-  // the full phase duration.
-  const getSyncedPhaseRemaining = (phaseEndsAt: string | number | undefined, fallbackSeconds: number): number => {
-    if (!phaseEndsAt) return fallbackSeconds;
-    const endsAtMs = typeof phaseEndsAt === 'number' ? phaseEndsAt : new Date(phaseEndsAt).getTime();
-    if (!Number.isFinite(endsAtMs) || endsAtMs <= 0) return fallbackSeconds;
-    const remaining = Math.ceil((endsAtMs - Date.now()) / 1000);
-    return remaining > 0 ? Math.min(fallbackSeconds, remaining) : fallbackSeconds;
-  };
-
-  const handleStageComplete = async (completedPhase: PlaybackPhase) => {
-    if (!cinemaState || isCompletingStageRef.current) return;
-    if (cinemaState.phase !== completedPhase) return;
-
-    isCompletingStageRef.current = true;
-    const currentStepNum = cinemaState.movie?.currentStep;
-
-    console.log(`[CinemaPage] Stage finished on client: ${completedPhase} (Step ${currentStepNum}). Requesting transition from Supabase...`);
-
-    // 1. Optimistic UI transition: advance locally for seamless, hitch-free continuity
-    if (completedPhase === 'PLAYING') {
-      setUserVoted(null);
-      const stepCount = currentStepNum;
-      // First-shot uninterrupted playback: steps 1, 2, 3 advance directly to next scene without voting pause
-      const hasNextFirstShotStep = stepCount < 4 && Boolean(cinemaState?.movie?.steps?.some(s => s.stepNumber === stepCount + 1));
-
-      if (hasNextFirstShotStep) {
-        const nextStepNum = stepCount + 1;
-        const nextStepObj = cinemaState?.movie?.steps?.find(s => s.stepNumber === nextStepNum);
-        setCinemaState((prev) => prev ? {
-          ...prev,
-          movie: { ...prev.movie, currentStep: nextStepNum },
-          activeStep: nextStepObj || prev.activeStep,
-          phase: 'PLAYING',
-          timeRemaining: 15,
-          phaseEndsAt: Date.now() + 15000,
-          votesA: 0,
-          votesB: 0,
-          hasUserVoted: null
-        } : null);
-      } else {
-        const adsConfig = cinemaState?.adsConfig;
-        const isAdDue = Boolean(
-          adsConfig?.autoAdsEnabled &&
-          stepCount > 0 &&
-          stepCount % (adsConfig.adIntervalSteps || 5) === 0 &&
-          stepCount !== adsConfig.lastAdStep &&
-          stepCount < 97
-        );
-
-        if (isAdDue) {
-          setCinemaState((prev) => prev ? {
-            ...prev,
-            phase: 'COMMERCIAL_BREAK',
-            timeRemaining: 15,
-            phaseEndsAt: Date.now() + 15000
-          } : null);
-        } else {
-          setCinemaState((prev) => prev ? {
-            ...prev,
-            phase: 'VOTING',
-            timeRemaining: 10,
-            phaseEndsAt: Date.now() + 10000,
-            votesA: 0,
-            votesB: 0
-          } : null);
-        }
-      }
-    } else if (completedPhase === 'COMMERCIAL_BREAK') {
-      setUserVoted(null);
-      setCinemaState((prev) => prev ? {
-        ...prev,
-        phase: 'VOTING',
-        timeRemaining: 10,
-        phaseEndsAt: Date.now() + 10000,
-        votesA: 0,
-        votesB: 0
-      } : null);
-    } else if (completedPhase === 'VOTING') {
-      setCinemaState((prev) => prev ? {
-        ...prev,
-        phase: 'GENERATING',
-        timeRemaining: 4,
-        phaseEndsAt: Date.now() + 4000
-      } : null);
-    } else if (completedPhase === 'BLOCKBUSTER_VOTING') {
-      setBlockbusterUserVoted(null);
-      setCinemaState((prev) => prev ? {
-        ...prev,
-        phase: 'GENERATING',
-        timeRemaining: 4,
-        phaseEndsAt: Date.now() + 4000,
-        blockbusterCandidates: []
-      } : null);
-    }
-
-    // 2. Report stage completion to Supabase and retrieve updated state
-    try {
-      const res = await fetch('/api/cinema/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'complete_stage',
-          stage: completedPhase,
-          stepNumber: currentStepNum,
-          userId
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.state) {
-          setCinemaState((prev) => {
-            if (!prev) return data.state;
-            const isSameStep = prev.activeStep?.stepNumber === data.state.activeStep?.stepNumber;
-            return {
-              ...prev,
-              ...data.state,
-              movie: data.state.movie ?? prev.movie,
-              activeStep: (isSameStep && prev.activeStep?.videoUrl === data.state.activeStep?.videoUrl)
-                ? prev.activeStep
-                : data.state.activeStep,
-              phase: data.state.phase ?? prev.phase,
-              timeRemaining: (prev.phase === data.state.phase) ? prev.timeRemaining : (data.state.timeRemaining ?? prev.timeRemaining),
-              votesA: data.state.votesA ?? prev.votesA,
-              votesB: data.state.votesB ?? prev.votesB,
-              totalAudience: data.state.totalAudience ?? prev.totalAudience,
-              isPaused: data.state.isPaused ?? prev.isPaused,
-              isGenerationPaused: data.state.isGenerationPaused ?? prev.isGenerationPaused,
-              apiStatus: data.state.apiStatus ?? prev.apiStatus
-            };
-          });
-        }
-      }
-    } catch (err) {
-      console.error(`Error completing stage ${completedPhase}:`, err);
-    } finally {
-      setTimeout(() => {
-        isCompletingStageRef.current = false;
-      }, 800);
-    }
-  };
-
-  // 1. Playback timer for PLAYING stage.
-  // - Starts counting down when the video actually starts playing.
-  // - The transition triggers immediately when the video finishes (onPlaybackEnded).
-  // - If the countdown reaches 0 while the video is still playing, it does NOT reset to 15s.
-  //   It stays at 0s and smoothly completes the stage as soon as the video ends.
-  useEffect(() => {
-    if (!cinemaState || cinemaState.phase !== 'PLAYING' || cinemaState.isPaused) return;
-
-    const stepNum = cinemaState.movie?.currentStep;
-    if (stepNum === undefined) return;
-
-    // Reset video flags when entering a new step
-    if (currentStepRef.current !== stepNum) {
-      currentStepRef.current = stepNum;
-      videoEndedRef.current = false;
-      videoStartedRef.current = false;
-    }
-
-    console.log(`[CinemaPage] Scene active (Step ${stepNum}). Waiting for video playback...`);
-
-    let timer: ReturnType<typeof setInterval> | null = null;
-    let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
-    const durationSec = 15;
-    let remaining = durationSec;
-
-    const startCountdown = () => {
-      if (timer) return;
-      videoStartedRef.current = true;
-      const startTime = Date.now();
-
-      timer = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        remaining = Math.max(0, durationSec - elapsed);
-
-        setCinemaState(prev => {
-          if (!prev || prev.phase !== 'PLAYING') return prev;
-          if (prev.timeRemaining === remaining) return prev;
-          return { ...prev, timeRemaining: remaining };
-        });
-
-        if (remaining <= 0) {
-          if (timer) clearInterval(timer);
-          if (videoEndedRef.current) {
-            console.log(`[CinemaPage] Playback and countdown both finished for Step ${stepNum}. Transitioning to VOTING.`);
-            handleStageComplete('PLAYING');
-          } else {
-            console.log(`[CinemaPage] 15s countdown elapsed for Step ${stepNum} but video is still playing. Waiting for onPlaybackEnded...`);
-            // Safety fallback: if video is frozen or stalled, advance after 3.5s grace
-            fallbackTimeout = setTimeout(() => {
-              console.log(`[CinemaPage] Safety fallback elapsed for Step ${stepNum}. Advancing to VOTING.`);
-              handleStageComplete('PLAYING');
-            }, 3500);
-          }
-        }
-      }, 1000);
-    };
-
-    // If playback already marked as started, begin immediately; otherwise wait max 2.5s before beginning countdown
-    const maxStartDelay = setTimeout(() => {
-      startCountdown();
-    }, 2500);
-
-    return () => {
-      clearTimeout(maxStartDelay);
-      if (timer) clearInterval(timer);
-      if (fallbackTimeout) clearTimeout(fallbackTimeout);
-    };
-  }, [cinemaState?.phase, cinemaState?.movie?.currentStep, cinemaState?.isPaused]);
-
-  // 2. Fixed 10-second timeout for VOTING stage.
-  // Triggers when VOTING starts, counts down 10s locally, and requests transition to GENERATING.
-  useEffect(() => {
-    if (!cinemaState || cinemaState.phase !== 'VOTING' || cinemaState.isPaused) return;
-
-    console.log('[CinemaPage] Voting started. Running voting timeout...');
-
-    const startTime = Date.now();
-    const durationSec = getSyncedPhaseRemaining(cinemaState.phaseEndsAt, 10);
-
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
-
-    const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const remaining = Math.max(0, durationSec - elapsed);
-
-      setCinemaState(prev => {
-        if (!prev || prev.phase !== 'VOTING') return prev;
-        if (prev.timeRemaining === remaining) return prev;
-        return { ...prev, timeRemaining: remaining };
-      });
-
-      if (remaining <= 0) {
-        clearInterval(timer);
-        console.log('[CinemaPage] 10s voting window elapsed. Transitioning to GENERATING...');
-        handleStageComplete('VOTING');
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [cinemaState?.phase, cinemaState?.isPaused]);
-
-  // 3. Fixed 15-second timeout for COMMERCIAL_BREAK stage.
-  // The ad player notifies completion when its video ends (or the countdown for
-  // image-only ads). This timer only drives the HUD countdown and acts as a
-  // last-resort fallback when the ad never completes (stalled/broken media).
-  useEffect(() => {
-    if (!cinemaState || cinemaState.phase !== 'COMMERCIAL_BREAK' || cinemaState.isPaused) return;
-
-    console.log('[CinemaPage] Commercial break started. Running commercial timeout...');
-
-    const startTime = Date.now();
-    const durationSec = getSyncedPhaseRemaining(cinemaState.phaseEndsAt, 15);
-
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
-
-    let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const remaining = Math.max(0, durationSec - elapsed);
-
-      setCinemaState(prev => {
-        if (!prev || prev.phase !== 'COMMERCIAL_BREAK') return prev;
-        if (prev.timeRemaining === remaining) return prev;
-        return { ...prev, timeRemaining: remaining };
-      });
-
-      // Never cut the ad video short: the transition is driven by onAdCompleted
-      // (ad video 'ended'). Fall back only if nothing completes well past the window.
-      if (remaining <= 0 && !fallbackTimeout) {
-        fallbackTimeout = setTimeout(() => {
-          console.log('[CinemaPage] Commercial break window exceeded without ad completion — advancing with grace.');
-          handleStageComplete('COMMERCIAL_BREAK');
-        }, 12000);
-      }
-    }, 1000);
-
-    return () => {
-      clearInterval(timer);
-      if (fallbackTimeout) clearTimeout(fallbackTimeout);
-    };
-  }, [cinemaState?.phase, cinemaState?.isPaused]);
-
-  // 3b. Fixed 60-second timeout for BLOCKBUSTER_VOTING stage.
-  // Audience picks the next film from 4 candidates; when time runs out the winner resolves.
-  useEffect(() => {
-    if (!cinemaState || cinemaState.phase !== 'BLOCKBUSTER_VOTING' || cinemaState.isPaused) return;
-
-    console.log('[CinemaPage] Next-blockbuster vote started. Running voting timeout...');
-
-    const startTime = Date.now();
-    // CRITICAL SYNC: a viewer joining mid-vote must count down the REAL
-    // remaining time (server phaseEndsAt), not a fresh 60s.
-    const durationSec = getSyncedPhaseRemaining(cinemaState.phaseEndsAt, 60);
-
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
-
-    const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const remaining = Math.max(0, durationSec - elapsed);
-
-      setCinemaState(prev => {
-        if (!prev || prev.phase !== 'BLOCKBUSTER_VOTING') return prev;
-        if (prev.timeRemaining === remaining) return prev;
-        return { ...prev, timeRemaining: remaining };
-      });
-
-      if (remaining <= 0) {
-        clearInterval(timer);
-        console.log('[CinemaPage] 60s blockbuster vote elapsed. Resolving winner...');
-        handleStageComplete('BLOCKBUSTER_VOTING');
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [cinemaState?.phase, cinemaState?.isPaused]);
 
   // 3c. Preload the NEXT known scene's video in the background so the cut at
   // scene start doesn't stall buffering on mid-range devices (helps the
@@ -549,16 +223,15 @@ export default function CinemaStreamingPage() {
             } as CinemaState : null;
           }
 
-          // Do not cut video playback if client is currently in PLAYING
-          const isPlaying = prev.phase === 'PLAYING';
+          // Authoritative state update: adopt server state directly
           return {
             ...prev,
             ...snapshot,
             apiStatus: snapshot.apiStatus ?? prev.apiStatus ?? defaultApiStatus,
             movie: snapshot.movie ?? prev.movie,
-            activeStep: (isPlaying && prev.activeStep) ? prev.activeStep : (snapshot.activeStep ?? prev.activeStep),
-            phase: (isPlaying && snapshot.phase !== 'PLAYING') ? prev.phase : (snapshot.phase ?? prev.phase),
-            timeRemaining: isPlaying ? prev.timeRemaining : (snapshot.timeRemaining ?? prev.timeRemaining),
+            activeStep: snapshot.activeStep ?? prev.activeStep,
+            phase: snapshot.phase ?? prev.phase,
+            timeRemaining: snapshot.timeRemaining ?? prev.timeRemaining,
             votesA: snapshot.votesA ?? prev.votesA,
             votesB: snapshot.votesB ?? prev.votesB,
             totalAudience: snapshot.totalAudience ?? prev.totalAudience,
@@ -575,18 +248,19 @@ export default function CinemaStreamingPage() {
       .on('broadcast', { event: 'time_tick' }, (payload: { payload: { timeRemaining?: number; phase?: PlaybackPhase; votesA?: number; votesB?: number; totalAudience?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean } }) => {
         setCinemaState((prev) => {
           if (!prev) return prev;
-          // In client-driven mode, scene video & voting timers run on the client.
-          // time_tick only updates live audience and votes counters without disrupting playback.
-          // Bail out when nothing changed — otherwise the whole page re-renders every second
-          // (noticeable frame drops on mobile).
+          const newTime = payload.payload.timeRemaining !== undefined ? payload.payload.timeRemaining : prev.timeRemaining;
+          const newPhase = payload.payload.phase ?? prev.phase;
           const votesA = payload.payload.votesA ?? prev.votesA;
           const votesB = payload.payload.votesB ?? prev.votesB;
           const totalAudience = payload.payload.totalAudience ?? prev.totalAudience;
-          if (votesA === prev.votesA && votesB === prev.votesB && totalAudience === prev.totalAudience) {
+
+          if (newTime === prev.timeRemaining && newPhase === prev.phase && votesA === prev.votesA && votesB === prev.votesB && totalAudience === prev.totalAudience) {
             return prev;
           }
           return {
             ...prev,
+            phase: newPhase,
+            timeRemaining: newTime,
             votesA,
             votesB,
             totalAudience
@@ -1036,15 +710,6 @@ export default function CinemaStreamingPage() {
                 subtitleLanguage={subtitleLanguage}
                 onToggleSubtitles={handleToggleSubtitles}
                 onChangeSubtitleLanguage={handleChangeSubtitleLanguage}
-                onPlaybackStarted={() => {
-                  videoStartedRef.current = true;
-                }}
-                onAdCompleted={() => handleStageComplete('COMMERCIAL_BREAK')}
-                onPlaybackEnded={() => {
-                  console.log(`[CinemaPage] Video playback finished for Step ${cinemaState.movie?.currentStep}. Advancing to VOTING...`);
-                  videoEndedRef.current = true;
-                  handleStageComplete('PLAYING');
-                }}
                 fullscreenContainerRef={stageContainerRef}
                 inSceneAd={
                   cinemaState.activeAd?.type === 'in_scene_overlay'
