@@ -1,5 +1,5 @@
 import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate } from '@/types/cinema';
-import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek } from './deepseek';
+import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek, generateImmersiveAdPromptWithDeepSeek } from './deepseek';
 import type { CommentInfluence } from './deepseek';
 import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel } from './fal-video';
 import type { VideoModelId, VideoResolution } from './fal-video';
@@ -34,7 +34,8 @@ import {
   updateMovieInDb,
   deleteMovieFromDb,
   persistBlockbusterVote,
-  loadBlockbusterVoteCountsFromDb
+  loadBlockbusterVoteCountsFromDb,
+  countActiveViewersFromDb
 } from './supabase/db';
 import { generateAndStorePropReferenceImage } from './supabase/storage';
 
@@ -123,6 +124,7 @@ class CinemaOrchestrator {
   private timerInterval: NodeJS.Timeout | null = null;
   public userVotes: Map<string, 'A' | 'B'> = new Map();
   private isAdvancing: boolean = false;
+  private audienceRefreshTickCounter: number = 0;
 
   public setPhase(newPhase: PlaybackPhase, durationSeconds: number) {
     this.phase = newPhase;
@@ -342,52 +344,71 @@ class CinemaOrchestrator {
     }
 
     // Ensure Step 1 has activeProps specified so prop references are sent to video generation
-    if (!generated.firstStep.activeProps || generated.firstStep.activeProps.length === 0) {
+    if (generated.firstStep && (!generated.firstStep.activeProps || generated.firstStep.activeProps.length === 0)) {
       if (generated.bible.props.length > 0) {
         generated.firstStep.activeProps = [generated.bible.props[0].id];
       }
     }
-    
-    // Collect reference images of props for Step 1 (strictly necessary only, hosted on Supabase Storage)
-    const initialPropImages = generated.bible.props
-      .filter(p => (generated.firstStep.activeProps || []).includes(p.id))
-      .map(p => p.imageUrl)
-      .filter(Boolean) as string[];
 
-    console.log(`[Cinema] Step 1 active prop reference images (Supabase Storage):`, initialPropImages);
+    const initialStepsRaw = (generated.initialSteps && generated.initialSteps.length === 4)
+      ? generated.initialSteps
+      : [generated.firstStep];
 
-    // Generate initial video for Step 1 with Minimax H3-Max (or simulated clip if generation is paused)
-    let initialVideoUrl: string;
-    let initialThumbnailUrl: string | undefined;
-
+    // Re-adopt the director's persisted model/resolution before spending credits
     if (!this.isGenerationPaused) {
-      const videoResult = await generateVideoWithFal({
-        prompt: generated.firstStep.visualPrompt,
-        cameraMotion: generated.firstStep.cameraMotionPrompt,
-        stepNumber: 1,
-        propReferenceImages: initialPropImages,
-        voiceDirection: generated.firstStep.voiceDirection,
-        model: this.videoModel,
-        resolution: this.videoResolution || undefined
-      });
-      initialVideoUrl = videoResult.videoUrl;
-      initialThumbnailUrl = videoResult.thumbnailUrl;
-    } else {
-      console.log('[Cinema] 🛡️ Generación PAUSADA: Usando video simulado para el paso 1 sin llamar a fal.ai.');
-      const mock = CINEMATIC_MOCK_VIDEOS[0];
-      initialVideoUrl = mock.url;
-      initialThumbnailUrl = mock.poster;
+      await this.refreshGenerationPrefsFromDb();
     }
 
-    const firstStepWithVideo: MovieStep = {
-      ...generated.firstStep,
-      videoUrl: initialVideoUrl,
-      thumbnailUrl: initialThumbnailUrl,
-      propReferenceImages: initialPropImages
-    };
+    // Generate videos for all initial steps (First-Shot: 4 scenes = 1 minute total)
+    console.log(`[Cinema] Synthesizing 4-scene First-Shot sequence (1-minute uninterrupted opening)...`);
+    const initialStepsWithVideo: MovieStep[] = await Promise.all(
+      initialStepsRaw.map(async (step, idx) => {
+        // Collect reference images of props for this step
+        const stepPropImages = generated.bible.props
+          .filter(p => (step.activeProps || []).includes(p.id))
+          .map(p => p.imageUrl)
+          .filter(Boolean) as string[];
+
+        let stepVideoUrl: string;
+        let stepThumbnailUrl: string | undefined;
+
+        if (!this.isGenerationPaused) {
+          try {
+            const videoResult = await generateVideoWithFal({
+              prompt: step.visualPrompt,
+              cameraMotion: step.cameraMotionPrompt,
+              stepNumber: step.stepNumber,
+              propReferenceImages: stepPropImages.length > 0 ? stepPropImages : undefined,
+              voiceDirection: step.voiceDirection,
+              model: this.videoModel,
+              resolution: this.videoResolution || undefined
+            });
+            stepVideoUrl = videoResult.videoUrl;
+            stepThumbnailUrl = videoResult.thumbnailUrl;
+          } catch (err) {
+            console.warn(`[Cinema] Fal.ai video generation failed for step ${step.stepNumber}, using mock fallback:`, err);
+            const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+            stepVideoUrl = mock.url;
+            stepThumbnailUrl = mock.poster;
+          }
+        } else {
+          console.log(`[Cinema] 🛡️ Generación PAUSADA: Usando video simulado para el paso ${step.stepNumber} sin llamar a fal.ai.`);
+          const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+          stepVideoUrl = mock.url;
+          stepThumbnailUrl = mock.poster;
+        }
+
+        return {
+          ...step,
+          videoUrl: stepVideoUrl,
+          thumbnailUrl: stepThumbnailUrl,
+          propReferenceImages: stepPropImages
+        };
+      })
+    );
 
     this.movie = {
-      id: `movie_${Date.now()}`,
+      id: movieId,
       title: generated.title,
       genre: generated.genre,
       tagline: generated.tagline,
@@ -402,7 +423,7 @@ class CinemaOrchestrator {
         videoModel: this.videoModel,
         videoResolution: this.videoResolution
       } as any,
-      steps: [firstStepWithVideo],
+      steps: initialStepsWithVideo,
       createdAt: new Date().toISOString(),
       totalVotesCast: 0
     };
@@ -413,13 +434,15 @@ class CinemaOrchestrator {
     this.votesB = 0;
     this.userVotes.clear();
 
-    // Persist movie and initial step to Supabase
+    // Persist movie and all 4 initial steps to Supabase
     await persistMovie(this.movie);
-    await persistMovieStep(this.movie.id, firstStepWithVideo);
+    for (const step of initialStepsWithVideo) {
+      await persistMovieStep(this.movie.id, step);
+    }
     // Refresh live state so cinema_state.movie_id points at THIS movie (prevents stale-movie resurrection)
     await this.persistCurrentStateToSupabase();
 
-    this.addSystemMessage(`🎬 Starting new interactive film: "${this.movie.title}"`);
+    this.addSystemMessage(`🎬 Starting new interactive film: "${this.movie.title}" (First-shot 1-minute prologue engaged)`);
     return this.movie;
   }
 
@@ -525,10 +548,15 @@ class CinemaOrchestrator {
     this.timeRemaining = remaining;
 
     if (remaining > 0) {
-      // Random audience fluctuation
-      if (Math.random() > 0.7) {
-        this.totalAudience += Math.random() > 0.4 ? 1 : -1;
-        if (this.totalAudience < 30) this.totalAudience = 45;
+      // Real audience count: refresh from the visits table every ~10 ticks
+      // instead of the old random fluctuation.
+      this.audienceRefreshTickCounter = (this.audienceRefreshTickCounter || 0) + 1;
+      if (this.audienceRefreshTickCounter % 10 === 0) {
+        countActiveViewersFromDb(5).then((count) => {
+          if (count !== null && count > 0) {
+            this.totalAudience = count;
+          }
+        }).catch(() => {});
       }
 
       // Fast, lightweight broadcast tick without heavy database/CDC spam
@@ -673,6 +701,32 @@ class CinemaOrchestrator {
 
     if (this.phase === 'PLAYING') {
       // 15 seconds clip has ended.
+      const currentStepNum = this.movie.currentStep;
+
+      // FIRST-SHOT UNINTERRUPTED PLAYBACK:
+      // Steps 1, 2, and 3 transition directly into the next scene without voting breaks,
+      // delivering exactly 1 minute (4 x 15s) of continuous cinematic storytelling.
+      // The first interactive audience voting only opens after Step 4 completes.
+      if (currentStepNum < 4 && this.movie.steps.some(s => s.stepNumber === currentStepNum + 1)) {
+        const nextStepNum = currentStepNum + 1;
+        this.movie.currentStep = nextStepNum;
+        const nextStepObj = this.movie.steps.find(s => s.stepNumber === nextStepNum) || this.movie.steps[nextStepNum - 1];
+        const duration = nextStepObj?.duration || 15;
+
+        this.setPhase('PLAYING', duration);
+        this.addSystemMessage(`🎬 First-shot sequence continuing: Scene ${nextStepNum}/4 ("${nextStepObj?.title || 'Continuing'}")`);
+
+        broadcastCinemaEvent('phase_change', {
+          phase: 'PLAYING',
+          timeRemaining: duration,
+          phaseDuration: duration,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
+        });
+        await this.broadcastStateSnapshot(workerId);
+        return;
+      }
+
       // Check if automatic commercial break should trigger a continuación of this scene!
       const currentStepCount = this.movie.steps.length;
       if (
@@ -939,9 +993,9 @@ class CinemaOrchestrator {
         // instead of the last step's videoUrl, so the ad has zero influence on narrative continuity.
         const storyReferenceUrl = this.preAdVideoUrl ?? currentStep.videoUrl;
 
-        // If this new step will trigger a commercial break when it finishes playing,
-        // pre-generate the ad clip IN PARALLEL so the break starts with the ad already rendered.
-        this.preGenerateUpcomingAd(nextStepRaw.stepNumber, storyReferenceUrl);
+        // Re-adopt the director's persisted model/resolution BEFORE spending credits —
+        // multi-process safety: the admin's choice may have been written by another instance.
+        await this.refreshGenerationPrefsFromDb();
 
         const videoRes = await generateVideoWithFal({
           prompt: nextStepRaw.visualPrompt,
@@ -968,6 +1022,11 @@ class CinemaOrchestrator {
 
         this.movie.steps.push(nextStep);
         this.movie.currentStep = nextStep.stepNumber;
+
+        // If this scene triggers a commercial break when it finishes playing,
+        // generate the ad clip NOW (with THIS scene as the visual reference) so
+        // the break starts with the ad already rendered — only playback, no waiting.
+        this.preGenerateUpcomingAd(nextStep.stepNumber, videoRes.videoUrl);
 
         // Persist update in Supabase
         await persistMovie(this.movie);
@@ -1057,16 +1116,27 @@ class CinemaOrchestrator {
       }
     }
 
-    this.setPhase('BLOCKBUSTER_VOTING', 30);
-    this.addSystemMessage(`🎟️ NEXT BLOCKBUSTER VOTE: The audience has 30 seconds to pick the next film!`);
+    this.isPaused = false;
+    this.setPhase('BLOCKBUSTER_VOTING', 60);
+    this.addSystemMessage(`🎟️ NEXT BLOCKBUSTER VOTE: The audience has 60 seconds to pick the next film!`);
 
     broadcastCinemaEvent('phase_change', {
       phase: 'BLOCKBUSTER_VOTING',
-      timeRemaining: 30,
-      phaseDuration: 30,
+      timeRemaining: 60,
+      phaseDuration: 60,
       phaseStartedAt: this.phaseStartedAt,
       phaseEndsAt: this.phaseEndsAt,
-      blockbusterCandidates: this.blockbusterCandidates
+      blockbusterCandidates: this.blockbusterCandidates,
+      blockbusterVoteCounts: this.blockbusterVoteCounts
+    });
+    // Dedicated event so viewers switch to the selection phase even mid-PLAYING
+    // (state_snapshot intentionally never cuts live playback).
+    broadcastCinemaEvent('blockbuster_vote_started', {
+      candidates: this.blockbusterCandidates,
+      timeRemaining: 60,
+      phaseDuration: 60,
+      phaseStartedAt: this.phaseStartedAt,
+      phaseEndsAt: this.phaseEndsAt
     });
     await this.broadcastStateSnapshot();
     return candidates;
@@ -1270,9 +1340,39 @@ class CinemaOrchestrator {
   }
 
   /**
-   * Build the fal.ai generation prompt for an immersive ad.
+   * Build the fal.ai generation prompt for an immersive ad. DeepSeek writes a
+   * cinematic prompt that weaves the product INTO the story world when available;
+   * otherwise falls back to the ad's own cinematicPrompt / a generic template.
+   * The product never leaks into the NEXT story step's prompt (story generation
+   * only reads the movie bible + audience comments, never the ad).
    */
-  private buildAdGenerationPrompt(ad: ImmersiveAd): string {
+  private async buildAdGenerationPrompt(ad: ImmersiveAd): Promise<string> {
+    if (this.movie) {
+      try {
+        const characters = (this.movie.bible.characters || [])
+          .slice(0, 4)
+          .map(c => `${c.name} (${c.role}, ${c.visualTraits || ''})`)
+          .join('; ');
+        const lastStep = this.movie.steps[this.movie.steps.length - 1];
+        const environment = lastStep?.synopsis || this.movie.initialPlot || '';
+
+        const immersive = await generateImmersiveAdPromptWithDeepSeek({
+          brandName: ad.brandName,
+          title: ad.title,
+          tagline: ad.tagline,
+          description: ad.description,
+          movieTitle: this.movie.title,
+          genre: this.movie.genre,
+          cinematicStyle: (this.movie.bible as any)?.cinematicStyle || '',
+          characters,
+          environment
+        });
+        if (immersive) return immersive;
+      } catch (err) {
+        console.warn('[Cinema] Immersive ad prompt generation failed, using template fallback:', err);
+      }
+    }
+
     const rawPrompt = ad.cinematicPrompt
       || `A character naturally interacts with or observes "${ad.brandName}". ${ad.tagline || ''}. Maintain identical cinematic lighting, colors, lens flare, and environment as the previous shot.`;
 
@@ -1285,7 +1385,7 @@ class CinemaOrchestrator {
    * generation. By the time the story clip finishes playing and the break starts,
    * the ad is already rendered and only needs to be played back.
    */
-  private preGenerateUpcomingAd(stepNumber: number, referenceVideoUrl: string): void {
+  private async preGenerateUpcomingAd(stepNumber: number, referenceVideoUrl: string): Promise<void> {
     if (!this.adsConfig.autoAdsEnabled) return;
     if (this.isGenerationPaused) return;
     if (stepNumber <= 0) return;
@@ -1296,7 +1396,7 @@ class CinemaOrchestrator {
     const ad = this.pickRandomCommercialAd();
     if (!ad) return;
 
-    const adPrompt = this.buildAdGenerationPrompt(ad);
+    const adPrompt = await this.buildAdGenerationPrompt(ad);
 
     console.log(`[Cinema] 🎬 Pre-generating ad clip for "${ad.brandName}" in parallel with story clip (Step ${stepNumber})...`);
 
@@ -1338,7 +1438,18 @@ class CinemaOrchestrator {
    *     the commercial has zero influence on future narrative direction.
    */
   public async triggerCommercialBreak(customAd?: ImmersiveAd, nextPhase: PlaybackPhase = 'VOTING'): Promise<boolean> {
-    const adToPlay = customAd || this.pickRandomCommercialAd() || DEFAULT_IMMERSIVE_ADS[0];
+    const currentStepCount = this.movie?.steps.length ?? 0;
+
+    // If an ad clip was pre-generated TOGETHER with the story clip that just
+    // finished, prefer that exact ad — never re-roll the random pick, or the
+    // pre-rendered clip would be discarded and we'd burn credits again.
+    const pendingForThisStep = !customAd &&
+      this.pendingPreGeneratedAd &&
+      this.pendingPreGeneratedAd.stepNumber === currentStepCount
+      ? this.pendingPreGeneratedAd.ad
+      : undefined;
+
+    const adToPlay = customAd || pendingForThisStep || this.pickRandomCommercialAd() || DEFAULT_IMMERSIVE_ADS[0];
 
     if (!adToPlay) return false;
 
@@ -1348,7 +1459,6 @@ class CinemaOrchestrator {
 
     // ── Step 1b: Resolve the pre-generated ad clip (generated together with the story clip) ──
     let preGenerated: { ad: ImmersiveAd; stepNumber: number; videoUrl: string; thumbnailUrl: string; isRealAiGenerated: boolean } | null = null;
-    const currentStepCount = this.movie?.steps.length ?? 0;
     if (!customAd && !this.isGenerationPaused) {
       if (
         this.pendingPreGeneratedAd &&
@@ -1440,7 +1550,10 @@ class CinemaOrchestrator {
         await this.broadcastStateSnapshot();
       }
     } else if (this.preAdVideoUrl || adToPlay.cinematicPrompt) {
-      const adPrompt = this.buildAdGenerationPrompt(adToPlay);
+      // Re-adopt the director's persisted model/resolution before spending credits
+      await this.refreshGenerationPrefsFromDb();
+
+      const adPrompt = await this.buildAdGenerationPrompt(adToPlay);
 
       generateVideoWithFal({
         prompt: adPrompt,
@@ -1790,6 +1903,24 @@ class CinemaOrchestrator {
   }
 
   /**
+   * Re-read the director's persisted generation preferences (video model + resolution)
+   * from the database right before spending credits. In multi-process deployments the
+   * admin's choice is written by one process but generation may run in another — this
+   * guarantees the cheap model stays the cheap model.
+   */
+  private async refreshGenerationPrefsFromDb(): Promise<void> {
+    try {
+      const ls = await loadLiveCinemaStateFromDb(this.movie?.id || undefined);
+      if (ls) {
+        this.adoptVideoModel(ls.videoModel);
+        this.adoptVideoResolution(ls.videoResolution);
+      }
+    } catch (err) {
+      console.warn('[Cinema] refreshGenerationPrefsFromDb failed:', err);
+    }
+  }
+
+  /**
    * Silently adopt a persisted video resolution read from the database (no broadcast/persist).
    */
   public adoptVideoResolution(resolution: string | null | undefined): void {
@@ -2096,6 +2227,34 @@ class CinemaOrchestrator {
         phaseDuration: this.phaseDuration,
         workerId: workerId
       });
+
+      // Mirror the liveState into the in-memory bible so the next persistMovie()
+      // writes the FRESH state instead of stomping it with a stale frozen snapshot.
+      if (this.movie) {
+        (this.movie.bible as any).liveState = {
+          phase: this.phase,
+          timeRemaining: this.timeRemaining,
+          currentStep: this.movie.currentStep,
+          totalAudience: this.totalAudience,
+          votesA: this.votesA,
+          votesB: this.votesB,
+          isLive: !this.isPaused,
+          isPaused: this.isPaused,
+          isGenerationPaused: this.isGenerationPaused,
+          videoModel: this.videoModel,
+          videoResolution: this.videoResolution,
+          blockbusterCandidates: this.blockbusterCandidates,
+          blockbusterVoteCounts: this.blockbusterVoteCounts,
+          activeAd: this.activeAd || null,
+          adsConfig: this.adsConfig,
+          selectedOption: currentStepObj?.selectedOption || null,
+          wasRandomPick: currentStepObj?.wasRandomPick || false,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt,
+          phaseDuration: this.phaseDuration,
+          updatedAt: new Date().toISOString()
+        };
+      }
     } catch {
       // Non-blocking
     }

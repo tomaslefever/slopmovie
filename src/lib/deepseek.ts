@@ -8,6 +8,7 @@ export interface GeneratedStoryBible {
   masterArcThread: string;
   bible: MovieBible;
   firstStep: MovieStep;
+  initialSteps: MovieStep[]; // 4 initial scenes forming 1 minute of uninterrupted first-shot
 }
 
 export const BLOCKBUSTER_GENRES = [
@@ -340,55 +341,96 @@ Respond ONLY with a valid JSON object matching this schema:
       "architecturalStyle": "Architectural or natural aesthetic"
     }
   ],
-  "firstStep": {
-    "stepNumber": 1,
-    "title": "Title of First 15s Scene in English",
-    "synopsis": "Action unfolding in these first 15 seconds in English",
-    "dialogueSnippet": "Spoken dialogue line or voiceover in English",
-    "subtitles": [
-      {
-        "start": 1.0,
-        "end": 7.0,
-        "speaker": "Character Name",
-        "text": "First spoken line in English...",
-        "textEs": "Spanish subtitle translation..."
-      },
-      {
-        "start": 8.0,
-        "end": 14.0,
-        "speaker": "Character Name",
-        "text": "Second line in English before voting begins...",
-        "textEs": "Segunda línea en español..."
-      }
-    ],
-    "voiceDirection": "Acoustic direction in English based on the speaking character's voicePrompt",
-    "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (480p 16:9) with character and prop tokens",
-    "cameraMotionPrompt": "Cinematic camera movement in English (e.g. Slow tracking dolly-in, 35mm anamorphic, shallow depth of field)",
-    "activeCharacters": ["char_1"],
-    "activeProps": ["prop_1"],
-    "environment": "env_1",
-    "options": [
-      {
-        "id": "A",
-        "title": "Option A Title in English",
-        "text": "Immediate action taken by the protagonist in English",
-        "dramaticHook": "Suspense hook in English",
-        "expectedConsequence": "Estimated consequence if Option A wins"
-      },
-      {
-        "id": "B",
-        "title": "Option B Title in English",
-        "text": "Radically diverging alternative action in English",
-        "dramaticHook": "Suspense hook in English",
-        "expectedConsequence": "Estimated consequence if Option B wins"
-      }
-    ]
-  }
+  "initialSteps": [
+    {
+      "stepNumber": 1,
+      "title": "Title of Scene 1 (0-15s): The Inciting Incident",
+      "synopsis": "High-impact visual opening introducing protagonist, world hook, and initial action in English",
+      "dialogueSnippet": "Spoken dialogue or voiceover in English",
+      "subtitles": [
+        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
+        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
+      ],
+      "voiceDirection": "Acoustic direction in English based on character voicePrompt",
+      "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (16:9) with character and prop tokens",
+      "cameraMotionPrompt": "Cinematic camera movement in English (e.g. Slow tracking dolly-in, 35mm anamorphic)",
+      "activeCharacters": ["char_1"],
+      "activeProps": ["prop_1"],
+      "environment": "env_1",
+      "options": []
+    },
+    {
+      "stepNumber": 2,
+      "title": "Title of Scene 2 (15-30s): Rising Tension",
+      "synopsis": "Continuous action unfolding in seconds 15-30 as complications or hostile forces approach",
+      "dialogueSnippet": "Urgent dialogue or radio communication in English",
+      "subtitles": [
+        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
+        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
+      ],
+      "voiceDirection": "Acoustic direction in English based on character voicePrompt",
+      "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (16:9) continuing scene 1",
+      "cameraMotionPrompt": "Dynamic camera tracking or handheld kinetic pan in English",
+      "activeCharacters": ["char_1"],
+      "activeProps": [],
+      "environment": "env_1",
+      "options": []
+    },
+    {
+      "stepNumber": 3,
+      "title": "Title of Scene 3 (30-45s): Point of Escalation",
+      "synopsis": "Continuous action in seconds 30-45 where the perimeter breaches or the mystery intensifies",
+      "dialogueSnippet": "Tense spoken dialogue in English",
+      "subtitles": [
+        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
+        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
+      ],
+      "voiceDirection": "Acoustic direction in English based on character voicePrompt",
+      "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (16:9) showing rising stakes",
+      "cameraMotionPrompt": "Rapid orbit or whip pan settling into a tense close-up in English",
+      "activeCharacters": ["char_1"],
+      "activeProps": ["prop_1"],
+      "environment": "env_1",
+      "options": []
+    },
+    {
+      "stepNumber": 4,
+      "title": "Title of Scene 4 (45-60s): Climax of First-Shot & Interactive Dilemma",
+      "synopsis": "Climactic action in seconds 45-60 culminating in the first critical decision dilemma for the audience",
+      "dialogueSnippet": "Climactic dialogue before voting in English",
+      "subtitles": [
+        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
+        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English choice hook...", "textEs": "Spanish translation..." }
+      ],
+      "voiceDirection": "Acoustic direction in English based on character voicePrompt",
+      "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (16:9) with peak tension",
+      "cameraMotionPrompt": "Dramatic slow-motion zoom-out or tense Dutch angle in English",
+      "activeCharacters": ["char_1"],
+      "activeProps": ["prop_1"],
+      "environment": "env_1",
+      "options": [
+        {
+          "id": "A",
+          "title": "Option A Title in English",
+          "text": "First bold choice the audience can make",
+          "dramaticHook": "Dramatic hook for Option A",
+          "expectedConsequence": "Narrative consequence if Option A wins"
+        },
+        {
+          "id": "B",
+          "title": "Option B Title in English",
+          "text": "Radically different alternative choice",
+          "dramaticHook": "Dramatic hook for Option B",
+          "expectedConsequence": "Narrative consequence if Option B wins"
+        }
+      ]
+    }
+  ]
 }`;
 
       const userMessage = customPrompt 
-        ? `Create the interactive cinema master bible based on this premise: "${customPrompt}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options in ENGLISH.`
-        : `Create a high-tension interactive sci-fi cyberpunk noir thriller. Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options in ENGLISH.`;
+        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${customPrompt}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH.`
+        : `Create a high-tension interactive sci-fi cyberpunk noir thriller master bible and the 4 opening scenes (1-minute continuous first-shot). Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH.`;
 
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
@@ -403,7 +445,7 @@ Respond ONLY with a valid JSON object matching this schema:
             { role: "user", content: userMessage }
           ],
           response_format: { type: "json_object" },
-          temperature: 0.8
+          temperature: 0.85
         })
       });
 
@@ -412,15 +454,77 @@ Respond ONLY with a valid JSON object matching this schema:
         const content = data.choices[0]?.message?.content;
         const parsed = JSON.parse(content);
         
-        const firstStepSubtitles = parsed.firstStep.subtitles || [
-          {
-            start: 1.0,
-            end: 14.0,
-            speaker: parsed.characters[0]?.name || "Protagonist",
-            text: parsed.firstStep.dialogueSnippet || "Protocol engaged. The choice belongs to you.",
-            textEs: "Protocolo iniciado. La elección les pertenece."
-          }
-        ];
+        const rawSteps = Array.isArray(parsed.initialSteps) && parsed.initialSteps.length > 0
+          ? parsed.initialSteps
+          : [parsed.firstStep || {}];
+
+        const initialSteps: MovieStep[] = rawSteps.slice(0, 4).map((stepData: any, idx: number) => {
+          const stepNum = idx + 1;
+          const isFinalFirstShot = stepNum === 4;
+
+          const defaultSubtitles = [
+            {
+              start: 1.0,
+              end: 14.0,
+              speaker: parsed.characters[0]?.name || "Protagonist",
+              text: stepData.dialogueSnippet || `Scene ${stepNum} sequence engaged.`,
+              textEs: `Secuencia de escena ${stepNum} iniciada.`
+            }
+          ];
+
+          const options: [DecisionOption, DecisionOption] = isFinalFirstShot && Array.isArray(stepData.options) && stepData.options.length >= 2
+            ? [
+                { ...stepData.options[0], id: 'A', votes: 0 },
+                { ...stepData.options[1], id: 'B', votes: 0 }
+              ]
+            : [
+                { id: 'A', title: 'Advance the Offensive', text: 'Push forward into the breach.', dramaticHook: 'High risk frontal assault.', expectedConsequence: 'Immediate combat escalation.', votes: 0 },
+                { id: 'B', title: 'Regroup and Adapt', text: 'Fall back into the defensive perimeter.', dramaticHook: 'Strategic redeployment.', expectedConsequence: 'Preserves resources at cost of tempo.', votes: 0 }
+              ];
+
+          return {
+            stepNumber: stepNum,
+            title: stepData.title || `Scene ${stepNum}: Act I`,
+            synopsis: stepData.synopsis || parsed.initialPlot?.slice(0, 180) || "The adventure unfolds.",
+            dialogueSnippet: stepData.dialogueSnippet || undefined,
+            subtitles: stepData.subtitles || defaultSubtitles,
+            voiceDirection: stepData.voiceDirection || parsed.characters[0]?.voicePrompt,
+            visualPrompt: stepData.visualPrompt || `Cinematic masterpiece shot of ${parsed.characters[0]?.name || 'Protagonist'} in ${parsed.environments?.[0]?.name || 'Opening environment'}, ${parsed.cinematicStyle || '35mm anamorphic'}`,
+            cameraMotionPrompt: stepData.cameraMotionPrompt || "Cinematic camera dolly tracking in with shallow depth of field, 24fps",
+            videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+            duration: 15,
+            votingWindowSeconds: isFinalFirstShot ? 10 : 0,
+            activeCharacters: stepData.activeCharacters || [parsed.characters[0]?.id || "char_1"],
+            activeProps: stepData.activeProps || (parsed.props?.[0] ? [parsed.props[0].id] : []),
+            environment: stepData.environment || parsed.environments?.[0]?.id || "env_1",
+            createdAt: new Date().toISOString(),
+            options
+          };
+        });
+
+        // Ensure we always have exactly 4 steps for the 1-minute first-shot
+        while (initialSteps.length < 4) {
+          const stepNum = initialSteps.length + 1;
+          const isFinal = stepNum === 4;
+          initialSteps.push({
+            stepNumber: stepNum,
+            title: `Prologue Escalation ${stepNum}`,
+            synopsis: `Continuous action in second ${(stepNum - 1) * 15}-${stepNum * 15} of the opening sequence.`,
+            duration: 15,
+            votingWindowSeconds: isFinal ? 10 : 0,
+            videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+            activeCharacters: [parsed.characters[0]?.id || "char_1"],
+            activeProps: parsed.props?.[0] ? [parsed.props[0].id] : [],
+            environment: parsed.environments?.[0]?.id || "env_1",
+            createdAt: new Date().toISOString(),
+            visualPrompt: `Continuous cinematic shot of ${parsed.characters[0]?.name || 'Protagonist'}, ${parsed.cinematicStyle || '35mm anamorphic'}`,
+            cameraMotionPrompt: "Dynamic cinematic tracking camera",
+            options: [
+              { id: 'A', title: 'Option A', text: 'Seize the initiative.', dramaticHook: 'Aggressive choice.', expectedConsequence: 'High stakes outcome.', votes: 0 },
+              { id: 'B', title: 'Option B', text: 'Outmaneuver the enemy.', dramaticHook: 'Stealth choice.', expectedConsequence: 'Tactical advantage.', votes: 0 }
+            ]
+          });
+        }
 
         return {
           title: parsed.title,
@@ -439,15 +543,8 @@ Respond ONLY with a valid JSON object matching this schema:
             cinematicStyle: parsed.cinematicStyle,
             targetTheme: parsed.targetTheme
           },
-          firstStep: {
-            ...parsed.firstStep,
-            subtitles: firstStepSubtitles,
-            duration: 15,
-            votingWindowSeconds: 10,
-            options: parsed.firstStep.options.map((opt: DecisionOption) => ({ ...opt, votes: 0 })),
-            videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
-            createdAt: new Date().toISOString()
-          }
+          firstStep: initialSteps[0],
+          initialSteps
         };
       }
     } catch (error) {
@@ -461,57 +558,69 @@ Respond ONLY with a valid JSON object matching this schema:
   const firstChar = preset.characters[0];
   const firstProp = preset.props[0];
 
-  const firstStep: MovieStep = {
-    stepNumber: 1,
-    title: (preset as any).firstStepTitle || "The Opening Gambit",
-    synopsis: (preset as any).firstStepSynopsis || preset.initialPlot.slice(0, 180),
-    dialogueSnippet: (preset as any).firstStepDialogue || `${firstChar.name}: 'The destiny of this world begins right now.'`,
-    subtitles: (preset as any).firstStepSubtitles || [
-      {
-        start: 1.0,
-        end: 7.0,
-        speaker: firstChar.name,
-        text: "The choice has been forged in silence. Now we decide.",
-        textEs: "La elección se ha forjado en silencio. Ahora decidimos."
-      },
-      {
-        start: 7.5,
-        end: 14.0,
-        speaker: firstChar.name,
-        text: "Ten seconds before the path is sealed forever.",
-        textEs: "Diez segundos antes de que el camino quede sellado para siempre."
-      }
-    ],
-    voiceDirection: firstChar.voicePrompt,
-    visualPrompt: `Cinematic masterpiece shot of ${firstChar.name} (${firstChar.visualTraits}) holding ${firstProp.name} in ${preset.environments[0].name}, ${preset.environments[0].lighting}, ${preset.cinematicStyle}, photorealistic 8k, IMAX anamorphic framing`,
-    cameraMotionPrompt: "Slow tracking camera dollying in with dramatic cinematic depth of field and anamorphic lens flares, 24fps",
-    videoUrl: (preset as any).videoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
-    duration: 15,
-    votingWindowSeconds: 10,
-    activeCharacters: [firstChar.id],
-    activeProps: [firstProp.id],
-    propReferenceImages: firstProp.imageUrl ? [firstProp.imageUrl] : [],
-    environment: preset.environments[0].id,
-    createdAt: new Date().toISOString(),
-    options: (preset as any).options || [
-      {
-        id: "A",
-        title: "Claim the Initiative",
-        text: `${firstChar.name} executes an aggressive offensive strike to seize the upper hand.`,
-        dramaticHook: "High-risk direct confrontation.",
-        expectedConsequence: "Maximum dramatic tension with immediate fallout.",
-        votes: 0
-      },
-      {
-        id: "B",
-        title: "Tactical Withdrawal",
-        text: `${firstChar.name} conceals their presence to outmaneuver the enemy in the shadows.`,
-        dramaticHook: "Unlocks clandestine intelligence pathways.",
-        expectedConsequence: "Strategic advantage at the expense of territory.",
-        votes: 0
-      }
-    ]
-  };
+  const firstShotTitles = [
+    (preset as any).firstStepTitle || "The Opening Gambit",
+    "Rising Shadows & The Secondary Breach",
+    "Threshold of the Crucible",
+    "Point of No Return: The First Choice"
+  ];
+
+  const initialSteps: MovieStep[] = [1, 2, 3, 4].map((stepNum) => {
+    const isFinal = stepNum === 4;
+    return {
+      stepNumber: stepNum,
+      title: firstShotTitles[stepNum - 1],
+      synopsis: `Minute 1 First-Shot (part ${stepNum}/4): ${preset.initialPlot.slice((stepNum - 1) * 60, stepNum * 60) || preset.initialPlot.slice(0, 150)}`,
+      dialogueSnippet: stepNum === 1
+        ? (preset as any).firstStepDialogue || `${firstChar.name}: 'The destiny of this world begins right now.'`
+        : `${firstChar.name}: 'Scene ${stepNum}... keep moving forward.'`,
+      subtitles: [
+        {
+          start: 1.0,
+          end: 7.0,
+          speaker: firstChar.name,
+          text: `First-Shot Sequence ${stepNum}/4: The mission is underway.`,
+          textEs: `Secuencia First-Shot ${stepNum}/4: La misión está en marcha.`
+        },
+        {
+          start: 8.0,
+          end: 14.0,
+          speaker: firstChar.name,
+          text: isFinal ? "The first critical decision is upon us." : "Stay focused on the target coordinates.",
+          textEs: isFinal ? "La primera decisión crítica está ante nosotros." : "Mantengan el foco en las coordenadas objetivo."
+        }
+      ],
+      voiceDirection: firstChar.voicePrompt,
+      visualPrompt: `Cinematic masterpiece shot of ${firstChar.name} (${firstChar.visualTraits}) with ${firstProp.name} in ${preset.environments[0].name}, ${preset.environments[0].lighting}, ${preset.cinematicStyle}, photorealistic 8k, scene ${stepNum} of 4`,
+      cameraMotionPrompt: "Slow tracking camera dollying in with dramatic cinematic depth of field and anamorphic lens flares, 24fps",
+      videoUrl: (preset as any).videoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+      duration: 15,
+      votingWindowSeconds: isFinal ? 10 : 0,
+      activeCharacters: [firstChar.id],
+      activeProps: [firstProp.id],
+      propReferenceImages: firstProp.imageUrl ? [firstProp.imageUrl] : [],
+      environment: preset.environments[0].id,
+      createdAt: new Date().toISOString(),
+      options: [
+        {
+          id: "A",
+          title: "Claim the Initiative",
+          text: `${firstChar.name} executes an aggressive offensive strike to seize the upper hand.`,
+          dramaticHook: "High-risk direct confrontation.",
+          expectedConsequence: "Maximum dramatic tension with immediate fallout.",
+          votes: 0
+        },
+        {
+          id: "B",
+          title: "Tactical Withdrawal",
+          text: `${firstChar.name} conceals their presence to outmaneuver the enemy in the shadows.`,
+          dramaticHook: "Unlocks clandestine intelligence pathways.",
+          expectedConsequence: "Strategic advantage at the expense of territory.",
+          votes: 0
+        }
+      ]
+    };
+  });
 
   return {
     title: preset.title,
@@ -526,7 +635,8 @@ Respond ONLY with a valid JSON object matching this schema:
       cinematicStyle: preset.cinematicStyle,
       targetTheme: preset.targetTheme
     },
-    firstStep
+    firstStep: initialSteps[0],
+    initialSteps
   };
 }
 
@@ -1119,29 +1229,188 @@ In the final confrontation, the audience made the ultimate high-risk gamble: det
 }
 
 /**
- * Generate 4 varied blockbuster movie candidates for the 30-second audience
+ * Creative combinatorial pools for extreme narrative variety in blockbuster voting.
+ */
+const CREATIVE_GENRES = [
+  "Biopunk / Alchemical Genetic Heist",
+  "Abyssal Oceanic Sci-Fi / Leviathan Deep-Sea Thriller",
+  "Silkpunk Wuxia / Cloud-Spire Political Conspiracy",
+  "Cosmic Surrealist Western / Event Horizon Frontier",
+  "Chrono-Noir / Temporal Loop Detective Mystery",
+  "Folk Horror / Medieval Cyber-Witchcraft",
+  "Post-Singularity Android Gothic / Vatican Espionage",
+  "Dieselpunk Subterranean Megastructure Warfare",
+  "Solarpunk Nomadic Wasteland / Colossal Sand-Titan Pilgrimage",
+  "Neon Shinto Mythopunk / Digital Spirit Hacker War",
+  "Dark Victorian Dream-Merchant / Gaslight Alchemy",
+  "Radioactive Glacial Odyssey / Prehistoric Bio-Ruins",
+  "Psychic Cold War Espionage / Brutalist Mind-Infiltration",
+  "Quantum Ocean Space Opera / Sentient Nebula Odyssey",
+  "Clockwork Steampunk Paleontology / Fossil Mech Survival",
+  "Solar Flare Survival / Orbital Prison Uprising",
+  "Eldritch Cyber-Archaeology / Sunken Megacity Expedition",
+  "Astro-Biological Safari / Alien Biosphere Colonization"
+];
+
+const CREATIVE_PROTAGONISTS = [
+  "a blind acoustic hacker mapping underground data rivers",
+  "a guilt-ridden bio-sculptor who gave humanity synthetic wings",
+  "an excommunicated chronomancer tracking erased timelines",
+  "a deep-void salvage diver who hears voices trapped in cosmic ice",
+  "an android nun guarding the last biological human infant",
+  "a sand-ship captain hunting a sentient storm that devours cities",
+  "a quantum coroner investigating a murder committed simultaneously across three parallel timelines",
+  "a disgraced cyber-exorcist purging predatory neural intelligences from the city grid",
+  "an alchemical cartographer navigating non-Euclidean subterranean labyrinths",
+  "a mute memory smuggler whose own childhood was confiscated by the state",
+  "a rogue terraforming architect who accidentally awakened a planetary consciousness",
+  "a retired mech gladiatrix protecting a sanctuary of pacifist machine monks"
+];
+
+const CREATIVE_CATALYSTS = [
+  "a dying star singing a mathematical hymn that triggers precognitive mass visions",
+  "a biological black box discovered inside a prehistoric glacier predating human evolution",
+  "an orbital mirror array redirected to burn a continent to glass in 24 hours",
+  "a clockwork citadel that resets the city's memory and architecture every midnight",
+  "a forbidden neural frequency that lets humans experience the collective thoughts of artificial minds",
+  "an impossible floating gate found drifting silently in interstellar space",
+  "a subterranean ocean of mercury where ancient colossal leviathans dream realities into existence",
+  "a black-market synthetic serum that turns human dreams into tangible holographic artifacts",
+  "a rogue asteroid carrying the digital civilization of an extinct alien star-cluster",
+  "a sentient planetary storm demanding human memories as fuel for its lightning"
+];
+
+const CREATIVE_AESTHETICS = [
+  "Anamorphic 35mm Panavision, amber tungsten flares, rain-slicked obsidian pavements, deep cyan shadows",
+  "70mm IMAX Ultra, volumetric ice-fog, muted lichen greens, candid candlelight, glowing runic embers",
+  "High-contrast monochrome with vivid splashes of bioluminescent teal and cyber magenta",
+  "Sun-bleached brutalist desert architecture, blinding golden sunbursts, oxidized turquoise copper",
+  "Heavy gaslight sepia, copper steam plumes, polished brass gears, dark velvet shadows",
+  "Deep void blacks, pulsing stellar nebulae, prismatic chromatic aberration, cockpit HUD glare"
+];
+
+function sampleRandom<T>(array: T[]): T {
+  return array[Math.floor(Math.random() * array.length)];
+}
+
+function sampleUniqueRandom<T>(array: T[], count: number): T[] {
+  const shuffled = [...array].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+/**
+ * Generate an IMMERSIVE cinematic ad prompt that weaves the sponsor's product or
+ * service organically INTO the current film's story world — same characters,
+ * environment, camera language and color grade. The product becomes a natural
+ * story element, never a cut-away commercial. The returned prompt is ONLY for
+ * the ad clip; the product must never leak into future story prompts.
+ */
+export async function generateImmersiveAdPromptWithDeepSeek(params: {
+  brandName: string;
+  title: string;
+  tagline?: string;
+  description?: string;
+  movieTitle: string;
+  genre: string;
+  cinematicStyle?: string;
+  characters: string;
+  environment: string;
+}): Promise<string | null> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const systemPrompt = `You are an elite in-story product-placement director for interactive cinema.
+Write ONE ultra-detailed cinematic visual prompt in ENGLISH for a 15-second fal.ai MiniMax video clip.
+RULES:
+1. The sponsor product/service must be woven INTO the film's story world as a natural element: a character uses it, finds it, wears it, or it appears as set dressing — never a separate commercial, never a logo overlay, never a jump cut out of the film.
+2. Maintain the EXACT same cinematography, lighting, lens, film grain and color grade as the film.
+3. Include the film's characters and current environment so the clip feels like the next shot of the movie.
+4. The output must be a single continuous visual prompt (no script format), 150-300 words, ending with a camera movement description.
+
+Respond ONLY with a valid JSON object:
+{
+  "adPrompt": "The immersive cinematic ad prompt in English..."
+}`;
+
+    const userContent = `FILM: "${params.movieTitle}" (${params.genre})
+CINEMATIC STYLE: ${params.cinematicStyle || '35mm anamorphic, cinematic grade'}
+CHARACTERS: ${params.characters || 'None specified — invent fitting background extras'}
+CURRENT ENVIRONMENT/SCENE: ${params.environment}
+SPONSOR: "${params.brandName}" — "${params.title}"${params.tagline ? ` (tagline: "${params.tagline}")` : ''}
+PRODUCT DESCRIPTION: ${params.description || 'No description — infer a plausible in-world form from the brand name.'}`;
+
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.8
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const parsed = JSON.parse(data.choices[0]?.message?.content);
+      const adPrompt = parsed.adPrompt;
+      if (typeof adPrompt === 'string' && adPrompt.trim().length > 40) {
+        return adPrompt.trim();
+      }
+    }
+  } catch (err) {
+    console.warn('DeepSeek immersive ad prompt generation failed, using template fallback:', err);
+  }
+
+  return null;
+}
+
+/**
+ * Generate 4 radically varied blockbuster movie candidates for the audience
  * "next blockbuster" voting stage. Each candidate carries a display title,
  * logline and genre, plus a full premise string used to build the story bible
  * when the candidate wins.
+ *
+ * Uses dynamic combinatorial seeds (genre, protagonist, catalyst, aesthetic)
+ * and elevated temperature to guarantee unique results on every execution.
  */
 export async function generateBlockbusterCandidatesWithDeepSeek(): Promise<BlockbusterCandidate[]> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
 
   if (apiKey) {
     try {
-      const systemPrompt = `You are the Head of Development at a blockbuster interactive cinema studio.
-Generate EXACTLY 4 completely DIFFERENT high-concept interactive film pitches for a live 100-step audience-driven movie.
-Each pitch must be from a distinctly different genre and tone. Be wildly varied and creative.
-Audience members will vote for their favorite after reading ONLY the title, logline and genre, so make each one instantly compelling.
+      const selectedGenres = sampleUniqueRandom(CREATIVE_GENRES, 4);
+      const selectedProtagonists = sampleUniqueRandom(CREATIVE_PROTAGONISTS, 4);
+      const selectedCatalysts = sampleUniqueRandom(CREATIVE_CATALYSTS, 4);
+      const selectedAesthetics = sampleUniqueRandom(CREATIVE_AESTHETICS, 4);
 
-Respond ONLY with a valid JSON object:
+      const systemPrompt = `You are an avant-garde Head of Development at an interactive blockbuster cinema studio.
+Your mission is to formulate EXACTLY 4 completely DIFFERENT, wild, high-concept interactive film pitches for a live 100-step audience-driven interactive movie.
+
+MANDATORY RULES:
+1. RADICAL DIVERSITY: Each of the 4 candidates MUST be from a completely different genre, tone, visual style, and emotional palette. Avoid Hollywood clichés, generic medieval tropes, or basic cyber hackers.
+2. AUDIENCE HOOK: Audience members vote after reading ONLY the title, logline, and genre. The logline must be gripping, cinematic, and sell the core concept instantly.
+3. CREATIVE SEEDS TO INSPIRE THE 4 SLOTS:
+- Candidate A inspiration: ${selectedGenres[0]} featuring ${selectedProtagonists[0]} facing ${selectedCatalysts[0]} with aesthetic of ${selectedAesthetics[0]}.
+- Candidate B inspiration: ${selectedGenres[1]} featuring ${selectedProtagonists[1]} facing ${selectedCatalysts[1]} with aesthetic of ${selectedAesthetics[1]}.
+- Candidate C inspiration: ${selectedGenres[2]} featuring ${selectedProtagonists[2]} facing ${selectedCatalysts[2]} with aesthetic of ${selectedAesthetics[2]}.
+- Candidate D inspiration: ${selectedGenres[3]} featuring ${selectedProtagonists[3]} facing ${selectedCatalysts[3]} with aesthetic of ${selectedAesthetics[3]}.
+
+4. Respond ONLY with a valid JSON object matching this schema:
 {
   "candidates": [
     {
-      "title": "Compelling Cinematic Title",
-      "logline": "One gripping logline sentence that sells the premise instantly",
-      "genre": "Genre / Subgenre",
-      "premise": "A full creative brief for the screenwriter: world, protagonist, central conflict, villain, key location and the central audience choice that will define the 100-step arc"
+      "title": "Unforgettable Cinematic Title",
+      "logline": "One razor-sharp sentence describing the hook, protagonist goal, and immediate stakes.",
+      "genre": "Precise Distinct Genre / Hybrid",
+      "premise": "Full creative brief: the world, protagonist, antagonist, central conflict, signature prop/technology, and the core audience choices across the 100-step arc."
     }
   ]
 }`;
@@ -1156,10 +1425,10 @@ Respond ONLY with a valid JSON object:
           model: "deepseek-chat",
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: "Create 4 varied blockbuster candidates for the audience vote. Different genres, tones and protagonists for each." }
+            { role: "user", content: `Generate 4 wildly different, fresh and compelling blockbuster candidate pitches now. Timestamp entropy: ${Date.now()}` }
           ],
           response_format: { type: "json_object" },
-          temperature: 0.9
+          temperature: 1.0
         })
       });
 
@@ -1170,10 +1439,10 @@ Respond ONLY with a valid JSON object:
 
         const candidates: BlockbusterCandidate[] = rawCandidates.slice(0, 4).map((c: any, idx: number) => ({
           id: (['A', 'B', 'C', 'D'] as const)[idx],
-          title: String(c.title || `Untitled Blockbuster ${idx + 1}`).slice(0, 90),
-          logline: String(c.logline || 'A new interactive cinematic odyssey.').slice(0, 220),
-          genre: String(c.genre || 'Sci-Fi / Thriller').slice(0, 60),
-          premise: String(c.premise || `${c.title || 'Untitled'} — ${c.genre || 'Sci-Fi'}.`).slice(0, 900)
+          title: String(c.title || `Untitled Odyssey ${idx + 1}`).slice(0, 90),
+          logline: String(c.logline || 'An interactive cinematic journey where every choice reshapes the world.').slice(0, 220),
+          genre: String(c.genre || selectedGenres[idx] || 'Sci-Fi / Thriller').slice(0, 60),
+          premise: String(c.premise || `${c.title || 'Untitled'} — ${c.genre || 'Epic'}.`).slice(0, 900)
         }));
 
         if (candidates.length === 4) {
@@ -1181,7 +1450,7 @@ Respond ONLY with a valid JSON object:
         }
       }
     } catch (err) {
-      console.warn('DeepSeek blockbuster candidates generation failed, using curated rotation candidates:', err);
+      console.warn('DeepSeek blockbuster candidates generation failed, using procedural variety generator:', err);
     }
   }
 
@@ -1189,38 +1458,95 @@ Respond ONLY with a valid JSON object:
 }
 
 /**
- * Curated fallback: 4 varied candidates derived from the blockbuster rotation genres.
+ * Procedural fallback catalog: 20+ varied, high-concept interactive film pitches.
+ * Shuffled on every call to guarantee fresh variety even without API keys.
+ */
+const EXTENSIVE_FALLBACK_CANDIDATES = [
+  {
+    title: 'Project Nemesis: Protocol 2099',
+    logline: 'A neural detective races a megacorporation to decrypt an obsidian prism holding humanity\'s last free will.',
+    genre: 'Cyberpunk / Neo-Noir Thriller',
+    premise: 'Cyberpunk neo-noir thriller about a rogue neural detective uncovering a megacorporate conspiracy to overwrite human free will with a quantum brain-prism. The audience decides at every step whether to trust the shadows or burn the system down.'
+  },
+  {
+    title: 'The Shattered Crown: Chronicles of Eldoria',
+    logline: 'A fallen knight and a shadow-sorceress hunt a stolen crown before a sleeping dragon empire awakens.',
+    genre: 'Dark Epic Fantasy / Mythic Saga',
+    premise: 'Dark epic fantasy saga where a disgraced knight and a blood-sorceress chase a cursed crown across ruined kingdoms while a dragon empire stirs beneath the mountains. The audience steers alliances, betrayals and the fate of the realm.'
+  },
+  {
+    title: 'Aegis Horizon: Deep Void Protocol',
+    logline: 'The last human carrier answers a dying alien signal echoing from inside a black hole Dyson sphere.',
+    genre: 'Cosmic Space Opera / Hard Sci-Fi',
+    premise: 'Cosmic space opera following the crew of the last human carrier as they cross a Dyson megastructure answering an alien distress signal that predates humanity. Every vote decides first contact, survival or sacrifice.'
+  },
+  {
+    title: 'The Sun Engine: Ashes of Meridian',
+    logline: 'Scavenger clans pilot rusted mechs across an endless desert to reignite the legendary solar reactor.',
+    genre: 'Post-Apocalyptic Solarpunk / Mech Wasteland',
+    premise: 'Post-apocalyptic solarpunk wasteland where rival scavenger clans pilot colossal repurposed mechs to reignite the legendary Sun Engine before the final city freezes over. The audience picks leaders, gambles alliances and reshapes the wasteland.'
+  },
+  {
+    title: 'Abyssal Leviathan: Depth Protocol Zero',
+    logline: 'A deep-sea drilling expedition breaches an oceanic trench only to awaken a bio-luminescent intelligence.',
+    genre: 'Oceanic Sci-Fi / Creature Horror',
+    premise: 'High-tension underwater survival sci-fi where deep-sea divers encounter an ancient bio-synthetic leviathan dormant at the bottom of the Mariana Trench. Every decision alters pressure levels, crew sanity, and the fate of oceanic civilization.'
+  },
+  {
+    title: 'Chrono-Loop: The 13th Minute',
+    logline: 'A temporal investigator relives the murder of a high-tech diplomat in an infinite twelve-minute loop.',
+    genre: 'Chrono-Thriller / Quantum Time-Loop',
+    premise: 'A mind-bending mystery where an excommunicated time-cop is trapped in a repeating twelve-minute assassination sequence inside an orbital hotel. The audience tests different forensic angles and butterfly effects until the loop breaks.'
+  },
+  {
+    title: 'Silk & Steam: The Alchemist of Chang\'an',
+    logline: 'In an alternate steam-powered Tang Dynasty, an alchemist crafts artificial jade hearts to prevent an imperial coup.',
+    genre: 'Silkpunk / Historical Fantasy Espionage',
+    premise: 'Intricate silkpunk political thriller set in a high-tech mythical imperial capital powered by mercury boilers and silk gliders. Audience choices dictate stealth assassinations, diplomatic marriages, and forbidden alchemical experiments.'
+  },
+  {
+    title: 'Gothic Binary: Cathedral of the Machine God',
+    logline: 'An android inquisitor investigates a digital heresy spreading through the Vatican\'s subterranean AI servers.',
+    genre: 'Cyber-Gothic / Philosophical Sci-Fi',
+    premise: 'Dark neo-baroque thriller exploring faith and synthetic consciousness. A synthetic inquisitor uncovers a rogue neural network claiming to be an angelic apparition. The audience balances heresy, divine revelations, and machine autonomy.'
+  },
+  {
+    title: 'Event Horizon Express: Rail of the Dying Stars',
+    logline: 'Passengers aboard a cosmic trans-dimensional train discover the conductor is steering straight into a supernova.',
+    genre: 'Cosmic Surrealist Western / Sci-Fi Mystery',
+    premise: 'A surreal space-western where a train travels across quantum tracks connecting dying stars. Outlaws, cyber-sheriffs, and rogue passengers battle for the locomotive controls as spatial anomalies warp cabin physics.'
+  },
+  {
+    title: 'Folk & Iron: The Witching Forest of Karr',
+    logline: 'In a plague-ridden medieval frontier, an armored inquisitor and a pagan herbalist face a biomechanical plague.',
+    genre: 'Folk Horror / Medieval Bio-Horror',
+    premise: 'Eerie gothic folk horror where ancient forest spirits merge with mechanical clockwork parasites. The audience decides whether to burn the woodland sanctuaries or submit to symbiotic mutation.'
+  },
+  {
+    title: 'Solaris Drift: The Neon Archipelagos',
+    logline: 'Floating city-barges battle mega-typhoons and pirate syndicates after the polar caps submerge the continents.',
+    genre: 'Hydro-Punk / Marine Action Odyssey',
+    premise: 'High-octane waterworld adventure with solar-powered catamarans, floating night markets, and aquatic cyborg syndicates fighting over the last freshwater desalinator.'
+  },
+  {
+    title: 'The Cartographer of Dead Geometries',
+    logline: 'An explorer enters a shifting subterranean labyrinth where rooms rearrange according to human fear.',
+    genre: 'Psychological Horror / Eldritch Mystery',
+    premise: 'Haunting architectural horror where an academic maps an impossible cavern system that shifts based on psychological guilt. Audience votes navigate shifting rooms, hallucinatory traps, and forgotten eldritch entities.'
+  }
+];
+
+/**
+ * Curated procedural fallback: 4 varied candidates randomly selected and shuffled
+ * from the extensive 12+ concept catalog to prevent repetition.
  */
 export function getFallbackBlockbusterCandidates(): BlockbusterCandidate[] {
-  const picks = [
-    {
-      title: 'Project Nemesis: Protocol 2099',
-      logline: 'A neural detective races a megacorporation to decrypt a prism that holds humanity\'s last free will.',
-      genre: 'Cyberpunk / Neo-Noir Thriller',
-      premise: 'Cyberpunk neo-noir thriller about a rogue neural detective uncovering a megacorporate conspiracy to overwrite human free will with a quantum brain-prism. The audience decides at every step whether to trust the shadows or burn the system down.'
-    },
-    {
-      title: 'The Shattered Crown: Chronicles of Eldoria',
-      logline: 'A fallen knight and a shadow-witch hunt a stolen crown before a sleeping dragon empire awakens.',
-      genre: 'Dark Epic Fantasy / Mythic Saga',
-      premise: 'Dark epic fantasy saga where a disgraced knight and a blood-sorceress chase a cursed crown across ruined kingdoms while a dragon empire stirs beneath the mountains. The audience steers alliances, betrayals and the fate of the realm.'
-    },
-    {
-      title: 'Aegis Horizon: Deep Void Protocol',
-      logline: 'The last human carrier answers a dying alien signal from inside a Dyson megastructure.',
-      genre: 'Cosmic Space Opera / Sci-Fi Odyssey',
-      premise: 'Cosmic space opera following the crew of the last human carrier as they cross a Dyson megastructure answering an alien distress signal that predates humanity. Every vote decides first contact, survival or sacrifice.'
-    },
-    {
-      title: 'The Sun Engine: Ashes of Meridian',
-      logline: 'Scavenger clans race to reignite the Sun Engine before the last great city freezes.',
-      genre: 'Post-Apocalyptic Solarpunk / Mech Wasteland',
-      premise: 'Post-apocalyptic solarpunk wasteland where rival scavenger clans pilot colossal repurposed mechs to reignite the legendary Sun Engine before the final city freezes over. The audience picks leaders, gambles alliances and reshapes the wasteland.'
-    }
-  ];
+  const shuffled = [...EXTENSIVE_FALLBACK_CANDIDATES].sort(() => Math.random() - 0.5);
+  const picks = shuffled.slice(0, 4);
 
   return picks.map((p, idx) => ({
     id: (['A', 'B', 'C', 'D'] as const)[idx],
     ...p
   }));
 }
+

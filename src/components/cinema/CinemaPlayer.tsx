@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { MovieStep, PlaybackPhase, SubtitleCue, ImmersiveAd } from '@/types/cinema';
-import { Volume2, VolumeX, Maximize2, Minimize2, Radio, Film, Clock, Subtitles, Check, Shuffle } from 'lucide-react';
+import { Volume2, VolumeX, Maximize2, Minimize2, Radio, Clock, Subtitles, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { audioCues } from '@/lib/audio-cues';
 import { ImmersiveAdPlayer } from './ImmersiveAdPlayer';
@@ -311,27 +311,6 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
               </span>
             </div>
           )}
-
-          {/* AI Generation Paused Status Indicator (Read-only for spectators) */}
-          {isGenerationPaused && (
-            <div
-              className="flex items-center space-x-2 bg-purple-950/90 border border-purple-500/50 px-3 py-1 rounded-full backdrop-blur-md shadow-[0_0_15px_rgba(168,85,247,0.3)] animate-pulse"
-              title="Generación IA pausada por el Director (Modo repetición de archivo)"
-            >
-              <Shuffle className="w-3 h-3 text-purple-400" />
-              <span className="text-[11px] font-bold text-purple-300 uppercase tracking-widest font-mono">
-                REPLAY LOOP // AI PAUSED
-              </span>
-            </div>
-          )}
-
-          {/* Step Badge */}
-          <div className="flex items-center space-x-2 bg-neutral-900/70 border border-white/10 px-3 py-1 rounded-full backdrop-blur-md">
-            <Film className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-[11px] font-mono font-semibold text-neutral-200">
-              STEP {activeStep.stepNumber} / {totalSteps}
-            </span>
-          </div>
 
           {/* Genre Tag */}
           <span className="hidden sm:inline-block text-[11px] text-neutral-400 bg-black/40 border border-white/5 px-2.5 py-1 rounded-full">

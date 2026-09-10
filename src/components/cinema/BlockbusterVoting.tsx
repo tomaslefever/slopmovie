@@ -24,7 +24,7 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
   userVoted,
   onVote
 }) => {
-  const currentSeconds = Math.max(0, Math.min(30, timeRemaining));
+  const currentSeconds = Math.max(0, Math.min(60, timeRemaining));
   const totalVotes = counts.A + counts.B + counts.C + counts.D;
 
   const handleCastVote = (candidateId: 'A' | 'B' | 'C' | 'D') => {
@@ -86,7 +86,7 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
           The Next Film Is In <span className="text-purple-400">Your Hands</span>
         </h2>
         <p className="text-[11px] sm:text-xs text-neutral-400 font-mono uppercase tracking-widest">
-          4 candidates · 30 seconds · majority rules
+          4 candidates · 60 seconds · majority rules
         </p>
       </motion.div>
 

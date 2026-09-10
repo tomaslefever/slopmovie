@@ -5,7 +5,9 @@ import {
   loadLiveCinemaStateFromDb, 
   loadUserVoteForStep, 
   loadViewerPreferences,
-  loadRecentChatMessagesFromDb
+  loadRecentChatMessagesFromDb,
+  recordVisit,
+  countActiveViewersFromDb
 } from '@/lib/supabase/db';
 import { CINEMATIC_MOCK_VIDEOS } from '@/lib/fal-video';
 import { cookies } from 'next/headers';
@@ -19,6 +21,14 @@ export async function GET(request: Request) {
   const isUuid = Boolean(rawId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId));
   const userId: string = isUuid && rawId ? rawId : crypto.randomUUID();
   const isNewViewer = !isUuid;
+
+  // Record the real visit (unique per viewer per day) — fire-and-forget
+  recordVisit(userId).catch(() => {});
+  // Real active-viewer count for the audience counter
+  const realActiveViewers = await countActiveViewersFromDb(5);
+  if (realActiveViewers !== null) {
+    cinemaEngine.totalAudience = realActiveViewers;
+  }
 
   // 1. Read live cinema state directly from Supabase database (Source of Truth)
   let liveState = await loadLiveCinemaStateFromDb();
@@ -124,7 +134,7 @@ export async function GET(request: Request) {
     : [];
 
   const phase = liveState?.phase || 'PLAYING';
-  const phaseDuration = liveState?.phaseDuration || (phase === 'VOTING' ? 10 : 15);
+  const phaseDuration = liveState?.phaseDuration || (phase === 'VOTING' ? 10 : phase === 'BLOCKBUSTER_VOTING' ? 60 : 15);
   const phaseStartedAt = liveState?.phaseStartedAt || new Date().toISOString();
 
   // Dynamically compute exact seconds remaining based on phaseEndsAt timestamp
@@ -145,7 +155,9 @@ export async function GET(request: Request) {
     phaseEndsAt,
     votesA: liveState?.votesA || 0,
     votesB: liveState?.votesB || 0,
-    totalAudience: liveState?.totalAudience || 142,
+    totalAudience: realActiveViewers !== null && realActiveViewers > 0
+      ? realActiveViewers
+      : (liveState?.totalAudience || cinemaEngine.totalAudience || 0),
     isLive: liveState?.isLive !== false,
     isPaused: liveState?.isPaused ?? false,
     isGenerationPaused: liveState?.isGenerationPaused ?? false,
@@ -221,6 +233,15 @@ export async function POST(request: Request) {
         success: voteResult.success,
         counts: voteResult.counts,
         userVoted: optionId
+      });
+    }
+
+    if (action === 'prepare_blockbuster_voting' || action === 'start_blockbuster_voting') {
+      const candidates = await cinemaEngine.prepareBlockbusterVoting();
+      return NextResponse.json({
+        success: true,
+        candidates,
+        state: cinemaEngine.getState()
       });
     }
 

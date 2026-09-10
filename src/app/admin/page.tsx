@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
 import { ImmersiveAd, AdsConfig, Movie } from '@/types/cinema';
 import { 
@@ -25,15 +25,17 @@ import {
   History,
   PlayCircle,
   Pencil,
-  X
+  X,
+  BarChart3
 } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
 
 const VIDEO_MODEL_CHOICES = [
-  { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (con referencias)' },
-  { id: 'minimax/h3-max/text-to-video', label: 'MiniMax H3-Max Turbo — Text-to-Video (16:9 · sin referencias)' },
-  { id: 'minimax/h3-max/image-to-video', label: 'MiniMax H3-Max — Image-to-Video (keyframe Flux · continuidad)' }
+  { id: 'minimax/h3-max-turbo/text-to-video', label: 'MiniMax H3-Max Turbo — Text-to-Video (económico)' },
+  { id: 'minimax/h3-max/text-to-video', label: 'MiniMax H3-Max — Text-to-Video (costoso)' },
+  { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (el más caro)' },
+  { id: 'minimax/h3-max/image-to-video', label: 'MiniMax H3-Max — Image-to-Video (keyframe Flux)' }
 ];
 
 const VIDEO_RESOLUTION_CHOICES = [
@@ -62,14 +64,19 @@ export default function AdminDashboardPage() {
     adIntervalSteps: 5,
     lastAdStep: 0
   });
-  const [activeTab, setActiveTab] = useState<'ads' | 'movie'>('ads');
+  const [activeTab, setActiveTab] = useState<'ads' | 'movie' | 'stats'>('ads');
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
   const [customPremise, setCustomPremise] = useState('');
   const [isTogglingPause, setIsTogglingPause] = useState(false);
   const [selectedStepNumber, setSelectedStepNumber] = useState<number | ''>('');
   const [isJumpingStep, setIsJumpingStep] = useState(false);
-  const [videoModel, setVideoModel] = useState<string>('minimax/h3-max/reference-to-video');
+  const [videoModel, setVideoModel] = useState<string>('minimax/h3-max-turbo/text-to-video');
   const [videoResolution, setVideoResolution] = useState<string>('');
+  const [draftVideoModel, setDraftVideoModel] = useState<string>('minimax/h3-max-turbo/text-to-video');
+  const [draftVideoResolution, setDraftVideoResolution] = useState<string>('');
+  const [isModelDirty, setIsModelDirty] = useState(false);
+  const [isSavingModelConfig, setIsSavingModelConfig] = useState(false);
+  const modelDirtyRef = useRef(false);
 
   // Movie edit state
   const [isEditingMovie, setIsEditingMovie] = useState(false);
@@ -80,6 +87,27 @@ export default function AdminDashboardPage() {
   const [isSavingMovie, setIsSavingMovie] = useState(false);
   const [isCreatingMovie, setIsCreatingMovie] = useState(false);
   const [isDeletingMovie, setIsDeletingMovie] = useState(false);
+  const [isPreparingBlockbusterVote, setIsPreparingBlockbusterVote] = useState(false);
+
+  // Stats state
+  const [stats, setStats] = useState<{ visitsByDay: { date: string; count: number }[]; totalVisits: number; todayVisits: number; activeViewers: number } | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+
+  // Fetch simple visit statistics
+  const fetchStats = async () => {
+    setIsLoadingStats(true);
+    try {
+      const res = await fetch('/api/cinema/stats');
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
 
   // New Ad Form State
   const [newBrandName, setNewBrandName] = useState('');
@@ -139,8 +167,10 @@ export default function AdminDashboardPage() {
         }
         if (stateData.videoModel) {
           setVideoModel(stateData.videoModel);
+          if (!modelDirtyRef.current) setDraftVideoModel(stateData.videoModel);
         }
         setVideoResolution(stateData.videoResolution || '');
+        if (!modelDirtyRef.current) setDraftVideoResolution(stateData.videoResolution || '');
         setSelectedMovieId(prev => prev || stateData.movie?.id || (stateData.allMovies?.[0]?.id ?? ''));
         if (stateData.supabaseConfig?.url && stateData.supabaseConfig?.anonKey) {
           initSupabaseBrowserClient(stateData.supabaseConfig.url, stateData.supabaseConfig.anonKey);
@@ -186,9 +216,11 @@ export default function AdminDashboardPage() {
               }));
               if (payload.payload.videoModel) {
                 setVideoModel(payload.payload.videoModel);
+                if (!modelDirtyRef.current) setDraftVideoModel(payload.payload.videoModel);
               }
               if (payload.payload.videoResolution !== undefined) {
                 setVideoResolution(payload.payload.videoResolution || '');
+                if (!modelDirtyRef.current) setDraftVideoResolution(payload.payload.videoResolution || '');
               }
             }
           })
@@ -429,6 +461,36 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Switch to Select Movie state (BLOCKBUSTER_VOTING):
+  // Starts generating candidate films, then enters BLOCKBUSTER_VOTING (60s)
+  const handleStartBlockbusterVoting = async () => {
+    audioCues.playClick();
+    setIsPreparingBlockbusterVote(true);
+    try {
+      showFeedback('✨ Generando posibles películas con IA...');
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'prepare_blockbuster_voting' })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.state) {
+          setCinemaState((prev: any) => ({ ...prev, ...data.state }));
+        }
+        showFeedback('🎟️ ¡Películas generadas! Estado cambiado a Selección de Película (60s)');
+        fetchData();
+      } else {
+        showFeedback('Error al iniciar la selección de película');
+      }
+    } catch {
+      showFeedback('Error de red al iniciar la selección de película');
+    } finally {
+      setIsPreparingBlockbusterVote(false);
+    }
+  };
+
   // Toggle Pause / Resume for live movie stream & AI generation
   const handleTogglePause = async () => {
     audioCues.playClick();
@@ -485,55 +547,91 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Change generative video model (fal.ai)
-  const handleSetVideoModel = async (model: string) => {
+  // Mark the draft model/resolution config as dirty (unsaved)
+  const markModelDirty = () => {
+    modelDirtyRef.current = true;
+    setIsModelDirty(true);
+  };
+
+  // Save the model + resolution configuration explicitly (single Save button)
+  const handleSaveModelConfig = async () => {
     audioCues.playClick();
-    setVideoModel(model);
+    // Credit guards for the expensive models
+    if (draftVideoModel === 'minimax/h3-max/reference-to-video') {
+      if (!confirm('💸 Reference-to-Video es el modelo MÁS CARO (usa el clip previo + props como referencias). ¿Continuar?')) return;
+    }
+    if (draftVideoModel === 'minimax/h3-max/text-to-video') {
+      if (!confirm('⚠️ H3-Max estándar es notablemente más costoso que Turbo. ¿Continuar?')) return;
+    }
+
+    setIsSavingModelConfig(true);
     try {
-      const res = await fetch('/api/cinema/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set_video_model', model })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          showFeedback(`🎞️ Modelo generativo de video: ${data.videoModel}`);
+      const [modelRes, resRes] = await Promise.all([
+        fetch('/api/cinema/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set_video_model', model: draftVideoModel })
+        }),
+        fetch('/api/cinema/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set_video_resolution', resolution: draftVideoResolution || null })
+        })
+      ]);
+
+      if (modelRes.ok && resRes.ok) {
+        const modelData = await modelRes.json();
+        const resData = await resRes.json();
+        if (modelData.success && resData.success) {
+          setVideoModel(draftVideoModel);
+          setVideoResolution(draftVideoResolution);
+          modelDirtyRef.current = false;
+          setIsModelDirty(false);
+          showFeedback(`💾 Configuración guardada y persistida: ${draftVideoModel}${draftVideoResolution ? ` · ${draftVideoResolution}` : ''}`);
           fetchData();
         } else {
-          showFeedback('Modelo de video no válido');
+          showFeedback('Configuración de modelo no válida');
         }
       } else {
-        showFeedback('Error al cambiar el modelo de video');
+        showFeedback('Error al guardar la configuración de modelo');
       }
     } catch {
-      showFeedback('Error de red al cambiar el modelo de video');
+      showFeedback('Error de red al guardar la configuración');
+    } finally {
+      setIsSavingModelConfig(false);
     }
   };
 
-  // Change output resolution for video generation (fal.ai)
-  const handleSetVideoResolution = async (resolution: string) => {
+  // Prepare the NEXT BLOCKBUSTER audience vote: generates the 4 candidate films
+  // server-side and switches the frontend to the 60s movie-selection phase.
+  const handlePrepareBlockbusterVote = async () => {
     audioCues.playClick();
-    setVideoResolution(resolution);
+    if (!confirm('🎟️ ¿Abrir la votación de la PRÓXIMA película? La audiencia tendrá 60 segundos para elegir entre 4 candidatas. Al terminar, la ganadora se generará y transmitirá.')) return;
+
+    setIsPreparingBlockbusterVote(true);
+    showFeedback('🎟️ Generando las 4 candidatas de blockbuster...');
     try {
       const res = await fetch('/api/cinema/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set_video_resolution', resolution: resolution || null })
+        body: JSON.stringify({ action: 'prepare_blockbuster_voting' })
       });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          showFeedback(`🎞️ Resolución de video: ${data.videoResolution || 'Auto (modelo)'}`);
+          setCinemaState((prev: any) => prev ? { ...prev, ...data.state } : prev);
+          showFeedback(`🎟️ Votación de próxima película ABIERTA: ${data.candidates?.length || 0} candidatas · 60 segundos.`);
           fetchData();
         } else {
-          showFeedback('Resolución de video no válida');
+          showFeedback('No se pudo abrir la votación');
         }
       } else {
-        showFeedback('Error al cambiar la resolución de video');
+        showFeedback('Error al abrir la votación de blockbuster');
       }
     } catch {
-      showFeedback('Error de red al cambiar la resolución de video');
+      showFeedback('Error de red al abrir la votación');
+    } finally {
+      setIsPreparingBlockbusterVote(false);
     }
   };
 
@@ -880,6 +978,35 @@ export default function AdminDashboardPage() {
             )}
           </button>
 
+          {/* Switch to Select Movie (Blockbuster Voting) Button */}
+          <button
+            onClick={handleStartBlockbusterVoting}
+            disabled={isPreparingBlockbusterVote || cinemaState?.phase === 'BLOCKBUSTER_VOTING'}
+            className={`px-3 py-1.5 rounded-lg border font-mono font-bold flex items-center space-x-1.5 transition-all shadow-md ${
+              cinemaState?.phase === 'BLOCKBUSTER_VOTING'
+                ? 'bg-purple-600 text-white border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.4)] animate-pulse'
+                : 'bg-gradient-to-r from-purple-600/30 to-fuchsia-600/20 hover:from-purple-600/50 hover:to-fuchsia-600/40 text-purple-200 border-purple-400/40 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
+            } disabled:opacity-60`}
+            title="Generar candidatas y cambiar estado a Selección de Película (60s)"
+          >
+            {isPreparingBlockbusterVote ? (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-purple-300 animate-spin" />
+                <span>GENERANDO PELÍCULAS...</span>
+              </>
+            ) : cinemaState?.phase === 'BLOCKBUSTER_VOTING' ? (
+              <>
+                <Radio className="w-3.5 h-3.5 text-white animate-pulse" />
+                <span>VOTANDO PELÍCULA ({cinemaState?.timeRemaining || 0}s)</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                <span>SELECCIONAR PELÍCULA</span>
+              </>
+            )}
+          </button>
+
           <span className="text-neutral-400 hidden sm:inline-block">
             {session.user?.email || 'admin@kinetic-cinema.com'}
           </span>
@@ -927,6 +1054,18 @@ export default function AdminDashboardPage() {
           >
             <Film className="w-4 h-4" />
             <span>Movie & Blockbuster Rotation</span>
+          </button>
+
+          <button
+            onClick={() => { audioCues.playClick(); setActiveTab('stats'); fetchStats(); }}
+            className={`px-4 py-2 rounded-xl font-mono text-xs font-bold tracking-wider uppercase flex items-center space-x-2 transition-all ${
+              activeTab === 'stats'
+                ? 'bg-purple-500 text-black shadow-[0_0_15px_rgba(168,85,247,0.3)]'
+                : 'bg-neutral-900 text-neutral-400 hover:text-white border border-white/5'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Estadísticas</span>
           </button>
         </div>
 
@@ -1208,6 +1347,59 @@ export default function AdminDashboardPage() {
         {/* TAB 2: MOVIE CONTROL & BLOCKBUSTER ROTATION */}
         {activeTab === 'movie' && (
           <div className="space-y-6 pb-24">
+            {/* Card: Select Movie State / Blockbuster Voting Controller */}
+            <div className={`p-6 rounded-2xl border transition-all ${
+              cinemaState?.phase === 'BLOCKBUSTER_VOTING' 
+                ? 'bg-purple-950/40 border-purple-400/60 shadow-[0_0_30px_rgba(168,85,247,0.25)] ring-1 ring-purple-400/40' 
+                : 'bg-neutral-950/80 border-white/10'
+            } flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${
+                    cinemaState?.phase === 'BLOCKBUSTER_VOTING' 
+                      ? 'bg-purple-400 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.9)]' 
+                      : 'bg-purple-500/60'
+                  }`} />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
+                    <Radio className="w-4 h-4 text-purple-400" />
+                    Estado de Emisión: {cinemaState?.phase === 'BLOCKBUSTER_VOTING' ? 'SELECCIONANDO PELÍCULA (VOTACIÓN ACTIVA)' : 'TRANSMISIÓN NARRATIVA NORMAL'}
+                  </h3>
+                </div>
+                <p className="text-xs text-neutral-400 max-w-xl">
+                  {cinemaState?.phase === 'BLOCKBUSTER_VOTING' 
+                    ? `La audiencia está votando la próxima película (${cinemaState?.timeRemaining || 0}s restantes de 1 minuto). Al finalizar, la ganadora comenzará su producción con un first-shot de 1 minuto ininterrumpido.`
+                    : 'Presiona el botón para comenzar a generar las 4 posibles películas con IA. Al completarse el proceso, el frontend pasará al estado de seleccionar película con 1 minuto para votar.'}
+                </p>
+              </div>
+
+              <button
+                onClick={handleStartBlockbusterVoting}
+                disabled={isPreparingBlockbusterVote || cinemaState?.phase === 'BLOCKBUSTER_VOTING'}
+                className={`w-full sm:w-auto px-6 py-3 rounded-xl font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center space-x-2 transition-all shadow-xl hover:scale-[1.02] active:scale-[0.98] ${
+                  cinemaState?.phase === 'BLOCKBUSTER_VOTING'
+                    ? 'bg-purple-500 text-black shadow-[0_0_25px_rgba(168,85,247,0.5)] cursor-default'
+                    : 'bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.35)]'
+                } disabled:opacity-60`}
+              >
+                {isPreparingBlockbusterVote ? (
+                  <>
+                    <Sparkles className="w-4 h-4 animate-spin text-white" />
+                    <span>Generando películas con IA...</span>
+                  </>
+                ) : cinemaState?.phase === 'BLOCKBUSTER_VOTING' ? (
+                  <>
+                    <Radio className="w-4 h-4 animate-pulse text-black" />
+                    <span>Votación en Curso ({cinemaState?.timeRemaining || 0}s)</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-white" />
+                    <span>Cambiar a Seleccionar Película</span>
+                  </>
+                )}
+              </button>
+            </div>
+
             {/* Live Playback & AI Generation Controller Card */}
             <div className={`p-6 rounded-2xl border transition-all ${
               cinemaState?.isPaused 
@@ -1303,28 +1495,33 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Generative Video Model Selector (Director Only) */}
-            <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className={`p-6 rounded-2xl border flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 ${isModelDirty ? 'bg-amber-950/20 border-amber-500/50' : 'bg-neutral-950/80 border-white/10'}`}>
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
                   <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
                     Generative Video Model
                   </h3>
+                  {isModelDirty && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[9px] font-mono font-bold uppercase animate-pulse">
+                      Cambios sin guardar
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-neutral-400 max-w-xl">
-                  Selecciona el modelo de fal.ai que generará las escenas y los comerciales, y la resolución de salida. H3-Max Turbo e Image-to-Video no aceptan referencias directas (escena previa, props y audio); Image-to-Video compensa animando un keyframe de continuidad generado con Flux.
+                  Selecciona el modelo de fal.ai y la resolución, y presiona <strong className="text-white">Guardar Configuración</strong> para persistirlos. Turbo es el modelo económico; Reference-to-Video es el más caro.
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto flex-shrink-0">
+              <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto flex-shrink-0">
                 <div className="flex flex-col gap-1 w-full sm:w-72">
                   <label className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    Modelo activo:
+                    Modelo (borrador):
                   </label>
                   <select
-                    value={videoModel}
-                    onChange={e => handleSetVideoModel(e.target.value)}
+                    value={draftVideoModel}
+                    onChange={e => { setDraftVideoModel(e.target.value); markModelDirty(); }}
                     className="w-full px-3 py-2 rounded-xl bg-black/90 border border-amber-500/30 text-white text-xs font-mono focus:border-amber-400 focus:outline-none cursor-pointer"
                   >
                     {VIDEO_MODEL_CHOICES.map(m => (
@@ -1332,22 +1529,24 @@ export default function AdminDashboardPage() {
                     ))}
                   </select>
                   <span className="text-[10px] font-mono text-neutral-500">
-                    {videoModel === 'minimax/h3-max/image-to-video'
-                      ? 'Image-to-Video: Flux genera un keyframe de la escena y el video lo anima (mejor consistencia que texto puro).'
-                      : videoModel === 'minimax/h3-max/text-to-video'
-                        ? 'Text-to-Video: continuidad visual solo vía prompt, sin clips/imágenes de referencia.'
-                        : 'Reference-to-Video: mantiene continuidad con el clip previo y las imágenes de props.'}
+                    {draftVideoModel === 'minimax/h3-max-turbo/text-to-video'
+                      ? 'Turbo: text-to-video rápido y económico. Sin referencias. 480P 16:9 por defecto.'
+                      : draftVideoModel === 'minimax/h3-max/text-to-video'
+                        ? 'Estándar: text-to-video de mayor costo. Sin referencias. 768P por defecto.'
+                        : draftVideoModel === 'minimax/h3-max/image-to-video'
+                          ? 'Image-to-Video: Flux genera un keyframe de la escena y el video lo anima.'
+                          : 'Reference-to-Video (el más caro): usa el clip previo y las imágenes de props como referencias.'}
                   </span>
                 </div>
 
                 <div className="flex flex-col gap-1 w-full sm:w-56">
                   <label className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold flex items-center gap-1">
                     <Sliders className="w-3 h-3" />
-                    Resolución de salida:
+                    Resolución (borrador):
                   </label>
                   <select
-                    value={videoResolution}
-                    onChange={e => handleSetVideoResolution(e.target.value)}
+                    value={draftVideoResolution}
+                    onChange={e => { setDraftVideoResolution(e.target.value); markModelDirty(); }}
                     className="w-full px-3 py-2 rounded-xl bg-black/90 border border-cyan-500/30 text-white text-xs font-mono focus:border-cyan-400 focus:outline-none cursor-pointer"
                   >
                     {VIDEO_RESOLUTION_CHOICES.map(r => (
@@ -1355,10 +1554,31 @@ export default function AdminDashboardPage() {
                     ))}
                   </select>
                   <span className="text-[10px] font-mono text-neutral-500">
-                    {videoResolution
-                      ? `Forzada a ${videoResolution} para el modelo activo.`
-                      : 'Usa la resolución por defecto del modelo (Reference/Image: 768P · Turbo: 480P).'}
+                    {draftVideoResolution
+                      ? `Forzada a ${draftVideoResolution} para el modelo activo.`
+                      : 'Usa la resolución por defecto del modelo (Turbo: 480P · resto: 768P).'}
                   </span>
+                </div>
+
+                <div className="flex flex-col gap-1 justify-end">
+                  <button
+                    onClick={handleSaveModelConfig}
+                    disabled={isSavingModelConfig || !isModelDirty}
+                    className={`px-5 py-2 rounded-xl font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all h-[38px] ${
+                      isModelDirty
+                        ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.35)] active:scale-95'
+                        : 'bg-neutral-900 text-neutral-500 border border-white/10 cursor-not-allowed'
+                    }`}
+                    title="Guardar modelo y resolución en la base de datos"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    {isSavingModelConfig ? 'Guardando...' : 'Guardar Configuración'}
+                  </button>
+                  {!isModelDirty && (
+                    <span className="text-[9px] font-mono text-emerald-400/80 text-center">
+                      ✓ Persistido: {videoModel}{videoResolution ? ` · ${videoResolution}` : ''}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1468,6 +1688,15 @@ export default function AdminDashboardPage() {
                         Película
                       </label>
                       <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={handlePrepareBlockbusterVote}
+                          disabled={isPreparingBlockbusterVote}
+                          className="px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-40 text-purple-300 border border-purple-500/30 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all flex-shrink-0 active:scale-95 h-[38px]"
+                          title="Abrir la votación de la próxima película (4 candidatas · 60s)"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>{isPreparingBlockbusterVote ? 'Generando...' : 'Votación'}</span>
+                        </button>
                         <button
                           onClick={() => handleCreateMovie()}
                           disabled={isCreatingMovie}
@@ -1713,6 +1942,100 @@ export default function AdminDashboardPage() {
                 <Film className="w-4 h-4 text-black" />
                 <span>🎬 Premiere Next Blockbuster Film (Rotate Genre)</span>
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: VISIT STATISTICS */}
+        {activeTab === 'stats' && (
+          <div className="space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-5 rounded-2xl bg-neutral-950/80 border border-purple-500/30 space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-purple-300 flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5" /> Visitas hoy
+                </span>
+                <span className="text-3xl font-black text-white font-mono">
+                  {stats?.todayVisits ?? '—'}
+                </span>
+              </div>
+              <div className="p-5 rounded-2xl bg-neutral-950/80 border border-purple-500/30 space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-purple-300 flex items-center gap-1.5">
+                  <BarChart3 className="w-3.5 h-3.5" /> Visitas (14 días)
+                </span>
+                <span className="text-3xl font-black text-white font-mono">
+                  {stats?.totalVisits ?? '—'}
+                </span>
+              </div>
+              <div className="p-5 rounded-2xl bg-neutral-950/80 border border-emerald-500/30 space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-300 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Espectadores activos
+                </span>
+                <span className="text-3xl font-black text-white font-mono">
+                  {stats?.activeViewers ?? '—'}
+                </span>
+              </div>
+            </div>
+
+            {/* Daily Visits Table */}
+            <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-purple-300 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4" /> Visitas por día (últimos 14 días)
+                </h3>
+                <button
+                  onClick={fetchStats}
+                  disabled={isLoadingStats}
+                  className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-40 text-purple-300 border border-purple-500/30 font-mono font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  {isLoadingStats ? 'Cargando...' : 'Actualizar'}
+                </button>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-white/10">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-black/60 text-neutral-400 uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="px-4 py-3 border-b border-white/10">Fecha</th>
+                      <th className="px-4 py-3 border-b border-white/10 text-right">Visitantes únicos</th>
+                      <th className="px-4 py-3 border-b border-white/10 w-2/5 hidden sm:table-cell">Barra</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-neutral-200">
+                    {!stats || stats.visitsByDay.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-4 py-8 text-center text-neutral-500">
+                          {isLoadingStats ? 'Cargando estadísticas...' : 'Sin visitas registradas todavía.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      stats.visitsByDay.map(day => {
+                        const max = Math.max(...stats.visitsByDay.map(d => d.count), 1);
+                        const pct = Math.round((day.count / max) * 100);
+                        return (
+                          <tr key={day.date} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="px-4 py-2.5 font-bold text-white">{day.date}</td>
+                            <td className="px-4 py-2.5 text-right text-purple-300 font-black">{day.count}</td>
+                            <td className="px-4 py-2.5 hidden sm:table-cell">
+                              <div className="h-2 rounded-full bg-black/60 overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-purple-500 to-fuchsia-400 transition-all duration-500"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="text-[10px] font-mono text-neutral-500">
+                Cada visitante único cuenta una vez por día. Los espectadores activos se calculan con actividad de los últimos 5 minutos.
+              </p>
             </div>
           </div>
         )}

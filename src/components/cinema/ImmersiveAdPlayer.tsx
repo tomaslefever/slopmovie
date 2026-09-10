@@ -17,7 +17,8 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   timeRemaining,
   onAdCompleted
 }) => {
-  const [isMuted, setIsMuted] = useState<boolean>(true);
+  // Ads play WITH SOUND by default; browsers that block autoplay-with-sound fall back to muted.
+  const [isMuted, setIsMuted] = useState<boolean>(false);
   const [hasInteracted, setHasInteracted] = useState<boolean>(false);
   const [adSeconds, setAdSeconds] = useState(ad.duration || 15);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -57,13 +58,29 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   const activeVideoSrc = ad.generatedAdVideoUrl || ad.videoUrl;
   const isCinematicAd = !!ad.generatedAdVideoUrl;
 
-  // Auto-play video on mount and whenever the source changes (e.g. fal.ai clip arrives)
+  // Auto-play video on mount and whenever the source changes (e.g. fal.ai clip arrives).
+  // Ads are NOT muted: attempt sound-first playback, and only fall back to muted when
+  // the browser blocks autoplay-with-sound (no user gesture yet).
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.load();          // Force reload when src changes
-      videoRef.current.currentTime = 0;
-      videoRef.current.play().catch(() => {
-        // Handled by muted autoplay
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.load();          // Force reload when src changes
+    video.currentTime = 0;
+    video.muted = false;
+    setIsMuted(false);
+
+    const playPromise = video.play();
+    if (playPromise) {
+      playPromise.then(() => {
+        setIsMuted(false);
+      }).catch(() => {
+        // Autoplay with sound blocked — retry muted so the ad still plays
+        video.muted = true;
+        setIsMuted(true);
+        video.play().catch(() => {
+          // Handled by muted autoplay
+        });
       });
     }
     audioCues.playVoteConfirm();

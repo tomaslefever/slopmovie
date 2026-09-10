@@ -36,18 +36,19 @@ export function isFalGenerationPaused(): boolean {
 }
 
 // Registro de modelos generativos de video disponibles en fal.ai
-// minimax/h3-max/text-to-video es el endpoint "Text To Video Turbo" de fal.ai
-// minimax/h3-max/image-to-video es el endpoint "Image to Video Max" de fal.ai
+// minimax/h3-max-turbo/text-to-video = "Text to Video Max Turbo" (el MÁS BARATO/rápido)
+// minimax/h3-max/text-to-video        = "Text to Video Max" (más costoso)
 export type VideoModelId =
   | 'minimax/h3-max/reference-to-video'
+  | 'minimax/h3-max-turbo/text-to-video'
   | 'minimax/h3-max/text-to-video'
   | 'minimax/h3-max/image-to-video';
 
-export const DEFAULT_VIDEO_MODEL: VideoModelId = 'minimax/h3-max/reference-to-video';
+export const DEFAULT_VIDEO_MODEL: VideoModelId = 'minimax/h3-max-turbo/text-to-video';
 
 // Alias de ids antiguos persistidos en bibles de películas existentes
 const LEGACY_VIDEO_MODEL_ALIASES: Record<string, VideoModelId> = {
-  'minimax/h3-max-turbo': 'minimax/h3-max/text-to-video'
+  'minimax/h3-max-turbo': 'minimax/h3-max-turbo/text-to-video'
 };
 
 // Resoluciones soportadas por la familia MiniMax H3-Max en fal.ai (schema oficial: 480P, 768P, 1080P)
@@ -81,22 +82,31 @@ export interface VideoModelOption {
 
 export const VIDEO_MODEL_OPTIONS: VideoModelOption[] = [
   {
+    id: 'minimax/h3-max-turbo/text-to-video',
+    label: 'MiniMax H3-Max Turbo — Text-to-Video',
+    description: 'Text-to-video rápido y ECONÓMICO. Sin referencias. 480P 16:9 por defecto.',
+    kind: 'text-to-video',
+    supportsReferences: false,
+    resolution: '480P',
+    aspectRatio: '16:9'
+  },
+  {
+    id: 'minimax/h3-max/text-to-video',
+    label: 'MiniMax H3-Max — Text-to-Video (costoso)',
+    description: 'Text-to-video estándar, más COSTOSO que Turbo. Sin referencias. 768P por defecto.',
+    kind: 'text-to-video',
+    supportsReferences: false,
+    resolution: '768P',
+    aspectRatio: '16:9'
+  },
+  {
     id: 'minimax/h3-max/reference-to-video',
-    label: 'MiniMax H3-Max — Reference-to-Video',
+    label: 'MiniMax H3-Max — Reference-to-Video (el más caro)',
     description: 'Video con referencias (video previo, imágenes de props y audio). 768P adaptativo por defecto.',
     kind: 'reference-to-video',
     supportsReferences: true,
     resolution: '768P',
     aspectRatio: 'adaptive'
-  },
-  {
-    id: 'minimax/h3-max/text-to-video',
-    label: 'MiniMax H3-Max Turbo — Text-to-Video',
-    description: 'Solo texto a video. Sin referencias. 480P 16:9 por defecto.',
-    kind: 'text-to-video',
-    supportsReferences: false,
-    resolution: '480P',
-    aspectRatio: '16:9'
   },
   {
     id: 'minimax/h3-max/image-to-video',
@@ -184,8 +194,8 @@ export async function generateVideoWithFal({
 }: VideoGenerationParams): Promise<VideoGenerationResult> {
   const videoModel: VideoModelId = resolveVideoModel(model) || DEFAULT_VIDEO_MODEL;
   const modelOption = VIDEO_MODEL_OPTIONS.find(m => m.id === videoModel)!;
-  const isTurbo = videoModel === 'minimax/h3-max/text-to-video';
-  const isImageToVideo = videoModel === 'minimax/h3-max/image-to-video';
+  const isTextToVideo = modelOption.kind === 'text-to-video';
+  const isImageToVideo = modelOption.kind === 'image-to-video';
   // Resolución elegida por el Director; si no hay una válida se usa la del modelo
   const effectiveResolution: string = isKnownVideoResolution(resolution) ? resolution : modelOption.resolution;
 
@@ -243,7 +253,7 @@ export async function generateVideoWithFal({
           prompt_expansion_mode: "balanced",
           ...(keyframeUrl ? { image_url: keyframeUrl } : {})
         };
-      } else if (isTurbo) {
+      } else if (isTextToVideo) {
         inputPayload = {
           prompt: fullPrompt,
           duration: duration || 15,

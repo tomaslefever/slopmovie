@@ -862,8 +862,7 @@ export async function deleteMovieFromDb(movieId: string): Promise<boolean> {
 
 /**
  * Persist (upsert) a viewer's next-blockbuster vote. One vote per user per movie.
- */
-export async function persistBlockbusterVote(
+ */export async function persistBlockbusterVote(
   movieId: string,
   userId: string,
   candidateId: 'A' | 'B' | 'C' | 'D'
@@ -919,6 +918,88 @@ export async function loadBlockbusterVoteCountsFromDb(
   }
 
   return counts;
+}
+
+/**
+ * Record a real viewer visit (unique per viewer per day). Called on every
+ * viewer page load so `last_seen` stays fresh for the active-viewers count.
+ */
+export async function recordVisit(viewerId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from('visits')
+      .upsert(
+        { viewer_id: viewerId, visit_date: new Date().toISOString().slice(0, 10), last_seen: new Date().toISOString() },
+        { onConflict: 'viewer_id,visit_date' }
+      );
+
+    if (error) {
+      logSupabaseError('recordVisit', error);
+    }
+  } catch (err) {
+    console.error('[Supabase] Exception in recordVisit:', err);
+  }
+}
+
+/**
+ * Count real ACTIVE viewers: unique viewers seen in the last N minutes.
+ */
+export async function countActiveViewersFromDb(windowMinutes = 5): Promise<number | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+
+  try {
+    const { count, error } = await supabase
+      .from('visits')
+      .select('viewer_id', { count: 'exact', head: true })
+      .gte('last_seen', new Date(Date.now() - windowMinutes * 60 * 1000).toISOString());
+
+    if (error) {
+      logSupabaseError('countActiveViewersFromDb', error);
+      return null;
+    }
+
+    return count ?? 0;
+  } catch (err) {
+    console.error('[Supabase] Exception in countActiveViewersFromDb:', err);
+    return null;
+  }
+}
+
+/**
+ * Daily visit counts (unique viewers per day) for the stats table.
+ */
+export async function countVisitsByDayFromDb(days = 14): Promise<{ date: string; count: number }[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('visits')
+      .select('visit_date')
+      .gte('visit_date', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+
+    if (error) {
+      logSupabaseError('countVisitsByDayFromDb', error);
+      return [];
+    }
+
+    const byDay = new Map<string, number>();
+    for (const row of data || []) {
+      const d = String(row.visit_date).slice(0, 10);
+      byDay.set(d, (byDay.get(d) || 0) + 1);
+    }
+
+    return Array.from(byDay.entries())
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+  } catch (err) {
+    console.error('[Supabase] Exception in countVisitsByDayFromDb:', err);
+    return [];
+  }
 }
 
 export interface LiveCinemaStateRecord {

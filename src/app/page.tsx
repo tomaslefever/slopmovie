@@ -97,30 +97,45 @@ export default function CinemaStreamingPage() {
     // 1. Optimistic UI transition: advance locally for seamless, hitch-free continuity
     if (completedPhase === 'PLAYING') {
       setUserVoted(null);
-      const stepCount = cinemaState?.movie?.steps?.length || cinemaState?.movie?.currentStep || 0;
-      const adsConfig = cinemaState?.adsConfig;
-      const isAdDue = Boolean(
-        adsConfig?.autoAdsEnabled &&
-        stepCount > 0 &&
-        stepCount % (adsConfig.adIntervalSteps || 5) === 0 &&
-        stepCount !== adsConfig.lastAdStep &&
-        stepCount < 97
-      );
+      const stepCount = currentStepNum;
+      // First-shot uninterrupted playback: steps 1, 2, 3 advance directly to next scene without voting pause
+      const hasNextFirstShotStep = stepCount < 4 && Boolean(cinemaState?.movie?.steps?.some(s => s.stepNumber === stepCount + 1));
 
-      if (isAdDue) {
+      if (hasNextFirstShotStep) {
+        const nextStepNum = stepCount + 1;
+        const nextStepObj = cinemaState?.movie?.steps?.find(s => s.stepNumber === nextStepNum);
         setCinemaState((prev) => prev ? {
           ...prev,
-          phase: 'COMMERCIAL_BREAK',
+          movie: { ...prev.movie, currentStep: nextStepNum },
+          activeStep: nextStepObj || prev.activeStep,
+          phase: 'PLAYING',
           timeRemaining: 15
         } : null);
       } else {
-        setCinemaState((prev) => prev ? {
-          ...prev,
-          phase: 'VOTING',
-          timeRemaining: 10,
-          votesA: 0,
-          votesB: 0
-        } : null);
+        const adsConfig = cinemaState?.adsConfig;
+        const isAdDue = Boolean(
+          adsConfig?.autoAdsEnabled &&
+          stepCount > 0 &&
+          stepCount % (adsConfig.adIntervalSteps || 5) === 0 &&
+          stepCount !== adsConfig.lastAdStep &&
+          stepCount < 97
+        );
+
+        if (isAdDue) {
+          setCinemaState((prev) => prev ? {
+            ...prev,
+            phase: 'COMMERCIAL_BREAK',
+            timeRemaining: 15
+          } : null);
+        } else {
+          setCinemaState((prev) => prev ? {
+            ...prev,
+            phase: 'VOTING',
+            timeRemaining: 10,
+            votesA: 0,
+            votesB: 0
+          } : null);
+        }
       }
     } else if (completedPhase === 'COMMERCIAL_BREAK') {
       setUserVoted(null);
@@ -292,18 +307,18 @@ export default function CinemaStreamingPage() {
     return () => clearInterval(timer);
   }, [cinemaState?.phase, cinemaState?.isPaused]);
 
-  // 3b. Fixed 30-second timeout for BLOCKBUSTER_VOTING stage.
+  // 3b. Fixed 60-second timeout for BLOCKBUSTER_VOTING stage.
   // Audience picks the next film from 4 candidates; when time runs out the winner resolves.
   useEffect(() => {
     if (!cinemaState || cinemaState.phase !== 'BLOCKBUSTER_VOTING' || cinemaState.isPaused) return;
 
-    console.log('[CinemaPage] Next-blockbuster vote started. Running 30s voting timeout...');
+    console.log('[CinemaPage] Next-blockbuster vote started. Running 60s voting timeout...');
 
     const startTime = Date.now();
-    const durationSec = 30;
+    const durationSec = 60;
 
-    // Reset local timeRemaining to 30s
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: 30 } : prev);
+    // Reset local timeRemaining to 60s
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: 60 } : prev);
 
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -316,7 +331,7 @@ export default function CinemaStreamingPage() {
 
       if (remaining <= 0) {
         clearInterval(timer);
-        console.log('[CinemaPage] 30s blockbuster vote elapsed. Resolving winner...');
+        console.log('[CinemaPage] 60s blockbuster vote elapsed. Resolving winner...');
         handleStageComplete('BLOCKBUSTER_VOTING');
       }
     }, 250);
@@ -461,8 +476,11 @@ export default function CinemaStreamingPage() {
             ...prev,
             phase: payload.payload.phase,
             timeRemaining: payload.payload.timeRemaining ?? prev.timeRemaining,
+            phaseDuration: (payload.payload as any).phaseDuration ?? prev.phaseDuration,
             votesA: payload.payload.votesA ?? prev.votesA,
             votesB: payload.payload.votesB ?? prev.votesB,
+            blockbusterCandidates: (payload.payload as any).blockbusterCandidates ?? prev.blockbusterCandidates,
+            blockbusterVoteCounts: (payload.payload as any).blockbusterVoteCounts ?? prev.blockbusterVoteCounts,
             activeStep: updatedStep
           };
         });
@@ -558,6 +576,20 @@ export default function CinemaStreamingPage() {
       .on('broadcast', { event: 'blockbuster_vote_update' }, (payload: any) => {
         if (payload.payload?.counts) {
           setCinemaState((prev) => prev ? { ...prev, blockbusterVoteCounts: payload.payload.counts } : prev);
+        }
+      })
+      .on('broadcast', { event: 'blockbuster_vote_started' }, (payload: any) => {
+        setUserVoted(null);
+        setBlockbusterUserVoted(null);
+        if (payload.payload?.candidates) {
+          setCinemaState((prev) => prev ? {
+            ...prev,
+            phase: 'BLOCKBUSTER_VOTING',
+            timeRemaining: 60,
+            blockbusterCandidates: payload.payload.candidates,
+            blockbusterVoteCounts: { A: 0, B: 0, C: 0, D: 0 },
+            activeAd: null
+          } : null);
         }
       })
       .on('broadcast', { event: 'ad_break_ended' }, (payload: any) => {
@@ -835,6 +867,7 @@ export default function CinemaStreamingPage() {
         onToggleGallery={() => setIsGalleryOpen(!isGalleryOpen)}
         isGalleryOpen={isGalleryOpen}
         currentStep={cinemaState.movie.currentStep}
+        totalSteps={cinemaState.movie.totalSteps}
       />
 
       {/* Main Content Area */}
