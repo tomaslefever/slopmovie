@@ -85,6 +85,19 @@ export default function CinemaStreamingPage() {
   // This eliminates arbitrary periodic polling and prevents scene cutting/overlap.
   const isCompletingStageRef = useRef<boolean>(false);
 
+  // Compute the REAL remaining seconds of the current phase from the server's
+  // phaseEndsAt. Falls back to the fixed duration when the timestamp is missing
+  // or already expired (optimistic local transitions, fresh states, restarts).
+  // A late-joining viewer then syncs to the true counter instead of restarting
+  // the full phase duration.
+  const getSyncedPhaseRemaining = (phaseEndsAt: string | number | undefined, fallbackSeconds: number): number => {
+    if (!phaseEndsAt) return fallbackSeconds;
+    const endsAtMs = typeof phaseEndsAt === 'number' ? phaseEndsAt : new Date(phaseEndsAt).getTime();
+    if (!Number.isFinite(endsAtMs) || endsAtMs <= 0) return fallbackSeconds;
+    const remaining = Math.ceil((endsAtMs - Date.now()) / 1000);
+    return remaining > 0 ? Math.min(fallbackSeconds, remaining) : fallbackSeconds;
+  };
+
   const handleStageComplete = async (completedPhase: PlaybackPhase) => {
     if (!cinemaState || isCompletingStageRef.current) return;
     if (cinemaState.phase !== completedPhase) return;
@@ -110,6 +123,7 @@ export default function CinemaStreamingPage() {
           activeStep: nextStepObj || prev.activeStep,
           phase: 'PLAYING',
           timeRemaining: 15,
+          phaseEndsAt: Date.now() + 15000,
           votesA: 0,
           votesB: 0,
           hasUserVoted: null
@@ -128,13 +142,15 @@ export default function CinemaStreamingPage() {
           setCinemaState((prev) => prev ? {
             ...prev,
             phase: 'COMMERCIAL_BREAK',
-            timeRemaining: 15
+            timeRemaining: 15,
+            phaseEndsAt: Date.now() + 15000
           } : null);
         } else {
           setCinemaState((prev) => prev ? {
             ...prev,
             phase: 'VOTING',
             timeRemaining: 10,
+            phaseEndsAt: Date.now() + 10000,
             votesA: 0,
             votesB: 0
           } : null);
@@ -146,6 +162,7 @@ export default function CinemaStreamingPage() {
         ...prev,
         phase: 'VOTING',
         timeRemaining: 10,
+        phaseEndsAt: Date.now() + 10000,
         votesA: 0,
         votesB: 0
       } : null);
@@ -153,7 +170,8 @@ export default function CinemaStreamingPage() {
       setCinemaState((prev) => prev ? {
         ...prev,
         phase: 'GENERATING',
-        timeRemaining: 4
+        timeRemaining: 4,
+        phaseEndsAt: Date.now() + 4000
       } : null);
     } else if (completedPhase === 'BLOCKBUSTER_VOTING') {
       setBlockbusterUserVoted(null);
@@ -161,6 +179,7 @@ export default function CinemaStreamingPage() {
         ...prev,
         phase: 'GENERATING',
         timeRemaining: 4,
+        phaseEndsAt: Date.now() + 4000,
         blockbusterCandidates: []
       } : null);
     }
@@ -219,13 +238,13 @@ export default function CinemaStreamingPage() {
     if (!cinemaState || cinemaState.phase !== 'PLAYING' || cinemaState.isPaused) return;
 
     const stepNum = cinemaState.movie?.currentStep;
-    console.log(`[CinemaPage] Scene started (Step ${stepNum}). Running 15s playback timeout...`);
+    console.log(`[CinemaPage] Scene started (Step ${stepNum}). Running playback timeout...`);
 
     const startTime = Date.now();
-    const durationSec = 15;
+    // Sync to the server's real remaining time; fall back to 15s when unknown
+    const durationSec = getSyncedPhaseRemaining(cinemaState.phaseEndsAt, 15);
 
-    // Reset local timeRemaining to 15s
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: 15 } : prev);
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
 
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -238,7 +257,7 @@ export default function CinemaStreamingPage() {
 
       if (remaining <= 0) {
         clearInterval(timer);
-        console.log(`[CinemaPage] 15s playback window elapsed for Step ${stepNum}. Transitioning to VOTING...`);
+        console.log(`[CinemaPage] Playback window elapsed for Step ${stepNum}. Transitioning to VOTING...`);
         handleStageComplete('PLAYING');
       }
     }, 250);
@@ -251,13 +270,12 @@ export default function CinemaStreamingPage() {
   useEffect(() => {
     if (!cinemaState || cinemaState.phase !== 'VOTING' || cinemaState.isPaused) return;
 
-    console.log('[CinemaPage] Voting started. Running 10s voting timeout...');
+    console.log('[CinemaPage] Voting started. Running voting timeout...');
 
     const startTime = Date.now();
-    const durationSec = 10;
+    const durationSec = getSyncedPhaseRemaining(cinemaState.phaseEndsAt, 10);
 
-    // Reset local timeRemaining to 10s
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: 10 } : prev);
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
 
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -283,13 +301,12 @@ export default function CinemaStreamingPage() {
   useEffect(() => {
     if (!cinemaState || cinemaState.phase !== 'COMMERCIAL_BREAK' || cinemaState.isPaused) return;
 
-    console.log('[CinemaPage] Commercial break started. Running 15s commercial timeout...');
+    console.log('[CinemaPage] Commercial break started. Running commercial timeout...');
 
     const startTime = Date.now();
-    const durationSec = 15;
+    const durationSec = getSyncedPhaseRemaining(cinemaState.phaseEndsAt, 15);
 
-    // Reset local timeRemaining to 15s
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: 15 } : prev);
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
 
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -315,13 +332,14 @@ export default function CinemaStreamingPage() {
   useEffect(() => {
     if (!cinemaState || cinemaState.phase !== 'BLOCKBUSTER_VOTING' || cinemaState.isPaused) return;
 
-    console.log('[CinemaPage] Next-blockbuster vote started. Running 60s voting timeout...');
+    console.log('[CinemaPage] Next-blockbuster vote started. Running voting timeout...');
 
     const startTime = Date.now();
-    const durationSec = 60;
+    // CRITICAL SYNC: a viewer joining mid-vote must count down the REAL
+    // remaining time (server phaseEndsAt), not a fresh 60s.
+    const durationSec = getSyncedPhaseRemaining(cinemaState.phaseEndsAt, 60);
 
-    // Reset local timeRemaining to 60s
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: 60 } : prev);
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
 
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -500,7 +518,7 @@ export default function CinemaStreamingPage() {
           };
         });
       })
-      .on('broadcast', { event: 'new_step' }, (payload: { payload: { step: MovieStep; currentStep: number } }) => {
+      .on('broadcast', { event: 'new_step' }, (payload: { payload: { step: MovieStep; currentStep: number; phaseEndsAt?: string | number } }) => {
         setUserVoted(null);
         if (payload.payload.step) {
           setCinemaState((prev) => {
@@ -521,6 +539,7 @@ export default function CinemaStreamingPage() {
               activeStep: payload.payload.step,
               phase: 'PLAYING',
               timeRemaining: payload.payload.step.duration || 15,
+              phaseEndsAt: payload.payload.phaseEndsAt || Date.now() + ((payload.payload.step.duration || 15) * 1000),
               votesA: 0,
               votesB: 0,
               hasUserVoted: null
@@ -589,6 +608,7 @@ export default function CinemaStreamingPage() {
             ...prev,
             phase: 'BLOCKBUSTER_VOTING',
             timeRemaining: 60,
+            phaseEndsAt: payload.payload.phaseEndsAt || Date.now() + 60000,
             blockbusterCandidates: payload.payload.candidates,
             blockbusterVoteCounts: { A: 0, B: 0, C: 0, D: 0 },
             activeAd: null
@@ -630,6 +650,7 @@ export default function CinemaStreamingPage() {
               activeStep: payload.payload.movie.steps[0],
               phase: 'PLAYING',
               timeRemaining: 15,
+              phaseEndsAt: Date.now() + 15000,
               votesA: 0,
               votesB: 0,
               hasUserVoted: null
