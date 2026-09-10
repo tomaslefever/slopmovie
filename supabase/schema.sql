@@ -221,6 +221,8 @@ create table if not exists public.cinema_state (
   phase_started_at timestamptz default now(),
   phase_ends_at timestamptz default (now() + interval '15 seconds'),
   phase_duration int default 15,
+  video_model text,
+  video_resolution text,
   updated_at timestamptz not null default now()
 );
 

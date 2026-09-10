@@ -28,6 +28,12 @@ export async function GET(request: Request) {
   cinemaEngine.adoptVideoModel(liveState?.videoModel);
   cinemaEngine.adoptVideoResolution(liveState?.videoResolution);
 
+  // If the live-state movie id points at an archived/completed movie (stale pointer),
+  // fall back to the newest streaming/paused movie so the same old film is never resurrected.
+  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0 || activeMovie.status === 'completed') {
+    activeMovie = await loadActiveMovieFromDb();
+  }
+
   // If no movie exists in DB yet, initialize one
   if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) {
     activeMovie = await cinemaEngine.initializeMovie();
@@ -83,6 +89,8 @@ export async function GET(request: Request) {
     id: m.id,
     title: m.title,
     genre: m.genre,
+    tagline: m.tagline || '',
+    initialPlot: m.initialPlot || '',
     currentStep: m.currentStep,
     totalSteps: m.totalSteps,
     stepsCount: m.steps.length,
@@ -311,6 +319,40 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success,
         videoResolution: cinemaEngine.videoResolution,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'create_movie') {
+      const newMovie = await cinemaEngine.startNextBlockbusterMovie(prompt);
+      return NextResponse.json({
+        success: true,
+        movie: newMovie,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'update_movie') {
+      const { movieId, fields } = body;
+      if (!movieId || !fields || typeof fields !== 'object') {
+        return NextResponse.json({ error: 'movieId y fields son requeridos' }, { status: 400 });
+      }
+      const success = await cinemaEngine.updateMovieDetails(movieId, fields);
+      return NextResponse.json({
+        success,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'delete_movie') {
+      const { movieId } = body;
+      if (!movieId) {
+        return NextResponse.json({ error: 'movieId es requerido' }, { status: 400 });
+      }
+      const result = await cinemaEngine.deleteMovie(movieId);
+      return NextResponse.json({
+        success: result.success,
+        movie: result.newMovie,
         state: cinemaEngine.getState()
       });
     }

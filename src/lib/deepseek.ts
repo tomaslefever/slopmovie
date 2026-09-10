@@ -294,6 +294,7 @@ MANDATORY RULES:
 3. PROPS & CHARACTERS: Every initial character must have their signature linked prop (ownerCharacterId) for consistent visual prompting.
 4. SUBTITLES: The first step must include timed "subtitles" (start in seconds, end in seconds, speaker, text in English, and optional textEs in Spanish).
 5. ONLY NECESSARY PROPS: In "firstStep.activeProps", specify ONLY the prop ID(s) that are physically visible or actively held/used in this opening 15-second scene. DO NOT pass all props. If no prop is visible in the shot, "activeProps" must be empty [].
+6. NARRATIVE ARC: The 100-step film follows a strict act structure that every step must respect — steps 1-19 SETUP (present the world, the characters and the central problem), steps 20-79 DEVELOPMENT (escalating conflict, twists and new characters), steps 80-96 DENOUEMENT (converging resolution), steps 97-99 EPIC FINALE (maximum-intensity climax), and step 100 THE END (definitive closing scene, no new conflicts). "masterArcThread" and "initialPlot" must be designed so the story can be resolved by step 100.
 
 Respond ONLY with a valid JSON object matching this schema:
 {
@@ -529,6 +530,27 @@ Respond ONLY with a valid JSON object matching this schema:
   };
 }
 
+/**
+ * Narrative arc directive for a given step number. The 100-step film follows a
+ * strict act structure: setup (1-19), development (20-79), denouement (80-96),
+ * epic finale (97-99) and THE END at step 100.
+ */
+export function getNarrativeArcDirective(stepNum: number): string {
+  if (stepNum >= 100) {
+    return `NARRATIVE ARC PHASE — THE END (FINAL SCENE): Step 100 is the ABSOLUTE and definitive ending of the film. The story reaches its emotional and thematic conclusion HERE: the central conflict is fully resolved, the antagonist's fate is sealed, every loose thread closes, and the film ends with an epic cathartic final image. Do NOT introduce any new conflict, character or cliffhanger. The two voting options are the audience's final artistic choice between two flavors of the closing moment (e.g. bittersweet vs hopeful, sacrifice vs reunion) — BOTH options must still END the story.`;
+  }
+  if (stepNum >= 97) {
+    return `NARRATIVE ARC PHASE — EPIC FINALE (steps 97-99, building toward the ending at step 100): This is the climax of the entire film. Raise intensity to the absolute maximum: the ultimate confrontation, the final battle, the highest-stakes decision. Converge every plot thread, character and prop introduced so far. The outcome of this scene must lead DIRECTLY toward the definitive ending in step 100.`;
+  }
+  if (stepNum >= 80) {
+    return `NARRATIVE ARC PHASE — DENOUEMENT / RESOLUTION (steps 80-99): The story is in its closing act. Conflicts begin to resolve: alliances are tested, secrets are revealed, the antagonist's endgame takes its final form, and stakes become personal and irreversible. Converge loose threads toward the epic finale of the last scenes (97-99) and the definitive ending at step 100. Each scene raises tension while moving the plot toward its conclusion.`;
+  }
+  if (stepNum >= 20) {
+    return `NARRATIVE ARC PHASE — DEVELOPMENT (steps 20-79): The story is in its middle act. Escalate conflict: complications, betrayals, twists and mid-point reversals. Deepen character relationships and raise the stakes with every scene. New characters and their signature props may be introduced here. Keep every scene connected to the master plot while building momentum toward the final act.`;
+  }
+  return `NARRATIVE ARC PHASE — SETUP / EXPOSITION (steps 1-19): The story is in its opening act. These scenes must plant the problem and present the situation: introduce the world, the protagonist, the central conflict and the stakes. Establish mood, tone and the rules of the universe. Near step 20 the protagonist must be locked into the main quest at the point of no return.`;
+}
+
 export async function generateNextStepWithDeepSeek(
   movie: Movie,
   chosenOptionId: 'A' | 'B',
@@ -553,6 +575,8 @@ Carefully review their suggestions. If any comment features an intriguing twist,
       const systemPrompt = `You are an elite Interactive Cinema AI Director. The film spans a coherent 100-step arc.
 The audience just voted for OPTION ${chosenOptionId}: "${chosenOption.title}" (${chosenOption.text}).
 You are generating STEP ${nextStepNum} of 100 (exactly a 15-second cinematic clip for MiniMax H3-Max in 480p 16:9).
+
+${getNarrativeArcDirective(nextStepNum)}
 
 CRITICAL REQUIREMENTS:
 1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, dialogue snippet, subtitle, option, and hook must be in evocative, cinematic English.
@@ -903,6 +927,78 @@ Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p
     // Tactical evasion / shootout in shadows: No specific gadget on screen
     activeProps = [];
     activePropImages = [];
+  }
+
+  // ── NARRATIVE ARC OVERRIDE: Finale steps converge into the epic ending (step 100 = THE END) ──
+  if (nextStepNum >= 97) {
+    const finalChar = movie.bible.characters[0] || char;
+    const finalProp = movie.bible.props[0] || prop;
+    const isLastScene = nextStepNum >= 100;
+
+    if (isLastScene) {
+      synopsis = `THE END. The fate of ${finalChar.name} and the ${finalProp.name} is decided as every audience choice across the entire 100-step journey converges into one defining, cathartic moment. The conflict is resolved and the film closes on an epic final image.`;
+      visualPrompt = `Epic finale shot of ${finalChar.name} (${finalChar.visualTraits}) at the end of the journey, the ${finalProp.name} (${finalProp.visualAppearance}) in its final state, the story's central conflict resolved, majestic golden-hour cinematic lighting, 480p 16:9 anamorphic film`;
+      subtitles = [
+        {
+          start: 1.0,
+          end: 7.0,
+          speaker: finalChar.name,
+          text: "It is finished. Every choice led us to this exact moment.",
+          textEs: "Se acabó. Cada elección nos trajo exactamente a este momento."
+        },
+        {
+          start: 7.5,
+          end: 14.0,
+          speaker: finalChar.name,
+          text: "This is how our story ends. Thank you for watching.",
+          textEs: "Así termina nuestra historia. Gracias por mirar."
+        }
+      ];
+    } else {
+      synopsis = `EPIC FINALE. The final confrontation erupts: ${finalChar.name} unleashes everything in the climactic battle that will decide the fate of the ${finalProp.name} and every life bound to it. The story surges toward its definitive ending.`;
+      visualPrompt = `Maximum-intensity climactic battle, ${finalChar.name} (${finalChar.visualTraits}) wielding the ${finalProp.name} (${finalProp.visualAppearance}), converging plot threads, epic scale explosion of light and shadow, cinematic 480p 16:9 anamorphic film`;
+      subtitles = [
+        {
+          start: 1.0,
+          end: 7.0,
+          speaker: finalChar.name,
+          text: "This is the final battle. Everything ends here!",
+          textEs: "¡Esta es la batalla final! ¡Todo termina aquí!"
+        },
+        {
+          start: 7.5,
+          end: 14.0,
+          speaker: finalChar.name,
+          text: "Make the last choice of the war.",
+          textEs: "Tomen la última elección de la guerra."
+        }
+      ];
+    }
+
+    optionA = {
+      id: "A",
+      title: isLastScene ? "A Bittersweet Farewell" : "Head-On Final Assault",
+      text: isLastScene
+        ? `The story closes on a quiet, bittersweet farewell as ${finalChar.name} walks into the horizon.`
+        : `${finalChar.name} launches a full frontal assault against the antagonist's stronghold.`,
+      dramaticHook: isLastScene ? "An emotional, melancholic final beat." : "Everything on the line in one decisive strike.",
+      expectedConsequence: isLastScene
+        ? "The film ends with a melancholic yet hopeful resolution."
+        : "A colossal, all-or-nothing confrontation.",
+      votes: 0
+    };
+    optionB = {
+      id: "B",
+      title: isLastScene ? "A Triumphant Reunion" : "Decapitation Strike",
+      text: isLastScene
+        ? `The story closes on a triumphant reunion as ${finalChar.name} is embraced by the allies who survived.`
+        : `${finalChar.name} infiltrates the heart of the enemy to cut off the threat at its source.`,
+      dramaticHook: isLastScene ? "A cathartic, uplifting final image." : "High risk with the highest reward.",
+      expectedConsequence: isLastScene
+        ? "The film ends on a celebratory, triumphant note."
+        : "A surgical strike that can end the war instantly.",
+      votes: 0
+    };
   }
 
   return {

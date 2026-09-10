@@ -784,7 +784,7 @@ export async function deleteImmersiveAdFromDb(adId: string): Promise<boolean> {
 
 
 /**
- * Mark all currently streaming movies as 'completed' so they are
+ * Mark all currently streaming/paused movies as 'completed' so they are
  * not restored on the next initializeMovie() call. Used when doing
  * a force-reset to switch from mockup mode to real AI generation.
  */
@@ -796,13 +796,62 @@ export async function archiveAllStreamingMovies(): Promise<void> {
     const { error } = await supabase
       .from('movies')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
-      .eq('status', 'streaming');
+      .in('status', ['streaming', 'paused']);
 
     if (error) {
       logSupabaseError('archiveAllStreamingMovies', error);
     }
   } catch (err) {
     console.error('[Supabase] Exception in archiveAllStreamingMovies:', err);
+  }
+}
+
+/**
+ * Update editable movie details (title, genre, tagline, initial plot).
+ */
+export async function updateMovieInDb(
+  movieId: string,
+  fields: { title?: string; genre?: string; tagline?: string; initialPlot?: string }
+): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  try {
+    const update: Record<string, string> = {};
+    if (fields.title !== undefined) update.title = fields.title;
+    if (fields.genre !== undefined) update.genre = fields.genre;
+    if (fields.tagline !== undefined) update.tagline = fields.tagline;
+    if (fields.initialPlot !== undefined) update.initial_plot = fields.initialPlot;
+
+    const { error } = await supabase.from('movies').update(update).eq('id', movieId);
+    if (error) {
+      logSupabaseError('updateMovieInDb', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Exception in updateMovieInDb:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete a movie and all its dependent rows (steps, props, chat, votes cascade).
+ */
+export async function deleteMovieFromDb(movieId: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('movies').delete().eq('id', movieId);
+    if (error) {
+      logSupabaseError('deleteMovieFromDb', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Exception in deleteMovieFromDb:', err);
+    return false;
   }
 }
 
@@ -868,6 +917,8 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
       is_live: payload.isLive,
       is_paused: payload.isPaused,
       is_generation_paused: payload.isGenerationPaused,
+      video_model: payload.videoModel ?? null,
+      video_resolution: payload.videoResolution ?? null,
       active_ad_id: payload.activeAd?.id || null,
       ads_config: payload.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
       selected_option: payload.selectedOption || null,
@@ -941,6 +992,9 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
 /**
  * Load live cinema state from Supabase.
  * Checks public.cinema_state first, falling back to public.movies.bible.liveState.
+ * When cinema_state exists but lacks the video config (row predates the
+ * video_model/video_resolution columns), those fields are backfilled from
+ * movies.bible.liveState so the director's selection is never lost.
  */
 export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveCinemaStateRecord | null> {
   const supabase = getSupabaseServerClient();
@@ -954,7 +1008,7 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
     }
     const { data, error } = await query.maybeSingle();
     if (!error && data) {
-      return {
+      const record: LiveCinemaStateRecord = {
         movieId: data.movie_id,
         phase: data.phase as PlaybackPhase,
         timeRemaining: data.time_remaining,
@@ -977,12 +1031,33 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
         workerHeartbeat: data.worker_heartbeat,
         updatedAt: data.updated_at
       };
+
+      // Backfill video config from the bible dual-write when cinema_state predates the columns
+      if (record.videoModel == null || record.videoResolution == null) {
+        const bibleState = await loadBibleLiveState(supabase, record.movieId);
+        if (bibleState) {
+          record.videoModel = record.videoModel ?? bibleState.videoModel ?? null;
+          record.videoResolution = record.videoResolution ?? bibleState.videoResolution ?? null;
+        }
+      }
+
+      return record;
     }
   } catch {
     // Non-blocking fallback
   }
 
   // 2. Fallback to movies.bible.liveState
+  return loadBibleLiveState(supabase, movieId);
+}
+
+/**
+ * Fallback live-state reader: public.movies.bible.liveState.
+ */
+async function loadBibleLiveState(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  movieId?: string
+): Promise<LiveCinemaStateRecord | null> {
   try {
     let query = supabase.from('movies').select('id, bible').in('status', ['streaming', 'paused']);
     if (movieId) {

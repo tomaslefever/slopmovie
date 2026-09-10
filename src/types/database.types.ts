@@ -79,6 +79,8 @@ export type Database = {
           time_remaining: number
           total_audience: number
           updated_at: string
+          video_model: string | null
+          video_resolution: string | null
           votes_a: number
           votes_b: number
           was_random_pick: boolean
@@ -102,6 +104,8 @@ export type Database = {
           time_remaining?: number
           total_audience?: number
           updated_at?: string
+          video_model?: string | null
+          video_resolution?: string | null
           votes_a?: number
           votes_b?: number
           was_random_pick?: boolean
@@ -125,6 +129,8 @@ export type Database = {
           time_remaining?: number
           total_audience?: number
           updated_at?: string
+          video_model?: string | null
+          video_resolution?: string | null
           votes_a?: number
           votes_b?: number
           was_random_pick?: boolean

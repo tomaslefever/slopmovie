@@ -30,7 +30,9 @@ import {
   recordUserVoteInDb,
   voteChatMessageInDb,
   loadTopVotedCommentsFromDb,
-  loadUserVotedCommentIdsFromDb
+  loadUserVotedCommentIdsFromDb,
+  updateMovieInDb,
+  deleteMovieFromDb
 } from './supabase/db';
 import { generateAndStorePropReferenceImage } from './supabase/storage';
 
@@ -365,6 +367,8 @@ class CinemaOrchestrator {
     // Persist movie and initial step to Supabase
     await persistMovie(this.movie);
     await persistMovieStep(this.movie.id, firstStepWithVideo);
+    // Refresh live state so cinema_state.movie_id points at THIS movie (prevents stale-movie resurrection)
+    await this.persistCurrentStateToSupabase();
 
     this.addSystemMessage(`🎬 Starting new interactive film: "${this.movie.title}"`);
     return this.movie;
@@ -559,7 +563,8 @@ class CinemaOrchestrator {
         this.adsConfig.autoAdsEnabled &&
         currentStepCount > 0 &&
         currentStepCount % this.adsConfig.adIntervalSteps === 0 &&
-        currentStepCount !== this.adsConfig.lastAdStep
+        currentStepCount !== this.adsConfig.lastAdStep &&
+        currentStepCount < 97 // Never break during the epic finale: scene 100 must end the film
       ) {
         this.adsConfig.lastAdStep = currentStepCount;
         // Trigger commercial break immediately after this scene plays.
@@ -1268,6 +1273,7 @@ class CinemaOrchestrator {
     const freshPrompt = customPrompt || `force_reset_${Date.now()}`;
     const newMovie = await this.initializeMovie(freshPrompt);
     broadcastCinemaEvent('new_movie_started', { movie: newMovie });
+    await this.broadcastStateSnapshot();
     return newMovie;
   }
 
@@ -1608,6 +1614,67 @@ class CinemaOrchestrator {
 
     await this.broadcastStateSnapshot();
     return true;
+  }
+
+  /**
+   * Director edits movie details (title, genre, tagline, initial plot).
+   * Updates the in-memory copy (active or archived) and the database.
+   */
+  public async updateMovieDetails(
+    movieId: string,
+    fields: { title?: string; genre?: string; tagline?: string; initialPlot?: string }
+  ): Promise<boolean> {
+    const clean: Record<string, string> = {};
+    if (typeof fields.title === 'string' && fields.title.trim()) clean.title = fields.title.trim();
+    if (typeof fields.genre === 'string' && fields.genre.trim()) clean.genre = fields.genre.trim();
+    if (typeof fields.tagline === 'string') clean.tagline = fields.tagline.trim();
+    if (typeof fields.initialPlot === 'string') clean.initialPlot = fields.initialPlot.trim();
+    if (Object.keys(clean).length === 0) return false;
+
+    const target = this.movie?.id === movieId
+      ? this.movie
+      : this.completedMovies.find(m => m.id === movieId) || null;
+
+    if (target) {
+      if (clean.title !== undefined) target.title = clean.title;
+      if (clean.genre !== undefined) target.genre = clean.genre;
+      if (clean.tagline !== undefined) target.tagline = clean.tagline;
+      if (clean.initialPlot !== undefined) target.initialPlot = clean.initialPlot;
+    }
+
+    const updated = await updateMovieInDb(movieId, clean);
+    if (!updated) return false;
+
+    if (target) {
+      this.addSystemMessage(`✏️ Director updated movie details${target.title ? ` for "${target.title}"` : ''}.`);
+      this.broadcastStateSnapshot();
+    }
+    return true;
+  }
+
+  /**
+   * Director deletes a movie from the library.
+   * Deleting the currently streaming movie starts a fresh film automatically.
+   */
+  public async deleteMovie(movieId: string): Promise<{ success: boolean; newMovie?: Movie }> {
+    const isActive = this.movie?.id === movieId;
+
+    const deleted = await deleteMovieFromDb(movieId);
+    if (!deleted) return { success: false };
+
+    this.completedMovies = this.completedMovies.filter(m => m.id !== movieId);
+
+    if (isActive) {
+      this.movie = null;
+      this.activeAd = null;
+      this.addSystemMessage(`🗑️ Director deleted the currently streaming movie. Generating a fresh blockbuster film...`);
+      const newMovie = await this.startNextBlockbusterMovie();
+      return { success: true, newMovie };
+    }
+
+    this.addSystemMessage(`🗑️ Director deleted movie "${movieId}" from the library.`);
+    await this.broadcastStateSnapshot();
+    return { success: true };
   }
 
   /**

@@ -23,7 +23,9 @@ import {
   Shuffle,
   RotateCcw,
   History,
-  PlayCircle
+  PlayCircle,
+  Pencil,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
@@ -68,6 +70,16 @@ export default function AdminDashboardPage() {
   const [isJumpingStep, setIsJumpingStep] = useState(false);
   const [videoModel, setVideoModel] = useState<string>('minimax/h3-max/reference-to-video');
   const [videoResolution, setVideoResolution] = useState<string>('');
+
+  // Movie edit state
+  const [isEditingMovie, setIsEditingMovie] = useState(false);
+  const [editMovieTitle, setEditMovieTitle] = useState('');
+  const [editMovieGenre, setEditMovieGenre] = useState('');
+  const [editMovieTagline, setEditMovieTagline] = useState('');
+  const [editMoviePlot, setEditMoviePlot] = useState('');
+  const [isSavingMovie, setIsSavingMovie] = useState(false);
+  const [isCreatingMovie, setIsCreatingMovie] = useState(false);
+  const [isDeletingMovie, setIsDeletingMovie] = useState(false);
 
   // New Ad Form State
   const [newBrandName, setNewBrandName] = useState('');
@@ -502,6 +514,121 @@ export default function AdminDashboardPage() {
       }
     } catch {
       showFeedback('Error de red al cambiar la resolución de video');
+    }
+  };
+
+  // Create a brand new movie and stream it immediately
+  const handleCreateMovie = async (premise?: string) => {
+    audioCues.playClick();
+    if (!confirm('🎬 ¿Generar una película nueva ahora y transmitirla en vivo? La película actual se archivará.')) return;
+    setIsCreatingMovie(true);
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_movie', prompt: premise?.trim() || undefined })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCinemaState((prev: any) => prev ? { ...prev, movie: data.movie, ...data.state } : prev);
+        setSelectedMovieId(data.movie?.id || '');
+        setIsEditingMovie(false);
+        showFeedback('🎬 Nueva película generada y transmitiendo en vivo.');
+        fetchData();
+      } else {
+        showFeedback('Error al crear la nueva película');
+      }
+    } catch {
+      showFeedback('Error de red al crear la película');
+    } finally {
+      setIsCreatingMovie(false);
+    }
+  };
+
+  // Open the edit form pre-filled with the movie currently in emission
+  const openEditMovie = () => {
+    audioCues.playClick();
+    if (!cinemaState?.movie) return;
+    setEditMovieTitle(cinemaState.movie.title || '');
+    setEditMovieGenre(cinemaState.movie.genre || '');
+    setEditMovieTagline(cinemaState.movie.tagline || '');
+    setEditMoviePlot(cinemaState.movie.initialPlot || '');
+    setIsEditingMovie(true);
+  };
+
+  // Save edited movie details
+  const handleSaveMovieEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cinemaState?.movie) return;
+    if (!editMovieTitle.trim()) return;
+
+    setIsSavingMovie(true);
+    audioCues.playClick();
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_movie',
+          movieId: cinemaState.movie.id,
+          fields: {
+            title: editMovieTitle.trim(),
+            genre: editMovieGenre.trim(),
+            tagline: editMovieTagline.trim(),
+            initialPlot: editMoviePlot.trim()
+          }
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setIsEditingMovie(false);
+          showFeedback('✏️ Película actualizada.');
+          fetchData();
+        } else {
+          showFeedback('No se pudo actualizar la película');
+        }
+      } else {
+        showFeedback('Error al actualizar la película');
+      }
+    } catch {
+      showFeedback('Error de red al actualizar la película');
+    } finally {
+      setIsSavingMovie(false);
+    }
+  };
+
+  // Delete the movie currently in emission
+  const handleDeleteMovie = async () => {
+    audioCues.playClick();
+    if (!cinemaState?.movie) return;
+    if (!confirm(`🗑️ ¿Eliminar definitivamente "${cinemaState.movie.title}"? Sus escenas, votos y chat se borrarán.`)) return;
+
+    setIsDeletingMovie(true);
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_movie', movieId: cinemaState.movie.id })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setCinemaState((prev: any) => prev ? { ...prev, movie: data.movie || prev.movie, ...data.state } : prev);
+          if (data.movie?.id) setSelectedMovieId(data.movie.id);
+          setIsEditingMovie(false);
+          showFeedback(data.movie ? '🗑️ Película eliminada. Nueva película generada.' : '🗑️ Película eliminada de la biblioteca.');
+          fetchData();
+        } else {
+          showFeedback('No se pudo eliminar la película');
+        }
+      } else {
+        showFeedback('Error al eliminar la película');
+      }
+    } catch {
+      showFeedback('Error de red al eliminar la película');
+    } finally {
+      setIsDeletingMovie(false);
     }
   };
 
@@ -1312,8 +1439,117 @@ export default function AdminDashboardPage() {
                         <span>Replay</span>
                       </button>
                     </div>
+
+                    {/* Movie Management Actions */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-mono uppercase tracking-wider text-transparent select-none hidden sm:block">
+                        Película
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleCreateMovie()}
+                          disabled={isCreatingMovie}
+                          className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] flex-shrink-0 active:scale-95 h-[38px]"
+                          title="Generar una película nueva y transmitirla en vivo"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-black" />
+                          <span>{isCreatingMovie ? 'Creando...' : 'Nueva'}</span>
+                        </button>
+                        <button
+                          onClick={openEditMovie}
+                          className="px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 disabled:opacity-40 text-cyan-300 border border-cyan-500/30 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all flex-shrink-0 active:scale-95 h-[38px]"
+                          title="Editar título, género, tagline y sinopsis de la película en emisión"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          onClick={handleDeleteMovie}
+                          disabled={isDeletingMovie}
+                          className="px-3 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 disabled:opacity-40 text-red-400 border border-red-500/20 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all flex-shrink-0 active:scale-95 h-[38px]"
+                          title="Eliminar definitivamente la película en emisión"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>{isDeletingMovie ? '...' : 'Eliminar'}</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
+
+                {/* Inline Movie Edit Form */}
+                {isEditingMovie && cinemaState?.movie && (
+                  <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[11px] font-mono font-bold uppercase tracking-widest text-cyan-300 flex items-center gap-2">
+                        <Pencil className="w-3.5 h-3.5" /> Editar Película en Emisión
+                      </h4>
+                      <button
+                        onClick={() => setIsEditingMovie(false)}
+                        className="p-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 transition-colors"
+                        title="Cerrar edición"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <form onSubmit={handleSaveMovieEdit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Título *</label>
+                        <input
+                          type="text"
+                          required
+                          value={editMovieTitle}
+                          onChange={e => setEditMovieTitle(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-cyan-400 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Género</label>
+                        <input
+                          type="text"
+                          value={editMovieGenre}
+                          onChange={e => setEditMovieGenre(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-cyan-400 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Tagline</label>
+                        <input
+                          type="text"
+                          value={editMovieTagline}
+                          onChange={e => setEditMovieTagline(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-cyan-400 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Sinopsis / Trama inicial</label>
+                        <input
+                          type="text"
+                          value={editMoviePlot}
+                          onChange={e => setEditMoviePlot(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-cyan-400 focus:outline-none"
+                        />
+                      </div>
+                      <div className="md:col-span-2 flex items-center gap-2 pt-1">
+                        <button
+                          type="submit"
+                          disabled={isSavingMovie}
+                          className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-black font-mono font-bold text-[11px] uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] active:scale-95"
+                        >
+                          <Check className="w-3.5 h-3.5 text-black" />
+                          <span>{isSavingMovie ? 'Guardando...' : 'Guardar Cambios'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingMovie(false)}
+                          className="px-5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-mono font-bold text-[11px] uppercase tracking-widest transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
 
                 {/* Currently Broadcasting Movie Overview Banner */}
                 <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
