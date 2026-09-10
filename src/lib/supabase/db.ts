@@ -1325,7 +1325,12 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
           blockbusterCandidates: (bibleState.blockbusterCandidates && bibleState.blockbusterCandidates.length > 0)
             ? bibleState.blockbusterCandidates
             : (record.blockbusterCandidates ?? []),
-          blockbusterVoteCounts: bibleState.blockbusterVoteCounts ?? record.blockbusterVoteCounts ?? null,
+          blockbusterVoteCounts: (record.blockbusterVoteCounts || bibleState?.blockbusterVoteCounts) ? {
+            A: Math.max(record.blockbusterVoteCounts?.A || 0, bibleState?.blockbusterVoteCounts?.A || 0),
+            B: Math.max(record.blockbusterVoteCounts?.B || 0, bibleState?.blockbusterVoteCounts?.B || 0),
+            C: Math.max(record.blockbusterVoteCounts?.C || 0, bibleState?.blockbusterVoteCounts?.C || 0),
+            D: Math.max(record.blockbusterVoteCounts?.D || 0, bibleState?.blockbusterVoteCounts?.D || 0),
+          } : null,
           activeAd: bibleFresh ? (bibleState.activeAd || null) : undefined,
           adsConfig: bibleFresh ? bibleState.adsConfig : record.adsConfig,
           selectedOption: bibleFresh ? bibleState.selectedOption : record.selectedOption,

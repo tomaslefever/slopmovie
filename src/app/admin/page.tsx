@@ -245,6 +245,22 @@ export default function AdminDashboardPage() {
               }
             }
           })
+          .on('broadcast', { event: 'blockbuster_vote_update' }, (payload: any) => {
+            if (payload.payload?.counts) {
+              setCinemaState((prev: any) => prev ? { ...prev, blockbusterVoteCounts: payload.payload.counts } : prev);
+            }
+          })
+          .on('broadcast', { event: 'blockbuster_vote_started' }, (payload: any) => {
+            if (payload.payload?.candidates) {
+              setCinemaState((prev: any) => prev ? {
+                ...prev,
+                phase: 'BLOCKBUSTER_VOTING',
+                timeRemaining: 60,
+                blockbusterCandidates: payload.payload.candidates,
+                blockbusterVoteCounts: { A: 0, B: 0, C: 0, D: 0 }
+              } : prev);
+            }
+          })
           .subscribe();
 
         // ── Supabase Realtime (postgres_changes): refresh admin state the instant
@@ -262,6 +278,7 @@ export default function AdminDashboardPage() {
           .on('postgres_changes', { event: '*', schema: 'public', table: 'movies' }, debouncedFetch)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'movie_steps' }, debouncedFetch)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'immersive_ads' }, debouncedFetch)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'blockbuster_votes' }, debouncedFetch)
           .subscribe();
 
         return () => {
@@ -1608,6 +1625,73 @@ export default function AdminDashboardPage() {
                 )}
               </button>
             </div>
+
+            {/* Blockbuster Candidates Live Vote Monitor (Admin) */}
+            {cinemaState?.phase === 'BLOCKBUSTER_VOTING' && Array.isArray(cinemaState?.blockbusterCandidates) && cinemaState.blockbusterCandidates.length > 0 && (
+              <div className="p-6 rounded-2xl border border-purple-400/40 bg-purple-950/20 backdrop-blur-md space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2">
+                    <Radio className="w-4 h-4 text-purple-400 animate-pulse" />
+                    <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-purple-200">
+                      Conteo de Votos en Vivo · 4 Películas Candidatas ({cinemaState.timeRemaining || 0}s restantes)
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-neutral-300 bg-purple-500/20 px-2.5 py-1 rounded-full border border-purple-400/30">
+                    Total: {(Number(cinemaState.blockbusterVoteCounts?.A) || 0) + (Number(cinemaState.blockbusterVoteCounts?.B) || 0) + (Number(cinemaState.blockbusterVoteCounts?.C) || 0) + (Number(cinemaState.blockbusterVoteCounts?.D) || 0)} votos
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {cinemaState.blockbusterCandidates.map((cand: any) => {
+                    const votes = Number(cinemaState.blockbusterVoteCounts?.[cand.id as 'A' | 'B' | 'C' | 'D']) || 0;
+                    const totalVotes = ((Number(cinemaState.blockbusterVoteCounts?.A) || 0) + (Number(cinemaState.blockbusterVoteCounts?.B) || 0) + (Number(cinemaState.blockbusterVoteCounts?.C) || 0) + (Number(cinemaState.blockbusterVoteCounts?.D) || 0));
+                    const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
+                    const isLead = votes > 0 && votes === Math.max(
+                      Number(cinemaState.blockbusterVoteCounts?.A) || 0,
+                      Number(cinemaState.blockbusterVoteCounts?.B) || 0,
+                      Number(cinemaState.blockbusterVoteCounts?.C) || 0,
+                      Number(cinemaState.blockbusterVoteCounts?.D) || 0
+                    );
+
+                    return (
+                      <div key={cand.id} className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
+                        isLead 
+                          ? 'bg-purple-900/40 border-purple-400/60 shadow-[0_0_20px_rgba(168,85,247,0.25)]' 
+                          : 'bg-neutral-900/60 border-white/10'
+                      }`}>
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="w-7 h-7 rounded-lg bg-purple-500 text-black font-mono font-black text-xs flex items-center justify-center shadow-md">
+                              {cand.id}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {isLead && (
+                                <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300">
+                                  👑 LIDER
+                                </span>
+                              )}
+                              <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-neutral-300">
+                                {cand.genre}
+                              </span>
+                            </div>
+                          </div>
+                          <h5 className="text-xs font-bold text-white line-clamp-1">{cand.title}</h5>
+                          <p className="text-[11px] text-neutral-400 line-clamp-2 mt-1 leading-relaxed">{cand.logline}</p>
+                        </div>
+                        <div className="space-y-1.5 pt-2 border-t border-white/10">
+                          <div className="flex justify-between text-[11px] font-mono text-neutral-300">
+                            <span className="font-bold">{votes} {votes === 1 ? 'voto' : 'votos'}</span>
+                            <span className="font-bold text-purple-300">{pct}%</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-black/60 overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-purple-500 to-fuchsia-400 transition-all duration-300" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Live Playback & AI Generation Controller Card */}
             <div className={`p-6 rounded-2xl border transition-all ${

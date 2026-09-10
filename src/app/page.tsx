@@ -892,7 +892,8 @@ export default function CinemaStreamingPage() {
         body: JSON.stringify({
           action: 'blockbuster_vote',
           optionId: candidateId,
-          userId
+          userId,
+          movieId: cinemaState.movie?.id
         })
       });
 

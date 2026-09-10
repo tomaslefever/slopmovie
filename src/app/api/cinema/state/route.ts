@@ -60,12 +60,13 @@ export async function GET(request: Request) {
 
   // If the live-state movie id points at an archived/completed movie (stale pointer),
   // fall back to the newest streaming/paused movie so the same old film is never resurrected.
-  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0 || activeMovie.status === 'completed') {
+  // CRITICAL: During BLOCKBUSTER_VOTING, the completed film is the legitimate active film whose successors are being voted on!
+  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0 || (activeMovie.status === 'completed' && liveState?.phase !== 'BLOCKBUSTER_VOTING')) {
     activeMovie = await loadActiveMovieFromDb();
   }
 
-  // If no movie exists in DB yet, initialize one
-  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) {
+  // If no movie exists in DB yet, initialize one (skip during BLOCKBUSTER_VOTING)
+  if ((!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) && liveState?.phase !== 'BLOCKBUSTER_VOTING') {
     activeMovie = await cinemaEngine.initializeMovie();
     liveState = await loadLiveCinemaStateFromDb();
   }
@@ -116,8 +117,12 @@ export async function GET(request: Request) {
     : null;
 
   // Load aggregate blockbuster votes and user's specific blockbuster pick
-  if (activeMovie) {
-    const dbCounts = await loadBlockbusterVoteCountsFromDb(activeMovie.id);
+  const targetBlockbusterMovieId = (liveState?.phase === 'BLOCKBUSTER_VOTING' && liveState?.movieId)
+    ? liveState.movieId
+    : (activeMovie?.id || liveState?.movieId || cinemaEngine.movie?.id);
+
+  if (targetBlockbusterMovieId) {
+    const dbCounts = await loadBlockbusterVoteCountsFromDb(targetBlockbusterMovieId);
     cinemaEngine.blockbusterVoteCounts = {
       A: Math.max(cinemaEngine.blockbusterVoteCounts?.A || 0, liveState?.blockbusterVoteCounts?.A || 0, dbCounts.A || 0),
       B: Math.max(cinemaEngine.blockbusterVoteCounts?.B || 0, liveState?.blockbusterVoteCounts?.B || 0, dbCounts.B || 0),
@@ -126,8 +131,8 @@ export async function GET(request: Request) {
     };
   }
 
-  const blockbusterUserVoted = activeMovie
-    ? await loadUserBlockbusterVote(activeMovie.id, userId)
+  const blockbusterUserVoted = targetBlockbusterMovieId
+    ? (await loadUserBlockbusterVote(targetBlockbusterMovieId, userId)) || cinemaEngine.getBlockbusterUserVote(userId)
     : cinemaEngine.getBlockbusterUserVote(userId);
 
   // Load viewer preferences from Supabase
@@ -280,9 +285,14 @@ export async function POST(request: Request) {
         if (activeMovie) cinemaEngine.movie = activeMovie;
       }
 
+      const { movieId: requestedMovieId } = body;
+      const targetMovieId = requestedMovieId || liveState?.movieId || cinemaEngine.movie?.id;
+      if (targetMovieId && cinemaEngine.movie && cinemaEngine.movie.id !== targetMovieId) {
+        cinemaEngine.movie.id = targetMovieId;
+      }
+
       cinemaEngine.castBlockbusterVote(userId || 'anonymous', optionId as 'A' | 'B' | 'C' | 'D');
 
-      const targetMovieId = cinemaEngine.movie?.id || liveState?.movieId;
       if (targetMovieId) {
         await persistBlockbusterVote(targetMovieId, userId || 'anonymous', optionId as 'A' | 'B' | 'C' | 'D');
         const authoritativeCounts = await loadBlockbusterVoteCountsFromDb(targetMovieId);
