@@ -721,24 +721,29 @@ Respond ONLY with a valid JSON object matching this schema:
       propReferenceImages: firstProp.imageUrl ? [firstProp.imageUrl] : [],
       environment: preset.environments[0].id,
       createdAt: new Date().toISOString(),
-      options: [
-        {
-          id: "A",
-          title: "Claim the Initiative",
-          text: `${firstChar.name} executes an aggressive offensive strike to seize the upper hand.`,
-          dramaticHook: "High-risk direct confrontation.",
-          expectedConsequence: "Maximum dramatic tension with immediate fallout.",
-          votes: 0
-        },
-        {
-          id: "B",
-          title: "Tactical Withdrawal",
-          text: `${firstChar.name} conceals their presence to outmaneuver the enemy in the shadows.`,
-          dramaticHook: "Unlocks clandestine intelligence pathways.",
-          expectedConsequence: "Strategic advantage at the expense of territory.",
-          votes: 0
-        }
-      ]
+      options: (preset.options && preset.options.length >= 2)
+        ? [
+            { ...preset.options[0], id: 'A', votes: 0 },
+            { ...preset.options[1], id: 'B', votes: 0 }
+          ]
+        : [
+            {
+              id: "A",
+              title: `${firstChar.name}'s Decisive Strike`,
+              text: `${firstChar.name} executes an aggressive offensive strike to seize the upper hand.`,
+              dramaticHook: "High-risk direct confrontation.",
+              expectedConsequence: "Maximum dramatic tension with immediate fallout.",
+              votes: 0
+            },
+            {
+              id: "B",
+              title: "Shadow Infiltration",
+              text: `${firstChar.name} conceals their presence to outmaneuver the enemy in the shadows.`,
+              dramaticHook: "Unlocks clandestine intelligence pathways.",
+              expectedConsequence: "Strategic advantage at the expense of territory.",
+              votes: 0
+            }
+          ]
     };
   });
 

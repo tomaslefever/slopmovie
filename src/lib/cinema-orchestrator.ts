@@ -936,105 +936,12 @@ class CinemaOrchestrator {
         return;
       }
 
-      // CHECK IF AI GENERATION IS PAUSED: REPLAY RANDOM PREVIOUSLY GENERATED VIDEO (ZERO FAL.AI CALLS)
-      if (this.isGenerationPaused) {
-        // Buscar entre TODAS las escenas de TODAS las películas una URL válida de
-        // video generado y usar una aleatoria — no importa si pertenece a otra
-        // película. Nunca debe aparecer una imagen sin movimiento.
-        const archived = await this.pickRandomArchivedVideo();
-
-        let chosenVideoUrl: string;
-        let chosenThumbnailUrl: string | undefined;
-        let chosenTitle = `Scene Continuation`;
-        let chosenSynopsis = `The narrative advances seamlessly using archived visual cinematography.`;
-        let chosenOptions = currentStep.options;
-
-        if (archived) {
-          chosenVideoUrl = archived.videoUrl;
-          chosenThumbnailUrl = archived.thumbnailUrl;
-          chosenTitle = `[Archive Replay] Scene Continuation`;
-          chosenSynopsis = `[Replay Mode] Reusing a previously generated scene clip from the cinema archive (another scene or film).`;
-        } else {
-          const previousSteps = [
-            ...this.movie.steps,
-            ...this.completedMovies.flatMap(m => m.steps)
-          ].filter(s => s.videoUrl);
-
-          if (previousSteps.length > 0) {
-            const randomStep = previousSteps[Math.floor(Math.random() * previousSteps.length)];
-            chosenVideoUrl = randomStep.videoUrl;
-            chosenThumbnailUrl = randomStep.thumbnailUrl;
-            chosenTitle = `[Archive Replay] ${randomStep.title}`;
-            chosenSynopsis = `[Replay Mode] ${randomStep.synopsis}`;
-            chosenOptions = [
-              { ...randomStep.options[0], votes: 0 },
-              { ...randomStep.options[1], votes: 0 }
-            ];
-          } else {
-            const mockIndex = (this.movie.steps.length) % CINEMATIC_MOCK_VIDEOS.length;
-            const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
-            chosenVideoUrl = mock.url;
-            chosenThumbnailUrl = mock.poster;
-            chosenTitle = `[Simulated Scene] ${mock.name}`;
-            chosenSynopsis = `Simulated scene continuous playback while AI generation is paused.`;
-          }
-        }
-
-        const replayStepNumber = this.movie.steps.length + 1;
-        const replayStep: MovieStep = {
-          stepNumber: replayStepNumber,
-          title: chosenTitle,
-          synopsis: chosenSynopsis,
-          dialogueSnippet: "",
-          visualPrompt: "Archived cinematic clip playback.",
-          cameraMotionPrompt: "Smooth cinematic hold.",
-          videoUrl: chosenVideoUrl,
-          thumbnailUrl: chosenThumbnailUrl,
-          duration: 15,
-          votingWindowSeconds: 10,
-          options: [
-            { ...chosenOptions[0], votes: 0 },
-            { ...chosenOptions[1], votes: 0 }
-          ],
-          activeCharacters: currentStep.activeCharacters || [],
-          activeProps: currentStep.activeProps || [],
-          environment: currentStep.environment || '',
-          createdAt: new Date().toISOString()
-        };
-
-        this.movie.steps.push(replayStep);
-        this.movie.currentStep = replayStepNumber;
-
-        // Persist movie and replay step to Supabase
-        await persistMovie(this.movie);
-        await persistMovieStep(this.movie.id, replayStep);
-
-        this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generación IA pausada. Reproduciendo clip #${replayStepNumber}: "${replayStep.title}" (sin gasto de créditos).`);
-
-        this.setPhase('PLAYING', 15);
-        broadcastCinemaEvent('new_step', {
-          step: replayStep,
-          currentStep: replayStepNumber,
-          phaseDuration: 15,
-          phaseStartedAt: this.phaseStartedAt,
-          phaseEndsAt: this.phaseEndsAt
-        });
-
-        // Reset voting
-        this.votesA = 0;
-        this.votesB = 0;
-        this.userVotes.clear();
-
-        await this.broadcastStateSnapshot(workerId);
-        return;
-      }
-
       // Rule: take the last 30 comments, pick ONE at random, and let it influence
       // exactly ONE of the two next options (the other follows the normal route).
       // The picked comment is marked as used and never reconsidered in later rounds.
       const commentInfluence = await this.selectCommentForInfluence();
 
-      // Generate step n + 1 with DeepSeek and fal.ai MiniMax H3-Max in 480p 16:9
+      // Generate step n + 1 with DeepSeek (always generating fresh narrative, dialogue, and non-repeating voting options)
       let nextStep: MovieStep | null = null;
       try {
         const nextStepRaw = await generateNextStepWithDeepSeek(this.movie, chosenOption, currentStep, commentInfluence ?? undefined);
@@ -1089,34 +996,69 @@ class CinemaOrchestrator {
 
         console.log(`[Cinema] Step ${nextStepRaw.stepNumber} active prop reference images (Supabase Storage):`, activePropImages);
 
-        // Generate video sending previous video as reference and prop images as references.
-        // If we just came from a COMMERCIAL_BREAK, use preAdVideoUrl (the clip before the ad)
-        // instead of the last step's videoUrl, so the ad has zero influence on narrative continuity.
         const storyReferenceUrl = this.preAdVideoUrl ?? currentStep.videoUrl;
 
-        // Re-adopt the director's persisted model/resolution BEFORE spending credits —
-        // multi-process safety: the admin's choice may have been written by another instance.
-        await this.refreshGenerationPrefsFromDb();
+        let chosenVideoUrl: string;
+        let chosenThumbnailUrl: string | undefined;
 
-        const videoRes = await generateVideoWithFal({
-          prompt: nextStepRaw.visualPrompt,
-          cameraMotion: nextStepRaw.cameraMotionPrompt,
-          stepNumber: nextStepRaw.stepNumber,
-          previousVideoUrl: storyReferenceUrl,
-          propReferenceImages: activePropImages,
-          voiceDirection: nextStepRaw.voiceDirection,
-          model: this.videoModel,
-          resolution: this.videoResolution || undefined
-        });
+        // CHECK IF AI VIDEO GENERATION IS PAUSED:
+        // Use an archived previously generated clip (zero fal.ai calls / credits spent),
+        // while the narrative, subtitles and voting options continue evolving dynamically.
+        if (this.isGenerationPaused) {
+          const archived = await this.pickRandomArchivedVideo();
+          if (archived) {
+            chosenVideoUrl = archived.videoUrl;
+            chosenThumbnailUrl = archived.thumbnailUrl;
+          } else {
+            const previousSteps = [
+              ...this.movie.steps,
+              ...this.completedMovies.flatMap(m => m.steps)
+            ].filter(s => s.videoUrl);
+
+            if (previousSteps.length > 0) {
+              const randomStep = previousSteps[Math.floor(Math.random() * previousSteps.length)];
+              chosenVideoUrl = randomStep.videoUrl;
+              chosenThumbnailUrl = randomStep.thumbnailUrl;
+            } else {
+              const mockIndex = nextStepRaw.stepNumber % CINEMATIC_MOCK_VIDEOS.length;
+              const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
+              chosenVideoUrl = mock.url;
+              chosenThumbnailUrl = mock.poster;
+            }
+          }
+          this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generación de video pausada. Escena #${nextStepRaw.stepNumber}: "${nextStepRaw.title}" con nuevas opciones de votación activas (sin gasto de créditos).`);
+        } else {
+          // Re-adopt the director's persisted model/resolution BEFORE spending credits —
+          // multi-process safety: the admin's choice may have been written by another instance.
+          await this.refreshGenerationPrefsFromDb();
+
+          const videoRes = await generateVideoWithFal({
+            prompt: nextStepRaw.visualPrompt,
+            cameraMotion: nextStepRaw.cameraMotionPrompt,
+            stepNumber: nextStepRaw.stepNumber,
+            previousVideoUrl: storyReferenceUrl,
+            propReferenceImages: activePropImages,
+            voiceDirection: nextStepRaw.voiceDirection,
+            model: this.videoModel,
+            resolution: this.videoResolution || undefined
+          });
+
+          chosenVideoUrl = videoRes.videoUrl;
+          chosenThumbnailUrl = videoRes.thumbnailUrl;
+
+          // If this scene triggers a commercial break when it finishes playing,
+          // generate the ad clip NOW (with THIS scene as the visual reference) so
+          // the break starts with the ad already rendered — only playback, no waiting.
+          this.preGenerateUpcomingAd(nextStepRaw.stepNumber, videoRes.videoUrl);
+        }
 
         // Consume and reset preAdVideoUrl — it must never persist past this step
         this.preAdVideoUrl = null;
 
-        
         nextStep = {
           ...nextStepRaw,
-          videoUrl: videoRes.videoUrl,
-          thumbnailUrl: videoRes.thumbnailUrl,
+          videoUrl: chosenVideoUrl,
+          thumbnailUrl: chosenThumbnailUrl,
           referenceVideoUrl: storyReferenceUrl, // Tracks the actual story clip used — never the ad
           propReferenceImages: activePropImages
         };
@@ -1124,10 +1066,6 @@ class CinemaOrchestrator {
         this.movie.steps.push(nextStep);
         this.movie.currentStep = nextStep.stepNumber;
 
-        // If this scene triggers a commercial break when it finishes playing,
-        // generate the ad clip NOW (with THIS scene as the visual reference) so
-        // the break starts with the ad already rendered — only playback, no waiting.
-        this.preGenerateUpcomingAd(nextStep.stepNumber, videoRes.videoUrl);
 
         // Persist update in Supabase
         await persistMovie(this.movie);
