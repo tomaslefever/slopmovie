@@ -78,10 +78,24 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
     setCurrentVideoSrc(prev => prev !== nextSrc ? nextSrc : prev);
   }, [activeStep.videoUrl, activeStep.stepNumber, fallbackUrl]);
 
+  // Consecutive load errors without a successful play. Bounds the fallback
+  // rotation so a fully offline client cannot remount the video forever.
+  const errorStreakRef = useRef<number>(0);
+  const MAX_CONSECUTIVE_ERRORS = CINEMA_FALLBACK_VIDEOS.length + 3;
+
   const handleVideoError = () => {
-    console.warn(`[CinemaPlayer] Video failed to load from "${currentVideoSrc}". Reverting to fallback video.`);
-    if (currentVideoSrc !== fallbackUrl) {
-      setCurrentVideoSrc(fallbackUrl);
+    console.warn(`[CinemaPlayer] Video failed to load from "${currentVideoSrc}". Switching to the next fallback video (never a static frame).`);
+    if (errorStreakRef.current >= MAX_CONSECUTIVE_ERRORS) {
+      console.warn('[CinemaPlayer] Every fallback video failed repeatedly. Stopping fallback rotation.');
+      return;
+    }
+    errorStreakRef.current += 1;
+    const fallbackIndex = CINEMA_FALLBACK_VIDEOS.indexOf(currentVideoSrc);
+    const nextSrc = fallbackIndex >= 0
+      ? CINEMA_FALLBACK_VIDEOS[(fallbackIndex + 1) % CINEMA_FALLBACK_VIDEOS.length]
+      : fallbackUrl;
+    if (nextSrc !== currentVideoSrc) {
+      setCurrentVideoSrc(nextSrc);
     }
   };
   
@@ -255,7 +269,10 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
         onTimeUpdate={handleTimeUpdate}
         onError={handleVideoError}
         onEnded={handleEnded}
-        onCanPlay={() => setIsVideoLoading(false)}
+        onCanPlay={() => {
+          errorStreakRef.current = 0;
+          setIsVideoLoading(false);
+        }}
         onWaiting={() => setIsVideoLoading(true)}
         className={`w-full h-full object-cover object-center transition-opacity duration-300 ${
           phase === 'COMMERCIAL_BREAK' ? 'opacity-0 invisible pointer-events-none' : 'opacity-100 visible'

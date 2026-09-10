@@ -29,10 +29,43 @@ export const CINEMATIC_MOCK_VIDEOS = [
   }
 ];
 
+/**
+ * Reconoce URLs de video realmente GENERADAS por fal.ai (fal.media / fal.ai /
+ * fal.run / falserverless) con extensión de video o ruta de archivos.
+ * Es el criterio de "url válida de video generado" que alimenta el pool de
+ * archivo cuando la generación está desactivada: nunca una imagen estática.
+ */
+export function isRealGeneratedVideoUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== 'string') return false;
+  if (!/(fal\.media|fal\.ai|fal\.run|falserverless)/i.test(url)) return false;
+  const bare = url.split('?')[0];
+  if (/\.(mp4|webm|mov)$/i.test(bare)) return true;
+  if (/\/(files|media)\//i.test(url)) return true;
+  return false;
+}
+
 export function isFalGenerationPaused(): boolean {
   if (process.env.PAUSE_VIDEO_GENERATION === 'true') return true;
   if (typeof globalThis !== 'undefined' && Boolean((globalThis as any).__isCinemaGenerationPaused)) return true;
   return false;
+}
+
+/**
+ * Delega en el orquestador de cine la selección de un video generado aleatorio
+ * del archivo (todas las escenas de todas las películas). Acceso por globalThis
+ * para evitar dependencia circular fal-video <-> cinema-orchestrator.
+ */
+async function pickRandomArchivedGeneratedVideo(): Promise<{ videoUrl: string; thumbnailUrl?: string } | null> {
+  try {
+    const orchestrator = (globalThis as any)?.__cinemaOrchestratorInstance;
+    if (orchestrator && typeof orchestrator.pickRandomArchivedVideo === 'function') {
+      const pick = await orchestrator.pickRandomArchivedVideo();
+      if (pick && pick.videoUrl) return pick;
+    }
+  } catch (err) {
+    console.warn('[fal.ai] No se pudo seleccionar un video generado archivado:', err);
+  }
+  return null;
 }
 
 // Registro de modelos generativos de video disponibles en fal.ai
@@ -199,8 +232,25 @@ export async function generateVideoWithFal({
   // Resolución elegida por el Director; si no hay una válida se usa la del modelo
   const effectiveResolution: string = isKnownVideoResolution(resolution) ? resolution : modelOption.resolution;
 
-  // Credit protection guard: if video generation is paused, immediately return mock video without calling fal.ai
+  // Credit protection guard: if video generation is paused, replay a random
+  // ARCHIVED GENERATED VIDEO from any scene of any movie (zero fal.ai calls).
+  // Never falls back to a static image — mocks are actual video clips.
   if (isFalGenerationPaused()) {
+    const archived = await pickRandomArchivedGeneratedVideo();
+    if (archived) {
+      console.log(`[fal.ai] 🛡️ Generación PAUSADA: Reproduciendo video generado archivado (otra escena/película) para el paso ${stepNumber}.`);
+      return {
+        videoUrl: archived.videoUrl,
+        thumbnailUrl: archived.thumbnailUrl || "",
+        isRealAiGenerated: false,
+        modelUsed: `${videoModel} (Archivo - Modo Pausa)`,
+        resolution: effectiveResolution,
+        aspectRatio: modelOption.aspectRatio,
+        previousVideoReference: previousVideoUrl,
+        propImagesReferences: propReferenceImages
+      };
+    }
+
     console.log(`[fal.ai] 🛡️ Generación de video PAUSADA (protección de créditos activa). Retornando clip simulado para el paso ${stepNumber}.`);
     const mockIndex = (stepNumber - 1) % CINEMATIC_MOCK_VIDEOS.length;
     const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];

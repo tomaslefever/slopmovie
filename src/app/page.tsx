@@ -26,6 +26,13 @@ export default function CinemaStreamingPage() {
   const [isBuyAdsModalOpen, setIsBuyAdsModalOpen] = useState<boolean>(false);
   const [topVotedMessages, setTopVotedMessages] = useState<ChatMessage[]>([]);
 
+  // On mobile the chat starts collapsed (the video needs the full width)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsChatOpen(false);
+    }
+  }, []);
+
   // Fetch chat messages and top-voted comments from Supabase / API
   const fetchChatAndTopVoted = async () => {
     try {

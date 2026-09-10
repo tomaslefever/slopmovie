@@ -1,8 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Film, LayoutGrid, Radio, Sparkles } from 'lucide-react';
-import Link from 'next/link';
+import React, { useState } from 'react';
+import { Film, LayoutGrid, Menu, Radio, Sparkles, X } from 'lucide-react';
 import { audioCues } from '@/lib/audio-cues';
 
 interface NavbarProps {
@@ -23,13 +22,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   totalSteps = 50,
   onOpenBuyAds
 }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const progressPercent = Math.min(100, Math.max(0, Math.round((currentStep / (totalSteps || 50)) * 100)));
 
   return (
-    <header className="h-14 bg-[#07080b]/90 border-b border-white/10 px-4 md:px-6 flex items-center justify-between backdrop-blur-xl z-40 select-none">
+    <header className="relative h-14 bg-[#07080b]/90 border-b border-white/10 px-4 md:px-6 flex items-center justify-between backdrop-blur-xl z-40 select-none">
       {/* Left: Brand & Movie Title */}
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2.5">
+      <div className="flex items-center space-x-2 min-w-0">
+        <div className="flex items-center space-x-2 shrink-0">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-sky-400 p-0.5 flex items-center justify-center shadow-[0_0_15px_rgba(0,240,255,0.4)]">
             <div className="w-full h-full bg-black rounded-[10px] flex items-center justify-center">
               <Film className="w-4 h-4 text-cyan-400" />
@@ -37,17 +37,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           <div>
             <span className="text-xs font-black tracking-widest text-white uppercase block leading-none">
-              KINETIC CINEMA
+              SLOP MOVIE
             </span>
-            <span className="text-[9px] font-mono text-cyan-400 tracking-wider">
-              LIVE INTERACTIVE STREAMING
+            <span className="text-[9px] font-mono text-cyan-400 tracking-wider leading-none block mt-px">
+              Interactive AI movies endless channel
             </span>
           </div>
         </div>
 
         <div className="h-4 w-px bg-white/10 hidden sm:block" />
 
-        <div className="text-xs font-semibold text-neutral-300 max-w-[180px] md:max-w-md truncate">
+        <div className="text-xs font-semibold text-neutral-300 max-w-[180px] md:max-w-md truncate hidden sm:block">
           {movieTitle}
         </div>
       </div>
@@ -69,8 +69,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </span>
       </div>
 
-      {/* Right Controls */}
-      <div className="flex items-center space-x-3">
+      {/* Right Controls (desktop) */}
+      <div className="hidden md:flex items-center space-x-3">
         {/* Buy Ads Modal Trigger */}
         <button
           onClick={() => {
@@ -107,6 +107,64 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </button>
       </div>
+
+      {/* Mobile Burger Toggle */}
+      <button
+        onClick={() => {
+          audioCues.playClick();
+          setIsMenuOpen(!isMenuOpen);
+        }}
+        className="md:hidden p-2 rounded-lg bg-neutral-900/80 border border-white/10 text-neutral-200 hover:text-white transition-colors"
+        title="Menu"
+      >
+        {isMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+      </button>
+
+      {/* Mobile Menu Dropdown */}
+      {isMenuOpen && (
+        <div className="absolute top-14 left-0 right-0 z-50 md:hidden bg-[#07080b]/97 border-b border-white/10 backdrop-blur-xl p-3 space-y-2 shadow-2xl">
+          <div className="text-xs font-semibold text-neutral-300 truncate px-2 pb-1 border-b border-white/5">
+            {movieTitle}
+          </div>
+
+          <button
+            onClick={() => {
+              audioCues.playClick();
+              setIsMenuOpen(false);
+              onOpenBuyAds?.();
+            }}
+            className="w-full px-3 py-2 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/20 to-yellow-500/10 text-amber-300 text-xs font-mono font-bold flex items-center justify-center space-x-1.5 transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Buy Ads</span>
+          </button>
+
+          <button
+            onClick={() => {
+              audioCues.playClick();
+              setIsMenuOpen(false);
+              onToggleGallery();
+            }}
+            className={`w-full px-3 py-2 rounded-xl border text-xs font-mono font-semibold flex items-center justify-center space-x-2 transition-colors ${
+              isGalleryOpen
+                ? 'bg-cyan-500 text-black border-cyan-400 font-bold'
+                : 'bg-neutral-900 text-neutral-200 border-white/10'
+            }`}
+          >
+            {isGalleryOpen ? (
+              <>
+                <Radio className="w-3.5 h-3.5 text-black" />
+                <span>Watch Live Stream</span>
+              </>
+            ) : (
+              <>
+                <LayoutGrid className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Cinema Gallery</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </header>
   );
 };

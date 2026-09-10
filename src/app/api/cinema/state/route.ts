@@ -63,14 +63,19 @@ export async function GET(request: Request) {
     liveState = await loadLiveCinemaStateFromDb();
   }
 
-  // Ensure active movie steps have valid playback URLs
+  // Ensure active movie steps have valid playback URLs. When generation is
+  // paused, missing URLs pick a random archived generated video from ANY movie
+  // so a scene never degrades to a static image.
   if (activeMovie) {
+    const generationPaused = liveState?.isGenerationPaused === true || cinemaEngine.isGenerationPaused;
+    const archivedFallback = generationPaused ? await cinemaEngine.pickRandomArchivedVideo() : null;
     activeMovie.steps = activeMovie.steps.map((s, idx) => {
       const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+      const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
       return {
         ...s,
-        videoUrl: (!s.videoUrl || s.videoUrl.startsWith('/videos/')) ? mock.url : s.videoUrl,
-        thumbnailUrl: s.thumbnailUrl || mock.poster
+        videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
+        thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster
       };
     });
   }

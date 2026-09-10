@@ -26,7 +26,8 @@ import {
   PlayCircle,
   Pencil,
   X,
-  BarChart3
+  BarChart3,
+  ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
@@ -1129,6 +1130,32 @@ export default function AdminDashboardPage() {
 
             {/* Ads List Table */}
             <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-lg bg-amber-400/20 text-amber-300">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-mono font-bold text-amber-300 uppercase">
+                      Lemon Squeezy Public Ad Checkout
+                    </h4>
+                    <p className="text-[11px] text-neutral-400">
+                      Sponsors can pay directly for an Ad Showcase slot via Lemon Squeezy.
+                    </p>
+                  </div>
+                </div>
+
+                <a
+                  href="https://iagents.lemonsqueezy.com/checkout/buy/3cda5e83-443b-4efe-98e2-6556726aff98"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-transform hover:scale-105 shadow-md flex-shrink-0"
+                >
+                  <span>Open Pay Link</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+
               <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-neutral-300">
                 Active Catalog of Immersive Ads
               </h3>

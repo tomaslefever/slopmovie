@@ -123,7 +123,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
   }
 
   return (
-    <aside className="w-80 md:w-96 h-full bg-[#08090d]/95 border-l border-white/10 flex flex-col backdrop-blur-2xl z-30 transition-all duration-300 select-none">
+    <aside className="absolute inset-y-0 right-0 z-50 w-[85%] max-w-xs md:static md:z-30 md:w-80 lg:w-96 h-full bg-[#08090d]/95 border-l border-white/10 flex flex-col backdrop-blur-2xl transition-all duration-300 select-none shadow-2xl md:shadow-none">
       {/* Chat Header */}
       <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/40">
         <div className="flex items-center space-x-2">

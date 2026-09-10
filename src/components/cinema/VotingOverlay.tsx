@@ -141,7 +141,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.98 }}
         transition={{ duration: 0.35 }}
-        className="absolute inset-0 z-40 bg-black/65 backdrop-blur-[6px] flex flex-col items-center justify-center p-6 overflow-y-auto"
+        className="absolute inset-0 z-40 bg-black/65 backdrop-blur-[6px] flex flex-col items-center justify-center p-3 md:p-6 overflow-y-auto"
       >
         <AnimatePresence mode="wait">
           {!isVotingEnded ? (
@@ -155,10 +155,10 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
               className="w-full flex flex-col items-center"
             >
               {/* Glowing Top Countdown Header */}
-              <div className="flex flex-col items-center mb-8 text-center">
-                <div className="relative flex items-center justify-center mb-3">
+              <div className="flex flex-col items-center mb-3 md:mb-8 text-center">
+                <div className="relative flex items-center justify-center mb-2 md:mb-3">
                   {/* Pulsing Timer Circle */}
-                  <svg className="w-24 h-24 transform -rotate-90">
+                  <svg className="w-20 h-20 md:w-24 md:h-24 transform -rotate-90" viewBox="0 0 96 96">
                     <circle
                       cx="48"
                       cy="48"
@@ -180,83 +180,83 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className={`text-3xl font-black font-mono tracking-tighter ${
+                    <span className={`text-2xl md:text-3xl font-black font-mono tracking-tighter ${
                       currentSeconds <= 3 ? "text-red-500 animate-pulse" : "text-white"
                     }`}>
                       {currentSeconds}
                     </span>
-                    <span className="text-[10px] text-neutral-400 font-mono uppercase tracking-widest">
+                    <span className="text-[9px] md:text-[10px] text-neutral-400 font-mono uppercase tracking-widest">
                       SEC
                     </span>
                   </div>
                 </div>
 
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/30 text-[10px] font-mono font-bold tracking-widest text-cyan-300 uppercase mb-2 backdrop-blur-md">
+                <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/30 text-[10px] font-mono font-bold tracking-widest text-cyan-300 uppercase mb-2 backdrop-blur-md">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                   Repetición de escena (sin sonido) • Música de tensión
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <Timer className="w-4 h-4 text-cyan-400" />
-                  <h2 className="text-xl md:text-2xl font-black uppercase tracking-widest text-white">
+                  <Timer className="w-3.5 h-3.5 md:w-4 md:h-4 text-cyan-400" />
+                  <h2 className="text-lg md:text-2xl font-black uppercase tracking-widest text-white">
                     Audience Vote
                   </h2>
-                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-400" />
                 </div>
-                <p className="text-xs text-neutral-400 mt-1 max-w-md">
+                <p className="hidden md:block text-xs text-neutral-400 mt-1 max-w-md">
                   Choose the next story continuation. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote instantly.
                 </p>
               </div>
 
               {/* 2 Options Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
+              <div className="grid grid-cols-2 gap-2 md:gap-6 w-full max-w-4xl">
                 {/* OPTION A */}
                 <motion.div
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleCastVote('A')}
-                  className={`relative p-6 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
+                  className={`relative p-3 md:p-6 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
                     userVoted === 'A'
                       ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_30px_rgba(0,240,255,0.3)]'
                       : 'bg-neutral-900/60 hover:bg-neutral-900/80 border-white/10 hover:border-cyan-500/50'
                   }`}
                 >
                   {/* Top Tag & Hotkey */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <span className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-400/40 text-cyan-400 font-black flex items-center justify-center text-sm shadow-[0_0_10px_rgba(0,240,255,0.4)]">
+                  <div className="flex items-center justify-between mb-1.5 md:mb-3">
+                    <div className="flex items-center space-x-1.5 md:space-x-2 min-w-0">
+                      <span className="w-6 h-6 md:w-8 md:h-8 rounded-lg bg-cyan-500/20 border border-cyan-400/40 text-cyan-400 font-black flex items-center justify-center text-xs md:text-sm shadow-[0_0_10px_rgba(0,240,255,0.4)] shrink-0">
                         A
                       </span>
-                      <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-widest">
+                      <span className="text-[9px] md:text-xs font-mono font-bold text-cyan-400 uppercase tracking-widest truncate">
                         OPTION A
                       </span>
                     </div>
-                    <span className="text-[11px] font-mono text-neutral-400 bg-neutral-800/80 px-2 py-0.5 rounded border border-white/5">
+                    <span className="hidden md:inline-block text-[11px] font-mono text-neutral-400 bg-neutral-800/80 px-2 py-0.5 rounded border border-white/5">
                       Key [1]
                     </span>
                   </div>
 
-                  <h3 className="text-lg font-bold text-white mb-2 group-hover:text-cyan-300 transition-colors">
+                  <h3 className="text-sm md:text-lg font-bold text-white mb-1 md:mb-2 group-hover:text-cyan-300 transition-colors">
                     {options[0].title}
                   </h3>
 
-                  <p className="text-xs text-neutral-300 mb-4 leading-relaxed line-clamp-3">
+                  <p className="text-[10px] md:text-xs text-neutral-300 mb-2 md:mb-4 leading-relaxed line-clamp-2 md:line-clamp-3">
                     {options[0].text}
                   </p>
 
                   {options[0].dramaticHook && (
-                    <div className="text-[11px] text-cyan-400/90 font-mono bg-cyan-950/50 px-3 py-1.5 rounded-lg border border-cyan-800/40 mb-4">
+                    <div className="text-[9px] md:text-[11px] text-cyan-400/90 font-mono bg-cyan-950/50 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border border-cyan-800/40 mb-2 md:mb-4 line-clamp-2 md:line-clamp-none">
                       ⚡ {options[0].dramaticHook}
                     </div>
                   )}
 
                   {/* Percentage Bar & Votes */}
-                  <div className="space-y-1.5 pt-2 border-t border-white/5">
-                    <div className="flex items-center justify-between text-xs font-mono">
+                  <div className="space-y-1 md:space-y-1.5 pt-1.5 md:pt-2 border-t border-white/5">
+                    <div className="flex items-center justify-between text-[10px] md:text-xs font-mono">
                       <span className="text-neutral-400">{votesA} votes</span>
                       <span className="font-bold text-cyan-400">{percentA}%</span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
+                    <div className="w-full h-1.5 md:h-2 rounded-full bg-neutral-800 overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${percentA}%` }}
@@ -267,8 +267,8 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   </div>
 
                   {userVoted === 'A' && (
-                    <div className="absolute top-4 right-4 flex items-center space-x-1 text-cyan-400 text-xs font-bold bg-cyan-950/90 border border-cyan-400 px-2.5 py-1 rounded-full">
-                      <Check className="w-3.5 h-3.5" />
+                    <div className="absolute top-2 right-2 md:top-4 md:right-4 flex items-center space-x-1 text-[9px] md:text-xs text-cyan-400 font-bold bg-cyan-950/90 border border-cyan-400 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded-full">
+                      <Check className="w-3 h-3 md:w-3.5 md:h-3.5" />
                       <span>YOUR VOTE</span>
                     </div>
                   )}
@@ -279,48 +279,48 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleCastVote('B')}
-                  className={`relative p-6 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
+                  className={`relative p-3 md:p-6 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
                     userVoted === 'B'
                       ? 'bg-amber-950/40 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.3)]'
                       : 'bg-neutral-900/60 hover:bg-neutral-900/80 border-white/10 hover:border-amber-500/50'
                   }`}
                 >
                   {/* Top Tag & Hotkey */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <span className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-400 font-black flex items-center justify-center text-sm shadow-[0_0_10px_rgba(251,191,36,0.4)]">
+                  <div className="flex items-center justify-between mb-1.5 md:mb-3">
+                    <div className="flex items-center space-x-1.5 md:space-x-2 min-w-0">
+                      <span className="w-6 h-6 md:w-8 md:h-8 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-400 font-black flex items-center justify-center text-xs md:text-sm shadow-[0_0_10px_rgba(251,191,36,0.4)] shrink-0">
                         B
                       </span>
-                      <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest">
+                      <span className="text-[9px] md:text-xs font-mono font-bold text-amber-400 uppercase tracking-widest truncate">
                         OPTION B
                       </span>
                     </div>
-                    <span className="text-[11px] font-mono text-neutral-400 bg-neutral-800/80 px-2 py-0.5 rounded border border-white/5">
+                    <span className="hidden md:inline-block text-[11px] font-mono text-neutral-400 bg-neutral-800/80 px-2 py-0.5 rounded border border-white/5">
                       Key [2]
                     </span>
                   </div>
 
-                  <h3 className="text-lg font-bold text-white mb-2 group-hover:text-amber-300 transition-colors">
+                  <h3 className="text-sm md:text-lg font-bold text-white mb-1 md:mb-2 group-hover:text-amber-300 transition-colors">
                     {options[1].title}
                   </h3>
 
-                  <p className="text-xs text-neutral-300 mb-4 leading-relaxed line-clamp-3">
+                  <p className="text-[10px] md:text-xs text-neutral-300 mb-2 md:mb-4 leading-relaxed line-clamp-2 md:line-clamp-3">
                     {options[1].text}
                   </p>
 
                   {options[1].dramaticHook && (
-                    <div className="text-[11px] text-amber-400/90 font-mono bg-amber-950/50 px-3 py-1.5 rounded-lg border border-amber-800/40 mb-4">
+                    <div className="text-[9px] md:text-[11px] text-amber-400/90 font-mono bg-amber-950/50 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border border-amber-800/40 mb-2 md:mb-4 line-clamp-2 md:line-clamp-none">
                       🔥 {options[1].dramaticHook}
                     </div>
                   )}
 
                   {/* Percentage Bar & Votes */}
-                  <div className="space-y-1.5 pt-2 border-t border-white/5">
-                    <div className="flex items-center justify-between text-xs font-mono">
+                  <div className="space-y-1 md:space-y-1.5 pt-1.5 md:pt-2 border-t border-white/5">
+                    <div className="flex items-center justify-between text-[10px] md:text-xs font-mono">
                       <span className="text-neutral-400">{votesB} votes</span>
                       <span className="font-bold text-amber-400">{percentB}%</span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
+                    <div className="w-full h-1.5 md:h-2 rounded-full bg-neutral-800 overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${percentB}%` }}
@@ -331,8 +331,8 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   </div>
 
                   {userVoted === 'B' && (
-                    <div className="absolute top-4 right-4 flex items-center space-x-1 text-amber-400 text-xs font-bold bg-amber-950/90 border border-amber-400 px-2.5 py-1 rounded-full">
-                      <Check className="w-3.5 h-3.5" />
+                    <div className="absolute top-2 right-2 md:top-4 md:right-4 flex items-center space-x-1 text-[9px] md:text-xs text-amber-400 font-bold bg-amber-950/90 border border-amber-400 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded-full">
+                      <Check className="w-3 h-3 md:w-3.5 md:h-3.5" />
                       <span>YOUR VOTE</span>
                     </div>
                   )}
@@ -340,8 +340,8 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
               </div>
 
               {/* Tie-breaker Rule Footer */}
-              <div className="flex items-center space-x-2 mt-6 text-xs text-neutral-400 font-mono bg-neutral-900/60 border border-white/5 px-4 py-2 rounded-full">
-                <Dices className="w-3.5 h-3.5 text-amber-400" />
+              <div className="flex items-center space-x-2 mt-3 md:mt-6 text-[10px] md:text-xs text-neutral-400 font-mono bg-neutral-900/60 border border-white/5 px-3 md:px-4 py-1.5 md:py-2 rounded-full">
+                <Dices className="w-3 h-3 md:w-3.5 md:h-3.5 text-amber-400 shrink-0" />
                 <span>In the event of a tie or zero votes, the system automatically picks at random.</span>
               </div>
             </motion.div>

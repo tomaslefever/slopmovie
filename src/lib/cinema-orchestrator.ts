@@ -1,7 +1,7 @@
 import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
 import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek, generateImmersiveAdPromptWithDeepSeek } from './deepseek';
 import type { CommentInfluence } from './deepseek';
-import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel } from './fal-video';
+import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel, isRealGeneratedVideoUrl } from './fal-video';
 import type { VideoModelId, VideoResolution } from './fal-video';
 
 declare global {
@@ -232,6 +232,69 @@ class CinemaOrchestrator {
   }
 
   private initializeMoviePromise: Promise<Movie> | null = null;
+
+  /**
+   * Pool de URLs de video GENERADAS válidas provenientes de TODAS las películas
+   * (en memoria y en Supabase). Se usa cuando la generación está desactivada
+   * para garantizar que siempre se reproduzca un clip en movimiento — jamás
+   * una imagen estática. Deduplicado: llamadas concurrentes comparten el build.
+   */
+  private archivedGeneratedPoolPromise: Promise<{ videoUrl: string; thumbnailUrl?: string }[]> | null = null;
+
+  private async buildArchivedGeneratedVideoPool(): Promise<{ videoUrl: string; thumbnailUrl?: string }[]> {
+    const movies: Movie[] = [];
+    if (this.movie) movies.push(this.movie);
+    for (const m of this.completedMovies) movies.push(m);
+
+    if (isSupabaseConfigured()) {
+      try {
+        const dbMovies = await loadAllMoviesFromDb();
+        for (const m of dbMovies) {
+          if (!movies.some(x => x.id === m.id)) movies.push(m);
+        }
+      } catch (err) {
+        console.warn('[Cinema] Error loading all movies for the archived video pool:', err);
+      }
+    }
+
+    const pool: { videoUrl: string; thumbnailUrl?: string }[] = [];
+    const seen = new Set<string>();
+    for (const m of movies) {
+      for (const s of m.steps || []) {
+        if (isRealGeneratedVideoUrl(s.videoUrl) && !seen.has(s.videoUrl as string)) {
+          seen.add(s.videoUrl as string);
+          pool.push({ videoUrl: s.videoUrl as string, thumbnailUrl: s.thumbnailUrl });
+        }
+      }
+    }
+    for (const url of this.generatedAdVideoArchive) {
+      if (isRealGeneratedVideoUrl(url) && !seen.has(url)) {
+        seen.add(url);
+        pool.push({ videoUrl: url });
+      }
+    }
+
+    return pool;
+  }
+
+  /**
+   * Selecciona un video generado ALEATORIO de TODAS las escenas con URL válida
+   * de video generado (no importa de qué película provengan). Devuelve null si
+   * el archivo no tiene ningún video generado (en ese caso el llamador recurre
+   * a los clips simulados, que también son videos en movimiento).
+   */
+  public async pickRandomArchivedVideo(): Promise<{ videoUrl: string; thumbnailUrl?: string; isRealGenerated: true } | null> {
+    if (!this.archivedGeneratedPoolPromise) {
+      this.archivedGeneratedPoolPromise = this.buildArchivedGeneratedVideoPool().finally(() => {
+        this.archivedGeneratedPoolPromise = null;
+      });
+    }
+    const pool = await this.archivedGeneratedPoolPromise;
+    if (pool.length === 0) return null;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    return { ...pick, isRealGenerated: true };
+  }
+
   /**
    * True while forceReset is generating a brand-new movie. The background worker
    * must not auto-initialize another movie during this window (race that resurrects
@@ -260,13 +323,17 @@ class CinemaOrchestrator {
       try {
         const savedMovie = await loadActiveMovieFromDb();
         if (savedMovie && savedMovie.steps.length > 0) {
-          // Sanitize step video URLs so none are missing or 404
+          // Sanitize step video URLs so none are missing or 404. When generation
+          // is paused, prefer a random archived generated video over the mocks so
+          // a scene with a missing URL never degrades to a static image.
+          const archivedFallback = this.isGenerationPaused ? await this.pickRandomArchivedVideo() : null;
           savedMovie.steps = savedMovie.steps.map((s, idx) => {
             const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+            const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
             return {
               ...s,
-              videoUrl: (!s.videoUrl || s.videoUrl.startsWith('/videos/')) ? mock.url : s.videoUrl,
-              thumbnailUrl: s.thumbnailUrl || mock.poster
+              videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
+              thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster
             };
           });
           this.movie = savedMovie;
@@ -392,10 +459,16 @@ class CinemaOrchestrator {
             stepThumbnailUrl = mock.poster;
           }
         } else {
-          console.log(`[Cinema] 🛡️ Generación PAUSADA: Usando video simulado para el paso ${step.stepNumber} sin llamar a fal.ai.`);
-          const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
-          stepVideoUrl = mock.url;
-          stepThumbnailUrl = mock.poster;
+          console.log(`[Cinema] 🛡️ Generación PAUSADA: Buscando un video generado archivado (de cualquier película) para el paso ${step.stepNumber} sin llamar a fal.ai.`);
+          const archived = await this.pickRandomArchivedVideo();
+          if (archived) {
+            stepVideoUrl = archived.videoUrl;
+            stepThumbnailUrl = archived.thumbnailUrl;
+          } else {
+            const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+            stepVideoUrl = mock.url;
+            stepThumbnailUrl = mock.poster;
+          }
         }
 
         return {
@@ -458,12 +531,16 @@ class CinemaOrchestrator {
     try {
       const savedMovie = await loadActiveMovieFromDb();
       if (savedMovie && savedMovie.steps.length > 0) {
+        // Sanitize missing step URLs; prefer archived generated videos when
+        // generation is paused so a scene never shows a static image.
+        const archivedFallback = this.isGenerationPaused ? await this.pickRandomArchivedVideo() : null;
         savedMovie.steps = savedMovie.steps.map((s, idx) => {
           const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+          const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
           return {
             ...s,
-            videoUrl: (!s.videoUrl || s.videoUrl.startsWith('/videos/')) ? mock.url : s.videoUrl,
-            thumbnailUrl: s.thumbnailUrl || mock.poster
+            videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
+            thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster
           };
         });
         this.movie = savedMovie;
@@ -859,10 +936,10 @@ class CinemaOrchestrator {
 
       // CHECK IF AI GENERATION IS PAUSED: REPLAY RANDOM PREVIOUSLY GENERATED VIDEO (ZERO FAL.AI CALLS)
       if (this.isGenerationPaused) {
-        const previousSteps = [
-          ...this.movie.steps,
-          ...this.completedMovies.flatMap(m => m.steps)
-        ].filter(s => s.videoUrl);
+        // Buscar entre TODAS las escenas de TODAS las películas una URL válida de
+        // video generado y usar una aleatoria — no importa si pertenece a otra
+        // película. Nunca debe aparecer una imagen sin movimiento.
+        const archived = await this.pickRandomArchivedVideo();
 
         let chosenVideoUrl: string;
         let chosenThumbnailUrl: string | undefined;
@@ -870,23 +947,35 @@ class CinemaOrchestrator {
         let chosenSynopsis = `The narrative advances seamlessly using archived visual cinematography.`;
         let chosenOptions = currentStep.options;
 
-        if (previousSteps.length > 0) {
-          const randomStep = previousSteps[Math.floor(Math.random() * previousSteps.length)];
-          chosenVideoUrl = randomStep.videoUrl;
-          chosenThumbnailUrl = randomStep.thumbnailUrl;
-          chosenTitle = `[Archive Replay] ${randomStep.title}`;
-          chosenSynopsis = `[Replay Mode] ${randomStep.synopsis}`;
-          chosenOptions = [
-            { ...randomStep.options[0], votes: 0 },
-            { ...randomStep.options[1], votes: 0 }
-          ];
+        if (archived) {
+          chosenVideoUrl = archived.videoUrl;
+          chosenThumbnailUrl = archived.thumbnailUrl;
+          chosenTitle = `[Archive Replay] Scene Continuation`;
+          chosenSynopsis = `[Replay Mode] Reusing a previously generated scene clip from the cinema archive (another scene or film).`;
         } else {
-          const mockIndex = (this.movie.steps.length) % CINEMATIC_MOCK_VIDEOS.length;
-          const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
-          chosenVideoUrl = mock.url;
-          chosenThumbnailUrl = mock.poster;
-          chosenTitle = `[Simulated Scene] ${mock.name}`;
-          chosenSynopsis = `Simulated scene continuous playback while AI generation is paused.`;
+          const previousSteps = [
+            ...this.movie.steps,
+            ...this.completedMovies.flatMap(m => m.steps)
+          ].filter(s => s.videoUrl);
+
+          if (previousSteps.length > 0) {
+            const randomStep = previousSteps[Math.floor(Math.random() * previousSteps.length)];
+            chosenVideoUrl = randomStep.videoUrl;
+            chosenThumbnailUrl = randomStep.thumbnailUrl;
+            chosenTitle = `[Archive Replay] ${randomStep.title}`;
+            chosenSynopsis = `[Replay Mode] ${randomStep.synopsis}`;
+            chosenOptions = [
+              { ...randomStep.options[0], votes: 0 },
+              { ...randomStep.options[1], votes: 0 }
+            ];
+          } else {
+            const mockIndex = (this.movie.steps.length) % CINEMATIC_MOCK_VIDEOS.length;
+            const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
+            chosenVideoUrl = mock.url;
+            chosenThumbnailUrl = mock.poster;
+            chosenTitle = `[Simulated Scene] ${mock.name}`;
+            chosenSynopsis = `Simulated scene continuous playback while AI generation is paused.`;
+          }
         }
 
         const replayStepNumber = this.movie.steps.length + 1;
