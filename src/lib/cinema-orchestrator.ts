@@ -646,7 +646,9 @@ class CinemaOrchestrator {
         phase: this.phase,
         votesA: this.votesA,
         votesB: this.votesB,
-        totalAudience: this.totalAudience
+        totalAudience: this.totalAudience,
+        phaseEndsAt: this.phaseEndsAt,
+        phaseDuration: this.phaseDuration
       });
     } else {
       // Authoritative time engine: phase timer expired. Advance immediately.

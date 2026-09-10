@@ -202,6 +202,42 @@ export default function CinemaStreamingPage() {
     };
   }, [cinemaState?.phase, cinemaState?.movie?.currentStep]);
 
+  // ── LOCAL CLIENT COUNTDOWN TICK (1 second) ──────────────────────────────────
+  // Ticks down the UI countdown smoothly every second in local state.
+  // Performs ZERO network requests or events.
+  // Server-authoritative state & phase transitions are received via Realtime broadcasts every 5s.
+  useEffect(() => {
+    if (!cinemaState || cinemaState.isPaused) return;
+
+    const timer = setInterval(() => {
+      setCinemaState((prev) => {
+        if (!prev || prev.isPaused) return prev;
+
+        // If phaseEndsAt is provided, calculate exact remaining seconds relative to wall-clock:
+        if (prev.phaseEndsAt) {
+          const endsAtMs = typeof prev.phaseEndsAt === 'string'
+            ? new Date(prev.phaseEndsAt).getTime()
+            : prev.phaseEndsAt;
+          const calculatedRemaining = Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000));
+          if (calculatedRemaining === prev.timeRemaining) return prev;
+          return {
+            ...prev,
+            timeRemaining: calculatedRemaining
+          };
+        }
+
+        // Fallback: decrement local seconds if remaining > 0
+        if (prev.timeRemaining <= 0) return prev;
+        return {
+          ...prev,
+          timeRemaining: prev.timeRemaining - 1
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [cinemaState?.isPaused, cinemaState?.phaseEndsAt, cinemaState?.phase]);
+
   // SUPABASE REALTIME SUBSCRIPTION
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -232,6 +268,7 @@ export default function CinemaStreamingPage() {
             activeStep: snapshot.activeStep ?? prev.activeStep,
             phase: snapshot.phase ?? prev.phase,
             timeRemaining: snapshot.timeRemaining ?? prev.timeRemaining,
+            phaseEndsAt: snapshot.phaseEndsAt ?? prev.phaseEndsAt,
             votesA: snapshot.votesA ?? prev.votesA,
             votesB: snapshot.votesB ?? prev.votesB,
             totalAudience: snapshot.totalAudience ?? prev.totalAudience,
@@ -245,7 +282,7 @@ export default function CinemaStreamingPage() {
           };
         });
       })
-      .on('broadcast', { event: 'time_tick' }, (payload: { payload: { timeRemaining?: number; phase?: PlaybackPhase; votesA?: number; votesB?: number; totalAudience?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean } }) => {
+      .on('broadcast', { event: 'time_tick' }, (payload: { payload: { timeRemaining?: number; phase?: PlaybackPhase; votesA?: number; votesB?: number; totalAudience?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean; phaseEndsAt?: string | number } }) => {
         setCinemaState((prev) => {
           if (!prev) return prev;
           const newTime = payload.payload.timeRemaining !== undefined ? payload.payload.timeRemaining : prev.timeRemaining;
@@ -253,21 +290,23 @@ export default function CinemaStreamingPage() {
           const votesA = payload.payload.votesA ?? prev.votesA;
           const votesB = payload.payload.votesB ?? prev.votesB;
           const totalAudience = payload.payload.totalAudience ?? prev.totalAudience;
+          const phaseEndsAt = payload.payload.phaseEndsAt ?? prev.phaseEndsAt;
 
-          if (newTime === prev.timeRemaining && newPhase === prev.phase && votesA === prev.votesA && votesB === prev.votesB && totalAudience === prev.totalAudience) {
+          if (newTime === prev.timeRemaining && newPhase === prev.phase && votesA === prev.votesA && votesB === prev.votesB && totalAudience === prev.totalAudience && phaseEndsAt === prev.phaseEndsAt) {
             return prev;
           }
           return {
             ...prev,
             phase: newPhase,
             timeRemaining: newTime,
+            phaseEndsAt,
             votesA,
             votesB,
             totalAudience
           };
         });
       })
-      .on('broadcast', { event: 'phase_change' }, (payload: { payload: { phase: PlaybackPhase; timeRemaining?: number; votesA?: number; votesB?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean } }) => {
+      .on('broadcast', { event: 'phase_change' }, (payload: { payload: { phase: PlaybackPhase; timeRemaining?: number; votesA?: number; votesB?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean; phaseEndsAt?: string | number; phaseDuration?: number } }) => {
         if (payload.payload.phase === 'VOTING') {
           setUserVoted(null);
         }
@@ -283,7 +322,8 @@ export default function CinemaStreamingPage() {
             ...prev,
             phase: payload.payload.phase,
             timeRemaining: payload.payload.timeRemaining ?? prev.timeRemaining,
-            phaseDuration: (payload.payload as any).phaseDuration ?? prev.phaseDuration,
+            phaseDuration: payload.payload.phaseDuration ?? (payload.payload as any).phaseDuration ?? prev.phaseDuration,
+            phaseEndsAt: payload.payload.phaseEndsAt ?? prev.phaseEndsAt,
             votesA: payload.payload.votesA ?? prev.votesA,
             votesB: payload.payload.votesB ?? prev.votesB,
             blockbusterCandidates: (payload.payload as any).blockbusterCandidates ?? prev.blockbusterCandidates,

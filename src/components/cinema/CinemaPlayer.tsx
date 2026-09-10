@@ -280,17 +280,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       {/* Ambient background glow */}
       <div className="absolute inset-0 bg-radial from-cyan-950/20 via-transparent to-black pointer-events-none" />
 
-      {/* Top-Edge Playback Progress Bar (square, flush with the header) */}
-      <div className="absolute top-0 left-0 right-0 h-1.5 z-30 bg-neutral-900/95 overflow-hidden">
-        <div 
-          key={`cinema_prog_top_${activeStep.stepNumber}_${phase}_${isPaused ? 'p' : 'r'}`}
-          className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-amber-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]"
-          style={{ 
-            animation: (phase === 'PLAYING' && !isPaused) ? `cinema-progress ${activeStep.duration || 15}s linear forwards` : undefined,
-            width: phase === 'PLAYING' ? undefined : '100%'
-          }}
-        />
-      </div>
+
 
       {/* Main Video Element (Always rendered with verified or fallback video) */}
       <video
