@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
-import { MovieStep, PlaybackPhase, SubtitleCue, ImmersiveAd } from '@/types/cinema';
-import { Volume2, VolumeX, Maximize2, Minimize2, Radio, Clock, Subtitles, Check } from 'lucide-react';
+import { MovieStep, PlaybackPhase, ImmersiveAd } from '@/types/cinema';
+import { Volume2, VolumeX, Maximize2, Minimize2, Radio, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { audioCues } from '@/lib/audio-cues';
 import { ImmersiveAdPlayer } from './ImmersiveAdPlayer';
@@ -115,21 +115,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     setSubtitleLanguage(initialSubtitleLanguage);
   }, [initialSubtitleLanguage]);
 
-  const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
-  const [videoCurrentTime, setVideoCurrentTime] = useState<number>(0);
 
-  const toggleSubtitlesEnabled = (val: boolean) => {
-    setSubtitlesEnabled(val);
-    onToggleSubtitles?.(val);
-  };
-
-  const changeSubtitleLanguage = (lang: 'en' | 'es') => {
-    setSubtitleLanguage(lang);
-    setSubtitlesEnabled(true);
-    onChangeSubtitleLanguage?.(lang);
-    onToggleSubtitles?.(true);
-    setShowSubtitleMenu(false);
-  };
 
   const lastPlayedStepRef = useRef<number>(activeStep.stepNumber);
   const lastVideoSrcRef = useRef<string>(currentVideoSrc);
@@ -154,7 +140,6 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       lastVideoSrcRef.current = currentVideoSrc;
       playbackEndedNotifiedRef.current = false;
       video.currentTime = 0;
-      setVideoCurrentTime(0);
       video.muted = phase === 'VOTING' ? true : isMuted;
       video.play().catch(() => {});
     } else if (video.paused && phase === 'PLAYING' && !isPaused) {
@@ -232,7 +217,6 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     const sec = Math.floor(video.currentTime);
     if (sec !== lastEmittedSecondRef.current) {
       lastEmittedSecondRef.current = sec;
-      setVideoCurrentTime(sec);
     }
   };
 
@@ -284,18 +268,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [fullscreenContainerRef]);
 
-  // Active Subtitle Resolution (driven purely by video playback time)
-  const currentPlaybackSecond = videoCurrentTime;
 
-  const activeCue: SubtitleCue | undefined = activeStep.subtitles?.find(
-    cue => currentPlaybackSecond >= cue.start && currentPlaybackSecond <= cue.end
-  );
-
-  const currentSubtitleText = activeCue
-    ? (subtitleLanguage === 'es' && activeCue.textEs ? activeCue.textEs : activeCue.text)
-    : (activeStep.dialogueSnippet || null);
-
-  const currentSpeaker = activeCue?.speaker;
 
   return (
     <div 
@@ -397,81 +370,8 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
           </span>
         </div>
 
-        {/* Video Controls (Subtitles [CC], Mute & Fullscreen) */}
+        {/* Video Controls (Mute & Fullscreen) */}
         <div className="flex items-center space-x-2 relative">
-          {/* Subtitles CC Toggle & Menu */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                audioCues.playClick();
-                setShowSubtitleMenu(!showSubtitleMenu);
-              }}
-              className={`px-2.5 py-2 rounded-full border text-xs font-mono font-bold flex items-center space-x-1.5 md:backdrop-blur-md transition-all hover:scale-105 active:scale-95 ${
-                subtitlesEnabled 
-                  ? 'bg-cyan-500/20 text-cyan-400 border-cyan-400/50 shadow-[0_0_12px_rgba(0,240,255,0.3)]' 
-                  : 'bg-black/60 hover:bg-neutral-800 text-neutral-400 border-white/10'
-              }`}
-              title="Subtitle Settings (CC)"
-            >
-              <Subtitles className="w-4 h-4" />
-              <span className="text-[10px] uppercase font-mono tracking-wider">
-                {subtitlesEnabled ? subtitleLanguage.toUpperCase() : 'OFF'}
-              </span>
-            </button>
-
-            {/* Subtitle Dropdown Menu */}
-            <AnimatePresence>
-              {showSubtitleMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-48 bg-[#0b0c12]/95 border border-white/15 rounded-xl shadow-2xl p-2 z-50 md:backdrop-blur-xl space-y-1 font-sans text-xs"
-                >
-                  <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-widest text-neutral-400 border-b border-white/5">
-                    Subtitle Settings
-                  </div>
-
-                  <button
-                    onClick={() => changeSubtitleLanguage('en')}
-                    className={`w-full px-2.5 py-2 rounded-lg text-left flex items-center justify-between transition-colors ${
-                      subtitlesEnabled && subtitleLanguage === 'en'
-                        ? 'bg-cyan-500/20 text-cyan-300 font-semibold'
-                        : 'text-neutral-300 hover:bg-neutral-800/80 hover:text-white'
-                    }`}
-                  >
-                    <span>English (Original CC)</span>
-                    {subtitlesEnabled && subtitleLanguage === 'en' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
-                  </button>
-
-                  <button
-                    onClick={() => changeSubtitleLanguage('es')}
-                    className={`w-full px-2.5 py-2 rounded-lg text-left flex items-center justify-between transition-colors ${
-                      subtitlesEnabled && subtitleLanguage === 'es'
-                        ? 'bg-cyan-500/20 text-cyan-300 font-semibold'
-                        : 'text-neutral-300 hover:bg-neutral-800/80 hover:text-white'
-                    }`}
-                  >
-                    <span>Spanish (Subtítulos ES)</span>
-                    {subtitlesEnabled && subtitleLanguage === 'es' && <Check className="w-3.5 h-3.5 text-cyan-400" />}
-                  </button>
-
-                  <div className="pt-1 border-t border-white/5">
-                    <button
-                      onClick={() => {
-                        toggleSubtitlesEnabled(!subtitlesEnabled);
-                        setShowSubtitleMenu(false);
-                      }}
-                      className="w-full px-2.5 py-1.5 rounded-lg text-left text-neutral-400 hover:bg-neutral-800/80 hover:text-white text-[11px] transition-colors"
-                    >
-                      {subtitlesEnabled ? 'Turn Subtitles Off' : 'Turn Subtitles On'}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
 
           {/* Mute Button */}
           <button
@@ -493,30 +393,8 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         </div>
       </div>
 
-      {/* Bottom Subtitle / Narrative Display */}
+      {/* Bottom Clip HUD Meta Info */}
       <div className="absolute bottom-6 left-6 right-6 z-20 pointer-events-none flex flex-col items-center">
-        {/* Cinematic Subtitles Component */}
-        <AnimatePresence mode="wait">
-          {subtitlesEnabled && currentSubtitleText && phase === 'PLAYING' && (
-            <motion.div
-              key={currentSubtitleText}
-              initial={{ opacity: 0, y: 6, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.98 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="mb-4 px-6 py-2.5 rounded-2xl bg-black/85 border border-white/15 md:backdrop-blur-md max-w-3xl text-center shadow-[0_10px_40px_rgba(0,0,0,0.9)] select-none"
-            >
-              <p className="text-sm sm:text-base font-medium text-white tracking-wide leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                {currentSpeaker && (
-                  <span className="font-bold text-cyan-400 uppercase tracking-widest font-mono text-xs mr-2 border-r border-white/20 pr-2">
-                    {currentSpeaker}
-                  </span>
-                )}
-                <span className="italic">{currentSubtitleText}</span>
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Clip HUD Meta Info */}
         <div className="w-full flex items-center justify-between text-xs text-neutral-400 font-mono px-2 mb-1.5">
