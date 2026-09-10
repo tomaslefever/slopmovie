@@ -19,9 +19,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleGallery,
   isGalleryOpen,
   currentStep = 1,
-  totalSteps = 100
+  totalSteps = 50
 }) => {
-  const progressPercent = Math.min(100, Math.max(0, Math.round((currentStep / (totalSteps || 100)) * 100)));
+  const progressPercent = Math.min(100, Math.max(0, Math.round((currentStep / (totalSteps || 50)) * 100)));
   const lemonSqueezyUrl = process.env.NEXT_PUBLIC_LEMON_SQUEEZY_URL || 'https://lemon-squeezy.com';
 
   return (

@@ -116,7 +116,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            <span>Hilo Conductor (100 Pasos)</span>
+            <span>Hilo Conductor (50 Pasos)</span>
           </button>
         </div>
 
@@ -295,7 +295,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
 
               <div className="p-4 rounded-xl bg-neutral-900/60 border border-white/5 space-y-2">
                 <span className="text-xs font-mono uppercase text-amber-400 font-bold block">
-                  Hilo Conductor de los 100 Pasos:
+                  Hilo Conductor de los 50 Pasos:
                 </span>
                 <p className="text-neutral-300 leading-relaxed">{masterArcThread}</p>
               </div>

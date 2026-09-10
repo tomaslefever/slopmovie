@@ -1,4 +1,4 @@
-import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate } from '@/types/cinema';
+import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
 import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek, generateImmersiveAdPromptWithDeepSeek } from './deepseek';
 import type { CommentInfluence } from './deepseek';
 import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel } from './fal-video';
@@ -416,7 +416,7 @@ class CinemaOrchestrator {
       masterArcThread: generated.masterArcThread,
       status: 'streaming',
       currentStep: 1,
-      totalSteps: 100,
+      totalSteps: TOTAL_STEPS,
       bible: {
         ...generated.bible,
         isGenerationPaused: this.isGenerationPaused,
@@ -716,6 +716,16 @@ class CinemaOrchestrator {
         this.setPhase('PLAYING', duration);
         this.addSystemMessage(`🎬 First-shot sequence continuing: Scene ${nextStepNum}/4 ("${nextStepObj?.title || 'Continuing'}")`);
 
+        // Broadcast new_step so EVERY client (including late joiners) switches to the
+        // next prologue scene authoritatively — 4 x 15s = 1 minute uninterrupted.
+        broadcastCinemaEvent('new_step', {
+          step: nextStepObj,
+          currentStep: nextStepNum,
+          totalSteps: this.movie.totalSteps || this.movie.steps.length,
+          phaseDuration: duration,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
+        });
         broadcastCinemaEvent('phase_change', {
           phase: 'PLAYING',
           timeRemaining: duration,
@@ -734,7 +744,7 @@ class CinemaOrchestrator {
         currentStepCount > 0 &&
         currentStepCount % this.adsConfig.adIntervalSteps === 0 &&
         currentStepCount !== this.adsConfig.lastAdStep &&
-        currentStepCount < 97 // Never break during the epic finale: scene 100 must end the film
+        currentStepCount < TOTAL_STEPS - 3 // Never break during the denouement/finale: scene 50 must end the film
       ) {
         this.adsConfig.lastAdStep = currentStepCount;
         // Trigger commercial break immediately after this scene plays.
@@ -811,13 +821,13 @@ class CinemaOrchestrator {
         this.addSystemMessage(`🏆 VOTING CLOSED! Audience selected OPTION ${chosenOption} ("${winningOption.title}") with ${percent}% of votes.`);
       }
 
-      // CHECK IF 100 STEPS COMPLETED: GENERATE FINAL SUMMARY & AUTO-START NEXT BLOCKBUSTER
-      if (this.movie.steps.length >= 100) {
+      // CHECK IF TOTAL_STEPS (50) COMPLETED: GENERATE FINAL SUMMARY & AUTO-START NEXT BLOCKBUSTER
+      if (this.movie.steps.length >= TOTAL_STEPS) {
         this.movie.status = 'completed';
         this.movie.completedAt = new Date().toISOString();
 
         try {
-          this.addSystemMessage(`📜 Film complete! DeepSeek synthesizing 100-step narrative retrospective and master synopsis...`);
+          this.addSystemMessage(`📜 Film complete! DeepSeek synthesizing 50-step narrative retrospective and master synopsis...`);
           const finalReport = await generateMovieFinalSummaryWithDeepSeek(this.movie);
           this.movie.finalSummary = finalReport.finalSummary;
           this.movie.finalSynopsis = finalReport.finalSynopsis;
@@ -1391,7 +1401,7 @@ class CinemaOrchestrator {
     if (stepNumber <= 0) return;
     if (stepNumber % this.adsConfig.adIntervalSteps !== 0) return;
     if (stepNumber === this.adsConfig.lastAdStep) return;
-    if (stepNumber >= 97) return; // Never break during the epic finale: scene 100 must end the film
+    if (stepNumber >= TOTAL_STEPS - 3) return; // Never break during the denouement/finale: scene 50 must end the film
 
     const ad = this.pickRandomCommercialAd();
     if (!ad) return;

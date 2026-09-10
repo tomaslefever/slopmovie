@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kinetic Cinema // Cine Interactivo IA en Vivo (100 Pasos)",
+  title: "Kinetic Cinema // Cine Interactivo IA en Vivo (50 Pasos)",
   description: "Plataforma de streaming de cine interactivo impulsada por IA. Clips de 15 segundos, votaciones de 10 segundos con DeepSeek y fal.ai.",
 };
 

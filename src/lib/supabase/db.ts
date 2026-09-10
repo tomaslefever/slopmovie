@@ -1,4 +1,4 @@
-import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig, BlockbusterCandidate } from '@/types/cinema';
+import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
 import { getSupabaseServerClient } from './server';
 
 export function isSupabaseConfigured(): boolean {
@@ -54,7 +54,7 @@ export async function persistMovie(movie: Movie): Promise<void> {
       master_arc_thread: movie.masterArcThread || '',
       status: movie.status,
       current_step: movie.currentStep,
-      total_steps: movie.totalSteps || 100,
+      total_steps: movie.totalSteps || TOTAL_STEPS,
       bible: movie.bible,
       total_votes_cast: movie.totalVotesCast || 0,
       final_summary: movie.finalSummary || null,

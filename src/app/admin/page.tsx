@@ -1919,7 +1919,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <p className="text-xs text-neutral-300 leading-relaxed">
-                When a film finishes all 100 steps, Kinetic Cinema automatically initiates the next blockbuster film, cycling between <strong>Dark Epic Fantasy, Cyberpunk Neo-Noir, Cosmic Space Opera, Solarpunk Wasteland</strong>, and <strong>Supernatural Steampunk</strong>.
+                When a film finishes all 50 steps, Kinetic Cinema automatically initiates the next blockbuster film, cycling between <strong>Dark Epic Fantasy, Cyberpunk Neo-Noir, Cosmic Space Opera, Solarpunk Wasteland</strong>, and <strong>Supernatural Steampunk</strong>.
               </p>
 
               <div>

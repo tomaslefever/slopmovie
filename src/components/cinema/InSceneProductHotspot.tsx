@@ -38,7 +38,7 @@ export const InSceneProductHotspot: React.FC<InSceneProductHotspotProps> = ({ ad
   };
 
   return (
-    <div className="absolute bottom-16 left-6 z-30 pointer-events-auto">
+    <div className="absolute bottom-16 right-6 z-30 pointer-events-auto">
       {/* Floating Trigger Button */}
       {!isOpen && (
         <motion.button

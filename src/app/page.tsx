@@ -109,7 +109,10 @@ export default function CinemaStreamingPage() {
           movie: { ...prev.movie, currentStep: nextStepNum },
           activeStep: nextStepObj || prev.activeStep,
           phase: 'PLAYING',
-          timeRemaining: 15
+          timeRemaining: 15,
+          votesA: 0,
+          votesB: 0,
+          hasUserVoted: null
         } : null);
       } else {
         const adsConfig = cinemaState?.adsConfig;

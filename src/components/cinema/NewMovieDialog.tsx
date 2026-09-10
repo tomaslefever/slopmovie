@@ -44,7 +44,7 @@ export const NewMovieDialog: React.FC<NewMovieDialogProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-white uppercase tracking-wider">
-                Nueva Película Interactiva (100 Pasos)
+                Nueva Película Interactiva (50 Pasos)
               </h3>
               <p className="text-xs text-neutral-400">
                 DeepSeek generará el argumento, la biblia de arte y el primer clip
@@ -99,7 +99,7 @@ export const NewMovieDialog: React.FC<NewMovieDialogProps> = ({
           </button>
 
           <p className="text-[11px] text-neutral-500 text-center font-mono">
-            La película constará de 100 clips de 15s con votaciones de 10s en vivo.
+            La película constará de 50 clips de 15s con votaciones de 10s en vivo.
           </p>
         </div>
       </div>

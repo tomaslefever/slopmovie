@@ -10,11 +10,11 @@ const SHOWCASE_COMPLETED_MOVIES: Movie[] = [
     title: "Chrono-Shift: La Paradoja de Neo-Tokio",
     genre: "Sci-Fi / Time-Travel Noir",
     tagline: "El futuro fue escrito por 2,400 espectadores. Este es el resultado.",
-    initialPlot: "Año 2145. Un físico renegado roba el último acelerador de taquiones del laboratorio subacuático de Shin-Tokyo. A lo largo de 100 saltos temporales votados por el público, la línea temporal se fractura en realidades alternas.",
+    initialPlot: "Año 2145. Un físico renegado roba el último acelerador de taquiones del laboratorio subacuático de Shin-Tokyo. A lo largo de 50 saltos temporales votados por el público, la línea temporal se fractura en realidades alternas.",
     masterArcThread: "Restauración del hilo temporal alfa mientras se elude a los saboteadores de la Guardia Cuántica.",
     status: "completed",
-    currentStep: 100,
-    totalSteps: 100,
+    currentStep: 50,
+    totalSteps: 50,
     createdAt: "2026-08-15T20:00:00.000Z",
     completedAt: "2026-08-16T01:30:00.000Z",
     totalVotesCast: 14820,
@@ -63,7 +63,7 @@ const SHOWCASE_COMPLETED_MOVIES: Movie[] = [
       cinematicStyle: "Cinemascope 2.39:1, Lentes Anamórficas Kowa Vintage, Aberración cromática en bordes, 24fps",
       targetTheme: "Destino vs. Casualidad, El peso del remordimiento temporal"
     },
-    steps: Array.from({ length: 100 }).map((_, i) => ({
+    steps: Array.from({ length: 50 }).map((_, i) => ({
       stepNumber: i + 1,
       title: `Secuencia ${i + 1}: ${i % 2 === 0 ? "Fisura en el Vacío" : "Resonancia Temporal"}`,
       synopsis: `En el paso ${i + 1}, el Dr. Ren activa el dispositivo mientras los agentes convergen. La audiencia votó ${i % 2 === 0 ? 'Opción A' : 'Opción B'} permitiendo continuar el escape hacia el puente dimensional.`,
@@ -81,7 +81,7 @@ const SHOWCASE_COMPLETED_MOVIES: Movie[] = [
       activeCharacters: ["char_ren"],
       activeProps: ["prop_tachyon"],
       environment: "env_tokyo",
-      createdAt: new Date(Date.now() - (100 - i) * 60000).toISOString(),
+      createdAt: new Date(Date.now() - (50 - i) * 60000).toISOString(),
       options: [
         {
           id: "A",

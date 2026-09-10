@@ -1,4 +1,4 @@
-import { Character, Prop, SceneEnvironment, MovieBible, MovieStep, DecisionOption, Movie, SubtitleCue, BlockbusterCandidate } from '@/types/cinema';
+import { Character, Prop, SceneEnvironment, MovieBible, MovieStep, DecisionOption, Movie, SubtitleCue, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
 
 export interface GeneratedStoryBible {
   title: string;
@@ -53,8 +53,8 @@ const PRESET_STORIES = [
     title: "Project Nemesis: Protocol 2099",
     genre: "Cyberpunk / Neo-Noir Thriller",
     tagline: "In a metropolis of chrome and acid rain, every audience choice reconfigures the city's pulse.",
-    initialPlot: "In Neo-Sector 9, cybernetically augmented detective Kael Vane intercepts a forbidden quantum data prism capable of destabilizing the planetary neural syndicate OmniaTech. Pursued by corporate assassin squads and underground faction The Silent Breach, Kael must navigate 100 critical decisions shaped in real-time by the audience.",
-    masterArcThread: "Gradual dismantling of the OmniaTech orbital syndicate across 100 community-voted milestones, from the subterranean gutters of Sub-Level 4 to the orbital spire.",
+    initialPlot: "In Neo-Sector 9, cybernetically augmented detective Kael Vane intercepts a forbidden quantum data prism capable of destabilizing the planetary neural syndicate OmniaTech. Pursued by corporate assassin squads and underground faction The Silent Breach, Kael must navigate 50 critical decisions shaped in real-time by the audience.",
+    masterArcThread: "Gradual dismantling of the OmniaTech orbital syndicate across 50 community-voted milestones, from the subterranean gutters of Sub-Level 4 to the orbital spire.",
     cinematicStyle: "Anamorphic 35mm Panavision, Dark Cyberpunk, Moody Teals and Neon Amber, High Contrast Volumetric Fog",
     targetTheme: "Transhumanism, Free Will and Urban Resistance",
     firstStepTitle: "Awakening the Silent Protocol",
@@ -139,7 +139,7 @@ const PRESET_STORIES = [
     genre: "Dark Epic Fantasy / Mythic Saga",
     tagline: "When the ancient god-kings bled, an obsidian throne fractured the kingdoms of man forever.",
     initialPlot: "In the frostbitten citadel of Val-Khor, exiled runesmith Soren Draven unearths the Starforged Cinder: the pulsing hearth of a slain titan. With the Blood Court's wraiths encroaching upon the sanctuary gates, Soren and shadow-weaver Vespera must decide whether to consume the relic's forbidden fire or seal the realm in eternal twilight.",
-    masterArcThread: "A 100-step journey across the desecrated kingdoms of Eldoria, reforging the shattered imperial crown before the Eclipse of the Seven Moons consumes mortal kind.",
+    masterArcThread: "A 50-step journey across the desecrated kingdoms of Eldoria, reforging the shattered imperial crown before the Eclipse of the Seven Moons consumes mortal kind.",
     cinematicStyle: "70mm Ultra Panavision, Dark Fantasy Gothic, Candelit Shadows, Volumetric Mist and Glowing Runic Embers",
     targetTheme: "Sacrifice, Corrupted Royalty and Primordial Magic",
     firstStepTitle: "The Whispering Forge of Val-Khor",
@@ -224,7 +224,7 @@ const PRESET_STORIES = [
     genre: "Cosmic Space Opera / Sci-Fi Odyssey",
     tagline: "At the event horizon of Sector Orion, humanity discovers we were never alone — we were forgotten.",
     initialPlot: "Deep exploratory vessel USS Vanguard arrives at the perimeter of the Kepler Singularity, discovering an abandoned colossal megastructure known as the Architect's Loom. Commander Marcus Vance and Chief Astrobiologist Dr. Sean Mercer receive an impossible distress signal encoded in human DNA dating back four million years.",
-    masterArcThread: "Deciphering the celestial origin of consciousness across 100 deep-space orbital encounters, navigating black hole distortions and rogue artificial sentinels.",
+    masterArcThread: "Deciphering the celestial origin of consciousness across 50 deep-space orbital encounters, navigating black hole distortions and rogue artificial sentinels.",
     cinematicStyle: "IMAX 65mm Cosmic Scale, Deep Void Blacks, Pulsing Starfield Glow, Chromatic Stellar Flare",
     targetTheme: "Cosmic Wonder, Extinction Paradigms and The Limits of Human Knowledge",
     firstStepTitle: "Threshold of the Kepler Singularity",
@@ -287,22 +287,22 @@ export async function generateStoryBibleWithDeepSeek(customPrompt?: string): Pro
   if (apiKey) {
     try {
       const systemPrompt = `You are an elite Hollywood Director and Screenwriter specializing in interactive sci-fi cinematic universes with strict visual and audio continuity.
-Your mission is to formulate a MASTER STORY AND ART BIBLE for a 100-step interactive live cinema film.
+Your mission is to formulate a MASTER STORY AND ART BIBLE for a 50-step interactive live cinema film.
 
 MANDATORY RULES:
 1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, character description, voice prompt, prop, dialogue, subtitle, and option must be written in high-caliber cinematic English.
-2. VOICE CONTINUITY: Every character must have an immutable "voicePrompt" (timbre, frequency, pacing, breathing, accent, audio processing) so audio engines synthesize the exact same voice across all 100 clips.
+2. VOICE CONTINUITY: Every character must have an immutable "voicePrompt" (timbre, frequency, pacing, breathing, accent, audio processing) so audio engines synthesize the exact same voice across all 50 clips.
 3. PROPS & CHARACTERS: Every initial character must have their signature linked prop (ownerCharacterId) for consistent visual prompting.
 4. SUBTITLES: The first step must include timed "subtitles" (start in seconds, end in seconds, speaker, text in English, and optional textEs in Spanish).
 5. ONLY NECESSARY PROPS: In "firstStep.activeProps", specify ONLY the prop ID(s) that are physically visible or actively held/used in this opening 15-second scene. DO NOT pass all props. If no prop is visible in the shot, "activeProps" must be empty [].
-6. NARRATIVE ARC: The 100-step film follows a strict act structure that every step must respect — steps 1-19 SETUP (present the world, the characters and the central problem), steps 20-79 DEVELOPMENT (escalating conflict, twists and new characters), steps 80-96 DENOUEMENT (converging resolution), steps 97-99 EPIC FINALE (maximum-intensity climax), and step 100 THE END (definitive closing scene, no new conflicts). "masterArcThread" and "initialPlot" must be designed so the story can be resolved by step 100.
+6. NARRATIVE ARC: The 50-step film follows a strict act structure that every step must respect — steps 1-10 SETUP (present the world, the characters and the central problem), steps 11-39 DEVELOPMENT (escalating conflict, twists and new characters), steps 40-49 DENOUEMENT (converging resolution), and step 50 THE END (definitive closing scene, no new conflicts). "masterArcThread" and "initialPlot" must be designed so the story can be resolved by step 50.
 
 Respond ONLY with a valid JSON object matching this schema:
 {
   "title": "Compelling Cinematic Title in English",
   "genre": "Sci-Fi / Cyberpunk Thriller",
   "tagline": "Intriguing Hook in English",
-  "initialPlot": "Full master narrative arc in English that serves as the spine for 100 steps",
+  "initialPlot": "Full master narrative arc in English that serves as the spine for 50 steps",
   "masterArcThread": "Core story trajectory in English that evolves with audience choices",
   "cinematicStyle": "Detailed visual style (lenses, lighting, film grain, color grading)",
   "targetTheme": "Underlying philosophical theme",
@@ -641,24 +641,21 @@ Respond ONLY with a valid JSON object matching this schema:
 }
 
 /**
- * Narrative arc directive for a given step number. The 100-step film follows a
- * strict act structure: setup (1-19), development (20-79), denouement (80-96),
- * epic finale (97-99) and THE END at step 100.
+ * Narrative arc directive for a given step number. The 50-step film follows a
+ * strict act structure: setup (1-10), development (11-39), denouement (40-49)
+ * and THE END at step 50.
  */
 export function getNarrativeArcDirective(stepNum: number): string {
-  if (stepNum >= 100) {
-    return `NARRATIVE ARC PHASE — THE END (FINAL SCENE): Step 100 is the ABSOLUTE and definitive ending of the film. The story reaches its emotional and thematic conclusion HERE: the central conflict is fully resolved, the antagonist's fate is sealed, every loose thread closes, and the film ends with an epic cathartic final image. Do NOT introduce any new conflict, character or cliffhanger. The two voting options are the audience's final artistic choice between two flavors of the closing moment (e.g. bittersweet vs hopeful, sacrifice vs reunion) — BOTH options must still END the story.`;
+  if (stepNum >= TOTAL_STEPS) {
+    return `NARRATIVE ARC PHASE — THE END (FINAL SCENE): Step ${TOTAL_STEPS} is the ABSOLUTE and definitive ending of the film. The story reaches its emotional and thematic conclusion HERE: the central conflict is fully resolved, the antagonist's fate is sealed, every loose thread closes, and the film ends with an epic cathartic final image. Do NOT introduce any new conflict, character or cliffhanger. The two voting options are the audience's final artistic choice between two flavors of the closing moment (e.g. bittersweet vs hopeful, sacrifice vs reunion) — BOTH options must still END the story.`;
   }
-  if (stepNum >= 97) {
-    return `NARRATIVE ARC PHASE — EPIC FINALE (steps 97-99, building toward the ending at step 100): This is the climax of the entire film. Raise intensity to the absolute maximum: the ultimate confrontation, the final battle, the highest-stakes decision. Converge every plot thread, character and prop introduced so far. The outcome of this scene must lead DIRECTLY toward the definitive ending in step 100.`;
+  if (stepNum >= 40) {
+    return `NARRATIVE ARC PHASE — DENOUEMENT / RESOLUTION (steps 40-49, building toward the ending at step ${TOTAL_STEPS}): The story is in its closing act. Conflicts begin to resolve: alliances are tested, secrets are revealed, the antagonist's endgame takes its final form, and stakes become personal and irreversible. Converge every loose thread toward the definitive ending at step ${TOTAL_STEPS}. Each scene raises tension while moving the plot toward its conclusion.`;
   }
-  if (stepNum >= 80) {
-    return `NARRATIVE ARC PHASE — DENOUEMENT / RESOLUTION (steps 80-99): The story is in its closing act. Conflicts begin to resolve: alliances are tested, secrets are revealed, the antagonist's endgame takes its final form, and stakes become personal and irreversible. Converge loose threads toward the epic finale of the last scenes (97-99) and the definitive ending at step 100. Each scene raises tension while moving the plot toward its conclusion.`;
+  if (stepNum >= 11) {
+    return `NARRATIVE ARC PHASE — DEVELOPMENT (steps 11-39): The story is in its middle act. Escalate conflict: complications, betrayals, twists and mid-point reversals. Deepen character relationships and raise the stakes with every scene. New characters and their signature props may be introduced here. Keep every scene connected to the master plot while building momentum toward the final act.`;
   }
-  if (stepNum >= 20) {
-    return `NARRATIVE ARC PHASE — DEVELOPMENT (steps 20-79): The story is in its middle act. Escalate conflict: complications, betrayals, twists and mid-point reversals. Deepen character relationships and raise the stakes with every scene. New characters and their signature props may be introduced here. Keep every scene connected to the master plot while building momentum toward the final act.`;
-  }
-  return `NARRATIVE ARC PHASE — SETUP / EXPOSITION (steps 1-19): The story is in its opening act. These scenes must plant the problem and present the situation: introduce the world, the protagonist, the central conflict and the stakes. Establish mood, tone and the rules of the universe. Near step 20 the protagonist must be locked into the main quest at the point of no return.`;
+  return `NARRATIVE ARC PHASE — SETUP / EXPOSITION (steps 1-10): The story is in its opening act. These scenes must plant the problem and present the situation: introduce the world, the protagonist, the central conflict and the stakes. Establish mood, tone and the rules of the universe. Near step 11 the protagonist must be locked into the main quest at the point of no return.`;
 }
 
 /**
@@ -698,9 +695,9 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
 
   if (apiKey) {
     try {
-      const systemPrompt = `You are an elite Interactive Cinema AI Director. The film spans a coherent 100-step arc.
+      const systemPrompt = `You are an elite Interactive Cinema AI Director. The film spans a coherent 50-step arc.
 The audience just voted for OPTION ${chosenOptionId}: "${chosenOption.title}" (${chosenOption.text}).
-You are generating STEP ${nextStepNum} of 100 (exactly a 15-second cinematic clip for MiniMax H3-Max in 480p 16:9).
+You are generating STEP ${nextStepNum} of ${TOTAL_STEPS} (exactly a 15-second cinematic clip for MiniMax H3-Max in 480p 16:9).
 
 ${getNarrativeArcDirective(nextStepNum)}
 ${influenceDirective}
@@ -1055,14 +1052,14 @@ Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p
     activePropImages = [];
   }
 
-  // ── NARRATIVE ARC OVERRIDE: Finale steps converge into the epic ending (step 100 = THE END) ──
-  if (nextStepNum >= 97) {
+  // ── NARRATIVE ARC OVERRIDE: Denouement steps converge into the epic ending (step 50 = THE END) ──
+  if (nextStepNum >= TOTAL_STEPS - 3) {
     const finalChar = movie.bible.characters[0] || char;
     const finalProp = movie.bible.props[0] || prop;
-    const isLastScene = nextStepNum >= 100;
+    const isLastScene = nextStepNum >= TOTAL_STEPS;
 
     if (isLastScene) {
-      synopsis = `THE END. The fate of ${finalChar.name} and the ${finalProp.name} is decided as every audience choice across the entire 100-step journey converges into one defining, cathartic moment. The conflict is resolved and the film closes on an epic final image.`;
+      synopsis = `THE END. The fate of ${finalChar.name} and the ${finalProp.name} is decided as every audience choice across the entire 50-step journey converges into one defining, cathartic moment. The conflict is resolved and the film closes on an epic final image.`;
       visualPrompt = `Epic finale shot of ${finalChar.name} (${finalChar.visualTraits}) at the end of the journey, the ${finalProp.name} (${finalProp.visualAppearance}) in its final state, the story's central conflict resolved, majestic golden-hour cinematic lighting, 480p 16:9 anamorphic film`;
       subtitles = [
         {
@@ -1081,7 +1078,7 @@ Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p
         }
       ];
     } else {
-      synopsis = `EPIC FINALE. The final confrontation erupts: ${finalChar.name} unleashes everything in the climactic battle that will decide the fate of the ${finalProp.name} and every life bound to it. The story surges toward its definitive ending.`;
+      synopsis = `FINAL CONFRONTATION. The last threads converge: ${finalChar.name} unleashes everything in the climactic struggle that will decide the fate of the ${finalProp.name} and every life bound to it. The story surges toward its definitive ending at step ${TOTAL_STEPS}.`;
       visualPrompt = `Maximum-intensity climactic battle, ${finalChar.name} (${finalChar.visualTraits}) wielding the ${finalProp.name} (${finalProp.visualAppearance}), converging plot threads, epic scale explosion of light and shadow, cinematic 480p 16:9 anamorphic film`;
       subtitles = [
         {
@@ -1158,7 +1155,7 @@ export async function generateMovieFinalSummaryWithDeepSeek(movie: Movie): Promi
 
   if (apiKey) {
     try {
-      const systemPrompt = `You are an elite Hollywood Film Director and Film Scholar. The interactive film "${movie.title}" has just concluded its 100-step arc, created and voted upon live by the audience.
+      const systemPrompt = `You are an elite Hollywood Film Director and Film Scholar. The interactive film "${movie.title}" has just concluded its 50-step arc, created and voted upon live by the audience.
 Your mission is to generate:
 1. "finalSynopsis": A definitive, thrilling master synopsis (2-3 paragraphs in ENGLISH) summarizing the full story created by the audience.
 2. "finalSummary": A detailed retrospective breakdown in ENGLISH (divided into Act I: The Catalyst & The Breach, Act II: Divergent Alliances & Shadow Warfare, and Act III: The Zenith Climax & Liberation), celebrating the characters introduced, key props utilized, and the philosophical weight of the audience's choices.
@@ -1198,7 +1195,7 @@ Major milestones: ${movie.steps.slice(0, 15).map(s => `Step ${s.stepNumber}: Opt
         const parsed = JSON.parse(data.choices[0]?.message?.content);
         return {
           finalSynopsis: parsed.finalSynopsis || movie.initialPlot,
-          finalSummary: parsed.finalSummary || "The film successfully concluded its community-driven 100-step cinematic odyssey."
+          finalSummary: parsed.finalSummary || "The film successfully concluded its community-driven 50-step cinematic odyssey."
         };
       }
     } catch (e) {
@@ -1210,7 +1207,7 @@ Major milestones: ${movie.steps.slice(0, 15).map(s => `Step ${s.stepNumber}: Opt
   const charNames = movie.bible.characters.map(c => c.name).join(' and ');
   const propNames = movie.bible.props.map(p => p.name).join(', ');
 
-  const finalSynopsis = `Across 100 real-time narrative branches shaped live by the audience, "${movie.title}" chronicles the pulse-pounding odyssey of ${charNames} in a race against extinction across the dystopian city. Forced to choose at every turn between calculated stealth and explosive open warfare, the protagonists confronted totalitarian corporate control armed with the ${propNames}, culminating in the definitive liberation of human free will.`;
+  const finalSynopsis = `Across 50 real-time narrative branches shaped live by the audience, "${movie.title}" chronicles the pulse-pounding odyssey of ${charNames} in a race against extinction across the dystopian city. Forced to choose at every turn between calculated stealth and explosive open warfare, the protagonists confronted totalitarian corporate control armed with the ${propNames}, culminating in the definitive liberation of human free will.`;
 
   const finalSummary = `### Cinematic Retrospective & Narrative Arc
 **Act I: The Catalyst & The Quantum Breach**
@@ -1392,7 +1389,7 @@ export async function generateBlockbusterCandidatesWithDeepSeek(): Promise<Block
       const selectedAesthetics = sampleUniqueRandom(CREATIVE_AESTHETICS, 4);
 
       const systemPrompt = `You are an avant-garde Head of Development at an interactive blockbuster cinema studio.
-Your mission is to formulate EXACTLY 4 completely DIFFERENT, wild, high-concept interactive film pitches for a live 100-step audience-driven interactive movie.
+Your mission is to formulate EXACTLY 4 completely DIFFERENT, wild, high-concept interactive film pitches for a live 50-step audience-driven interactive movie.
 
 MANDATORY RULES:
 1. RADICAL DIVERSITY: Each of the 4 candidates MUST be from a completely different genre, tone, visual style, and emotional palette. Avoid Hollywood clichés, generic medieval tropes, or basic cyber hackers.
@@ -1410,7 +1407,7 @@ MANDATORY RULES:
       "title": "Unforgettable Cinematic Title",
       "logline": "One razor-sharp sentence describing the hook, protagonist goal, and immediate stakes.",
       "genre": "Precise Distinct Genre / Hybrid",
-      "premise": "Full creative brief: the world, protagonist, antagonist, central conflict, signature prop/technology, and the core audience choices across the 100-step arc."
+      "premise": "Full creative brief: the world, protagonist, antagonist, central conflict, signature prop/technology, and the core audience choices across the 50-step arc."
     }
   ]
 }`;
