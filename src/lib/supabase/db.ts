@@ -507,7 +507,7 @@ async function loadStepsForMovies(
 /**
  * Load all movies from database (streaming, paused, completed)
  */
-export async function loadAllMoviesFromDb(limit = 30): Promise<Movie[]> {
+export async function loadAllMoviesFromDb(limit = 100): Promise<Movie[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return [];
 
@@ -841,43 +841,73 @@ export async function updateMovieInDb(
 }
 
 /**
- * Delete a movie and all its dependent rows (steps, props, chat, votes cascade).
+ * Bulk delete multiple movies from DB.
+ * Safely unlinks cinema_state if the active movie is deleted,
+ * cleans up dependent child tables, and verifies actual deleted rows.
  */
-export async function deleteMovieFromDb(movieId: string): Promise<boolean> {
+export async function deleteMoviesFromDb(movieIds: string[]): Promise<{ success: boolean; deletedCount: number }> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return false;
+  if (!supabase || !movieIds || movieIds.length === 0) {
+    return { success: false, deletedCount: 0 };
+  }
 
   try {
-    const { error } = await supabase.from('movies').delete().eq('id', movieId);
-    if (error) {
-      logSupabaseError('deleteMovieFromDb', error);
-      return false;
+    // 1. If cinema_state currently points to any of these movies, detach it first so active_session is not cascade-deleted
+    const { data: stateRow } = await supabase
+      .from('cinema_state')
+      .select('id, movie_id')
+      .eq('id', 'active_session')
+      .maybeSingle();
+
+    if (stateRow?.movie_id && movieIds.includes(stateRow.movie_id)) {
+      console.log(`[Supabase] Detaching active movie ${stateRow.movie_id} from cinema_state before deletion`);
+      await supabase
+        .from('cinema_state')
+        .update({ movie_id: null })
+        .eq('id', 'active_session');
     }
-    return true;
+
+    // 2. Explicitly clean up all dependent/foreign key tables to prevent constraint violations
+    await Promise.allSettled([
+      supabase.from('movie_steps').delete().in('movie_id', movieIds),
+      supabase.from('props').delete().in('movie_id', movieIds),
+      supabase.from('step_votes').delete().in('movie_id', movieIds),
+      supabase.from('blockbuster_votes').delete().in('movie_id', movieIds),
+      supabase.from('comment_votes').delete().in('movie_id', movieIds),
+      supabase.from('top_voted_comments').delete().in('movie_id', movieIds),
+      supabase.from('chat_messages').delete().in('movie_id', movieIds),
+      supabase.from('viewer_preferences').delete().in('movie_id', movieIds),
+      supabase.from('immersive_ads').update({ movie_id: null }).in('movie_id', movieIds)
+    ]);
+
+    // 3. Delete the movies and select back the deleted IDs to confirm deletion
+    const { data, error } = await supabase
+      .from('movies')
+      .delete()
+      .in('id', movieIds)
+      .select('id');
+
+    if (error) {
+      logSupabaseError('deleteMoviesFromDb', error);
+      return { success: false, deletedCount: 0 };
+    }
+
+    const deletedCount = data?.length ?? 0;
+    console.log(`[Supabase] deleteMoviesFromDb: requested ${movieIds.length}, deleted ${deletedCount}`);
+
+    return { success: true, deletedCount };
   } catch (err) {
-    console.error('[Supabase] Exception in deleteMovieFromDb:', err);
-    return false;
+    console.error('[Supabase] Exception in deleteMoviesFromDb:', err);
+    return { success: false, deletedCount: 0 };
   }
 }
 
 /**
- * Bulk delete multiple movies from DB.
+ * Delete a single movie and all its dependent rows from DB.
  */
-export async function deleteMoviesFromDb(movieIds: string[]): Promise<boolean> {
-  const supabase = getSupabaseServerClient();
-  if (!supabase || !movieIds || movieIds.length === 0) return false;
-
-  try {
-    const { error } = await supabase.from('movies').delete().in('id', movieIds);
-    if (error) {
-      logSupabaseError('deleteMoviesFromDb', error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error('[Supabase] Exception in deleteMoviesFromDb:', err);
-    return false;
-  }
+export async function deleteMovieFromDb(movieId: string): Promise<boolean> {
+  const result = await deleteMoviesFromDb([movieId]);
+  return result.success && result.deletedCount > 0;
 }
 
 /**

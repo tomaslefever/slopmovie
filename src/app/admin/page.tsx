@@ -745,6 +745,7 @@ export default function AdminDashboardPage() {
   const handleDeleteMovie = async () => {
     audioCues.playClick();
     if (!cinemaState?.movie) return;
+    const targetMovieId = cinemaState.movie.id;
     if (!confirm(`🗑️ ¿Eliminar definitivamente "${cinemaState.movie.title}"? Sus escenas, votos y chat se borrarán.`)) return;
 
     setIsDeletingMovie(true);
@@ -752,16 +753,17 @@ export default function AdminDashboardPage() {
       const res = await fetch('/api/cinema/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_movie', movieId: cinemaState.movie.id })
+        body: JSON.stringify({ action: 'delete_movie', movieId: targetMovieId })
       });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
+          setAllMovies(prev => prev.filter(m => m.id !== targetMovieId));
           setCinemaState((prev: any) => prev ? { ...prev, movie: data.movie || prev.movie, ...data.state } : prev);
           if (data.movie?.id) setSelectedMovieId(data.movie.id);
           setIsEditingMovie(false);
           showFeedback(data.movie ? '🗑️ Película eliminada. Nueva película generada.' : '🗑️ Película eliminada de la biblioteca.');
-          fetchData();
+          await fetchData();
         } else {
           showFeedback('No se pudo eliminar la película');
         }
@@ -789,9 +791,10 @@ export default function AdminDashboardPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
+          setAllMovies(prev => prev.filter(m => m.id !== movieId));
           setSelectedMovieIds(prev => prev.filter(id => id !== movieId));
           showFeedback('🗑️ Película eliminada correctamente.');
-          fetchData();
+          await fetchData();
         } else {
           showFeedback('No se pudo eliminar la película');
         }
@@ -832,23 +835,27 @@ export default function AdminDashboardPage() {
     audioCues.playClick();
     setIsBulkDeleting(true);
 
+    const idsToDelete = [...selectedMovieIds];
+
     try {
       const res = await fetch('/api/cinema/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'bulk_delete_movies',
-          movieIds: selectedMovieIds
+          movieIds: idsToDelete
         })
       });
 
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          showFeedback(`🗑️ ${data.deletedCount || selectedMovieIds.length} película(s) eliminada(s) en masa.`);
+          // Optimistically update list immediately
+          setAllMovies(prev => prev.filter(m => !idsToDelete.includes(m.id)));
           setSelectedMovieIds([]);
           setShowBulkDeleteModal(false);
-          fetchData();
+          showFeedback(`🗑️ ${data.deletedCount || idsToDelete.length} película(s) eliminada(s) en masa.`);
+          await fetchData();
         } else {
           showFeedback('No se pudieron eliminar las películas en masa.');
         }

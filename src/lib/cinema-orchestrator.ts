@@ -2264,24 +2264,34 @@ class CinemaOrchestrator {
    * Deleting the currently streaming movie starts a fresh film automatically.
    */
   public async deleteMovie(movieId: string): Promise<{ success: boolean; newMovie?: Movie }> {
-    const isActive = this.movie?.id === movieId;
+    let liveState = null;
+    try {
+      liveState = await loadLiveCinemaStateFromDb();
+    } catch {
+      // ignore
+    }
+    const activeMovieId = this.movie?.id || liveState?.movieId;
+    const isActive = activeMovieId === movieId;
+
+    let newMovie: Movie | undefined;
+    if (isActive) {
+      this.movie = null;
+      this.activeAd = null;
+      this.addSystemMessage(`🗑️ Director deleted the currently streaming movie. Generating a fresh blockbuster film...`);
+      newMovie = await this.startNextBlockbusterMovie();
+    }
 
     const deleted = await deleteMovieFromDb(movieId);
     if (!deleted) return { success: false };
 
     this.completedMovies = this.completedMovies.filter(m => m.id !== movieId);
 
-    if (isActive) {
-      this.movie = null;
-      this.activeAd = null;
-      this.addSystemMessage(`🗑️ Director deleted the currently streaming movie. Generating a fresh blockbuster film...`);
-      const newMovie = await this.startNextBlockbusterMovie();
-      return { success: true, newMovie };
+    if (!isActive) {
+      this.addSystemMessage(`🗑️ Director deleted movie "${movieId}" from the library.`);
+      await this.broadcastStateSnapshot();
     }
 
-    this.addSystemMessage(`🗑️ Director deleted movie "${movieId}" from the library.`);
-    await this.broadcastStateSnapshot();
-    return { success: true };
+    return { success: true, newMovie };
   }
 
   /**
@@ -2290,22 +2300,36 @@ class CinemaOrchestrator {
   public async bulkDeleteMovies(movieIds: string[]): Promise<{ success: boolean; deletedCount: number; newMovie?: Movie }> {
     if (!movieIds || movieIds.length === 0) return { success: false, deletedCount: 0 };
 
-    const activeIncluded = Boolean(this.movie && movieIds.includes(this.movie.id));
+    let liveState = null;
+    try {
+      liveState = await loadLiveCinemaStateFromDb();
+    } catch {
+      // ignore
+    }
+    const activeMovieId = this.movie?.id || liveState?.movieId;
+    const activeIncluded = Boolean(activeMovieId && movieIds.includes(activeMovieId));
 
-    await deleteMoviesFromDb(movieIds);
-    this.completedMovies = this.completedMovies.filter(m => !movieIds.includes(m.id));
-
+    let newMovie: Movie | undefined;
     if (activeIncluded) {
       this.movie = null;
       this.activeAd = null;
       this.addSystemMessage(`🗑️ Director deleted ${movieIds.length} movie(s) including active broadcast. Generating a fresh blockbuster film...`);
-      const newMovie = await this.startNextBlockbusterMovie();
-      return { success: true, deletedCount: movieIds.length, newMovie };
+      newMovie = await this.startNextBlockbusterMovie();
     }
 
-    this.addSystemMessage(`🗑️ Director deleted ${movieIds.length} movie(s) from the library.`);
-    await this.broadcastStateSnapshot();
-    return { success: true, deletedCount: movieIds.length };
+    const dbResult = await deleteMoviesFromDb(movieIds);
+    this.completedMovies = this.completedMovies.filter(m => !movieIds.includes(m.id));
+
+    if (!activeIncluded) {
+      this.addSystemMessage(`🗑️ Director deleted ${dbResult.deletedCount || movieIds.length} movie(s) from the library.`);
+      await this.broadcastStateSnapshot();
+    }
+
+    return {
+      success: dbResult.success,
+      deletedCount: dbResult.deletedCount || movieIds.length,
+      newMovie
+    };
   }
 
   /**
@@ -2344,26 +2368,28 @@ class CinemaOrchestrator {
   public async loadAllAvailableMovies(): Promise<Movie[]> {
     const moviesMap = new Map<string, Movie>();
 
-    if (this.movie) {
-      moviesMap.set(this.movie.id, this.movie);
-    }
-
-    for (const m of this.completedMovies) {
-      if (!moviesMap.has(m.id)) {
-        moviesMap.set(m.id, m);
-      }
-    }
-
     if (isSupabaseConfigured()) {
       try {
-        const dbMovies = await loadAllMoviesFromDb();
+        const dbMovies = await loadAllMoviesFromDb(100);
         for (const m of dbMovies) {
-          if (!moviesMap.has(m.id)) {
-            moviesMap.set(m.id, m);
-          }
+          moviesMap.set(m.id, m);
         }
       } catch (err) {
         console.warn("[Cinema] Error loading all movies from db:", err);
+      }
+    }
+
+    // Add active in-memory movie if not already in map
+    if (this.movie && !moviesMap.has(this.movie.id)) {
+      moviesMap.set(this.movie.id, this.movie);
+    }
+
+    // Only add in-memory completed movies if Supabase is NOT configured
+    if (!isSupabaseConfigured()) {
+      for (const m of this.completedMovies) {
+        if (!moviesMap.has(m.id)) {
+          moviesMap.set(m.id, m);
+        }
       }
     }
 

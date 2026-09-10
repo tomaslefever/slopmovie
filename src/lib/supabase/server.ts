@@ -15,6 +15,11 @@ export function getSupabaseServerClient(): SupabaseClient | null {
     return null;
   }
 
+  const hasServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  if (!hasServiceRole) {
+    console.warn('[Supabase Server] WARNING: SUPABASE_SERVICE_ROLE_KEY is not defined in process.env. Falling back to anon key. Admin deletions/updates might be restricted by Supabase RLS.');
+  }
+
   serverClient = createClient(supabaseUrl, supabaseKey, {
     auth: {
       persistSession: false,
