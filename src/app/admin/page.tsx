@@ -154,7 +154,8 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (session) {
       fetchData();
-      const interval = setInterval(fetchData, 3000);
+      // Lightweight fallback poll — primary refresh comes from Supabase Realtime below
+      const interval = setInterval(fetchData, 15000);
 
       const supabase = getSupabaseBrowserClient();
       if (supabase) {
@@ -193,9 +194,28 @@ export default function AdminDashboardPage() {
           })
           .subscribe();
 
+        // ── Supabase Realtime (postgres_changes): refresh admin state the instant
+        // anything changes in the database — no heavy polling needed. ──────────
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+        const debouncedFetch = () => {
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchData();
+          }, 400);
+        };
+
+        const dbChannel = supabase.channel('cinema_admin_db_sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'cinema_state' }, debouncedFetch)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'movies' }, debouncedFetch)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'movie_steps' }, debouncedFetch)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'immersive_ads' }, debouncedFetch)
+          .subscribe();
+
         return () => {
           clearInterval(interval);
+          if (debounceTimer) clearTimeout(debounceTimer);
           supabase.removeChannel(channel);
+          supabase.removeChannel(dbChannel);
         };
       }
 

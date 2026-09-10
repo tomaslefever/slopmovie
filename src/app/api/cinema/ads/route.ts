@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
 import { cinemaEngine } from '@/lib/cinema-orchestrator';
+import { loadImmersiveAdsFromDb, loadLiveCinemaStateFromDb } from '@/lib/supabase/db';
 
 export async function GET() {
-  const ads = cinemaEngine.getAds();
+  // Database is the source of truth so ad edits persist across processes;
+  // fall back to the in-memory engine when Supabase is not configured.
+  const dbAds = await loadImmersiveAdsFromDb();
+  const liveState = await loadLiveCinemaStateFromDb();
+
+  const ads = dbAds.length > 0 ? dbAds : cinemaEngine.getAds();
   return NextResponse.json({
     ads,
-    adsConfig: cinemaEngine.adsConfig,
-    activeAd: cinemaEngine.activeAd
+    adsConfig: liveState?.adsConfig || cinemaEngine.adsConfig,
+    activeAd: liveState?.activeAd || cinemaEngine.activeAd
   });
 }
 

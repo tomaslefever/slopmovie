@@ -32,7 +32,9 @@ import {
   voteChatMessageInDb,
   markChatMessageUsedForInfluence,
   updateMovieInDb,
-  deleteMovieFromDb
+  deleteMovieFromDb,
+  persistBlockbusterVote,
+  loadBlockbusterVoteCountsFromDb
 } from './supabase/db';
 import { generateAndStorePropReferenceImage } from './supabase/storage';
 
@@ -1046,6 +1048,15 @@ class CinemaOrchestrator {
     this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
     this.blockbusterUserVotes.clear();
 
+    // Seed counts from the realtime database (survives server restarts mid-vote)
+    if (this.movie) {
+      try {
+        this.blockbusterVoteCounts = await loadBlockbusterVoteCountsFromDb(this.movie.id);
+      } catch (err) {
+        console.warn('[Cinema] Could not restore blockbuster vote counts from DB:', err);
+      }
+    }
+
     this.setPhase('BLOCKBUSTER_VOTING', 30);
     this.addSystemMessage(`🎟️ NEXT BLOCKBUSTER VOTE: The audience has 30 seconds to pick the next film!`);
 
@@ -1063,6 +1074,7 @@ class CinemaOrchestrator {
 
   /**
    * Cast a vote for the next blockbuster movie during the BLOCKBUSTER_VOTING stage.
+   * Persisted in Supabase (blockbuster_votes, realtime-published) as well as memory.
    */
   public castBlockbusterVote(userId: string, candidateId: 'A' | 'B' | 'C' | 'D'): { success: boolean; counts: Record<'A' | 'B' | 'C' | 'D', number> } {
     if (this.phase !== 'BLOCKBUSTER_VOTING') {
@@ -1081,6 +1093,13 @@ class CinemaOrchestrator {
     this.blockbusterVoteCounts[candidateId]++;
 
     this.blockbusterUserVotes.set(userId, candidateId);
+
+    // Persist to the realtime database (upsert: one vote per user per movie)
+    if (this.movie) {
+      persistBlockbusterVote(this.movie.id, userId, candidateId).catch((err) => {
+        console.warn('[Cinema] Failed to persist blockbuster vote:', err);
+      });
+    }
 
     broadcastCinemaEvent('blockbuster_vote_update', {
       counts: this.blockbusterVoteCounts,
@@ -1499,6 +1518,8 @@ class CinemaOrchestrator {
     };
     // Config change invalidates any pre-generated ad clip
     this.pendingPreGeneratedAd = null;
+    // Persist immediately so other processes/restarts see the change
+    this.persistCurrentStateToSupabase();
     broadcastCinemaEvent('ads_config_update', this.adsConfig);
   }
 
@@ -2064,6 +2085,8 @@ class CinemaOrchestrator {
         isGenerationPaused: this.isGenerationPaused,
         videoModel: this.videoModel,
         videoResolution: this.videoResolution,
+        blockbusterCandidates: this.blockbusterCandidates,
+        blockbusterVoteCounts: this.blockbusterVoteCounts,
         activeAd: this.activeAd,
         adsConfig: this.adsConfig,
         selectedOption: currentStepObj?.selectedOption,

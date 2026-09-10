@@ -28,6 +28,19 @@ export async function GET(request: Request) {
   cinemaEngine.adoptVideoModel(liveState?.videoModel);
   cinemaEngine.adoptVideoResolution(liveState?.videoResolution);
 
+  // Adopt ads configuration persisted in the DB
+  if (liveState?.adsConfig) {
+    cinemaEngine.adsConfig = liveState.adsConfig;
+  }
+
+  // Adopt blockbuster voting state persisted in the DB (survives restarts / multi-process)
+  if (Array.isArray(liveState?.blockbusterCandidates) && liveState.blockbusterCandidates.length > 0) {
+    cinemaEngine.blockbusterCandidates = liveState.blockbusterCandidates;
+  }
+  if (liveState?.blockbusterVoteCounts) {
+    cinemaEngine.blockbusterVoteCounts = liveState.blockbusterVoteCounts;
+  }
+
   // If the live-state movie id points at an archived/completed movie (stale pointer),
   // fall back to the newest streaming/paused movie so the same old film is never resurrected.
   if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0 || activeMovie.status === 'completed') {

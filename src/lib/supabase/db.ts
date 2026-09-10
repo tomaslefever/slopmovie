@@ -1,4 +1,4 @@
-import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig } from '@/types/cinema';
+import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig, BlockbusterCandidate } from '@/types/cinema';
 import { getSupabaseServerClient } from './server';
 
 export function isSupabaseConfigured(): boolean {
@@ -340,61 +340,12 @@ export async function loadCompletedMoviesFromDb(): Promise<Movie[]> {
       .eq('status', 'completed')
       .order('completed_at', { ascending: false });
 
-    if (error || !movies) return [];
+    if (error || !movies || movies.length === 0) return [];
 
-    const result: Movie[] = [];
-    for (const m of movies) {
-      const { data: steps } = await supabase
-        .from('movie_steps')
-        .select('*')
-        .eq('movie_id', m.id)
-        .order('step_number', { ascending: true });
+    // Single batched query for ALL steps instead of one query per movie
+    const stepsByMovie = await loadStepsForMovies(supabase, movies.map(m => m.id));
 
-      result.push({
-        id: m.id,
-        title: m.title,
-        genre: m.genre,
-        tagline: m.tagline,
-        initialPlot: m.initial_plot,
-        masterArcThread: m.master_arc_thread,
-        status: m.status,
-        currentStep: m.current_step,
-        totalSteps: m.total_steps,
-        bible: m.bible,
-        steps: (steps || []).map(s => ({
-          stepNumber: s.step_number,
-          title: s.title,
-          synopsis: s.synopsis,
-          dialogueSnippet: s.dialogue_snippet,
-          voiceDirection: s.voice_direction,
-          visualPrompt: s.visual_prompt,
-          cameraMotionPrompt: s.camera_motion_prompt,
-          videoUrl: s.video_url,
-          thumbnailUrl: s.thumbnail_url,
-          duration: s.duration,
-          votingWindowSeconds: s.voting_window_seconds,
-          options: s.options,
-          selectedOption: s.selected_option,
-          wasRandomPick: s.was_random_pick,
-          activeCharacters: s.active_characters,
-          activeProps: s.active_props,
-          newCharacter: s.new_character,
-          newProp: s.new_prop,
-          referenceVideoUrl: s.reference_video_url,
-          propReferenceImages: s.prop_reference_images,
-          subtitles: s.subtitles || [],
-          environment: s.environment,
-          createdAt: s.created_at,
-        })),
-        createdAt: m.created_at,
-        completedAt: m.completed_at,
-        totalVotesCast: m.total_votes_cast,
-        finalSummary: m.final_summary,
-        finalSynopsis: m.final_synopsis,
-      });
-    }
-
-    return result;
+    return movies.map(m => mapMovieRow(m, stepsByMovie.get(m.id) || []));
   } catch (err) {
     console.error('[Supabase] Exception in loadCompletedMoviesFromDb:', err);
     return [];
@@ -475,6 +426,85 @@ export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | n
 }
 
 /**
+ * Map a raw movie row + its step rows into a Movie object.
+ */
+function mapMovieRow(m: any, steps: any[]): Movie {
+  return {
+    id: m.id,
+    title: m.title,
+    genre: m.genre,
+    tagline: m.tagline,
+    initialPlot: m.initial_plot,
+    masterArcThread: m.master_arc_thread,
+    status: m.status,
+    currentStep: m.current_step,
+    totalSteps: m.total_steps,
+    bible: m.bible,
+    steps: (steps || []).map((s: any) => ({
+      stepNumber: s.step_number,
+      title: s.title,
+      synopsis: s.synopsis,
+      dialogueSnippet: s.dialogue_snippet,
+      voiceDirection: s.voice_direction,
+      visualPrompt: s.visual_prompt,
+      cameraMotionPrompt: s.camera_motion_prompt,
+      videoUrl: s.video_url,
+      thumbnailUrl: s.thumbnail_url,
+      duration: s.duration,
+      votingWindowSeconds: s.voting_window_seconds,
+      options: s.options,
+      selectedOption: s.selected_option,
+      wasRandomPick: s.was_random_pick,
+      activeCharacters: s.active_characters,
+      activeProps: s.active_props,
+      newCharacter: s.new_character,
+      newProp: s.new_prop,
+      referenceVideoUrl: s.reference_video_url,
+      propReferenceImages: s.prop_reference_images,
+      subtitles: s.subtitles || [],
+      environment: s.environment,
+      createdAt: s.created_at,
+    })),
+    createdAt: m.created_at,
+    completedAt: m.completed_at,
+    totalVotesCast: m.total_votes_cast,
+    finalSummary: m.final_summary,
+    finalSynopsis: m.final_synopsis,
+  };
+}
+
+/**
+ * Batch-load steps for many movies in ONE query (avoids N+1 on the movies list).
+ */
+async function loadStepsForMovies(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  movieIds: string[]
+): Promise<Map<string, any[]>> {
+  const stepsByMovie = new Map<string, any[]>();
+  if (movieIds.length === 0) return stepsByMovie;
+
+  try {
+    const { data, error } = await supabase
+      .from('movie_steps')
+      .select('*')
+      .in('movie_id', movieIds)
+      .order('step_number', { ascending: true });
+
+    if (error) return stepsByMovie;
+
+    for (const s of data || []) {
+      const list = stepsByMovie.get(s.movie_id) || [];
+      list.push(s);
+      stepsByMovie.set(s.movie_id, list);
+    }
+  } catch (err) {
+    console.error('[Supabase] Exception in loadStepsForMovies:', err);
+  }
+
+  return stepsByMovie;
+}
+
+/**
  * Load all movies from database (streaming, paused, completed)
  */
 export async function loadAllMoviesFromDb(limit = 30): Promise<Movie[]> {
@@ -488,61 +518,12 @@ export async function loadAllMoviesFromDb(limit = 30): Promise<Movie[]> {
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (error || !movies) return [];
+    if (error || !movies || movies.length === 0) return [];
 
-    const result: Movie[] = [];
-    for (const m of movies) {
-      const { data: steps } = await supabase
-        .from('movie_steps')
-        .select('*')
-        .eq('movie_id', m.id)
-        .order('step_number', { ascending: true });
+    // Single batched query for ALL steps instead of one query per movie
+    const stepsByMovie = await loadStepsForMovies(supabase, movies.map(m => m.id));
 
-      result.push({
-        id: m.id,
-        title: m.title,
-        genre: m.genre,
-        tagline: m.tagline,
-        initialPlot: m.initial_plot,
-        masterArcThread: m.master_arc_thread,
-        status: m.status,
-        currentStep: m.current_step,
-        totalSteps: m.total_steps,
-        bible: m.bible,
-        steps: (steps || []).map(s => ({
-          stepNumber: s.step_number,
-          title: s.title,
-          synopsis: s.synopsis,
-          dialogueSnippet: s.dialogue_snippet,
-          voiceDirection: s.voice_direction,
-          visualPrompt: s.visual_prompt,
-          cameraMotionPrompt: s.camera_motion_prompt,
-          videoUrl: s.video_url,
-          thumbnailUrl: s.thumbnail_url,
-          duration: s.duration,
-          votingWindowSeconds: s.voting_window_seconds,
-          options: s.options,
-          selectedOption: s.selected_option,
-          wasRandomPick: s.was_random_pick,
-          activeCharacters: s.active_characters,
-          activeProps: s.active_props,
-          newCharacter: s.new_character,
-          newProp: s.new_prop,
-          referenceVideoUrl: s.reference_video_url,
-          propReferenceImages: s.prop_reference_images,
-          subtitles: s.subtitles || [],
-          environment: s.environment,
-          createdAt: s.created_at,
-        })),
-        createdAt: m.created_at,
-        completedAt: m.completed_at,
-        totalVotesCast: m.total_votes_cast,
-        finalSummary: m.final_summary,
-        finalSynopsis: m.final_synopsis,
-      });
-    }
-
-    return result;
+    return movies.map(m => mapMovieRow(m, stepsByMovie.get(m.id) || []));
   } catch (err) {
     console.error('[Supabase] Exception in loadAllMoviesFromDb:', err);
     return [];
@@ -879,6 +860,67 @@ export async function deleteMovieFromDb(movieId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Persist (upsert) a viewer's next-blockbuster vote. One vote per user per movie.
+ */
+export async function persistBlockbusterVote(
+  movieId: string,
+  userId: string,
+  candidateId: 'A' | 'B' | 'C' | 'D'
+): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from('blockbuster_votes')
+      .upsert(
+        { movie_id: movieId, user_id: userId, candidate_id: candidateId },
+        { onConflict: 'movie_id,user_id' }
+      );
+
+    if (error) {
+      logSupabaseError('persistBlockbusterVote', error);
+    }
+  } catch (err) {
+    console.error('[Supabase] Exception in persistBlockbusterVote:', err);
+  }
+}
+
+/**
+ * Load the aggregate blockbuster vote counts for a movie.
+ */
+export async function loadBlockbusterVoteCountsFromDb(
+  movieId: string
+): Promise<Record<'A' | 'B' | 'C' | 'D', number>> {
+  const supabase = getSupabaseServerClient();
+  const counts: Record<'A' | 'B' | 'C' | 'D', number> = { A: 0, B: 0, C: 0, D: 0 };
+  if (!supabase) return counts;
+
+  try {
+    const { data, error } = await supabase
+      .from('blockbuster_votes')
+      .select('candidate_id')
+      .eq('movie_id', movieId);
+
+    if (error) {
+      logSupabaseError('loadBlockbusterVoteCountsFromDb', error);
+      return counts;
+    }
+
+    for (const row of data || []) {
+      const id = row.candidate_id as string;
+      if (id === 'A' || id === 'B' || id === 'C' || id === 'D') {
+        counts[id]++;
+      }
+    }
+  } catch (err) {
+    console.error('[Supabase] Exception in loadBlockbusterVoteCountsFromDb:', err);
+  }
+
+  return counts;
+}
+
 export interface LiveCinemaStateRecord {
   phase: PlaybackPhase;
   timeRemaining: number;
@@ -891,6 +933,8 @@ export interface LiveCinemaStateRecord {
   isGenerationPaused: boolean;
   videoModel?: string | null;
   videoResolution?: string | null;
+  blockbusterCandidates?: BlockbusterCandidate[];
+  blockbusterVoteCounts?: Record<'A' | 'B' | 'C' | 'D', number> | null;
   activeAd?: ImmersiveAd | null;
   adsConfig?: AdsConfig;
   selectedOption?: 'A' | 'B';
@@ -941,8 +985,10 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
       is_live: payload.isLive,
       is_paused: payload.isPaused,
       is_generation_paused: payload.isGenerationPaused,
-      video_model: payload.videoModel ?? null,
-      video_resolution: payload.videoResolution ?? null,
+      video_model: payload.videoModel || null,
+      video_resolution: payload.videoResolution || null,
+      blockbuster_candidates: payload.blockbusterCandidates || [],
+      blockbuster_vote_counts: payload.blockbusterVoteCounts || { A: 0, B: 0, C: 0, D: 0 },
       active_ad_id: payload.activeAd?.id || null,
       ads_config: payload.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
       selected_option: payload.selectedOption || null,
@@ -987,6 +1033,8 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
         isGenerationPaused: payload.isGenerationPaused,
         videoModel: payload.videoModel ?? null,
         videoResolution: payload.videoResolution ?? null,
+        blockbusterCandidates: payload.blockbusterCandidates ?? [],
+        blockbusterVoteCounts: payload.blockbusterVoteCounts ?? { A: 0, B: 0, C: 0, D: 0 },
         activeAd: payload.activeAd || null,
         adsConfig: payload.adsConfig || null,
         selectedOption: payload.selectedOption || null,
@@ -1045,6 +1093,8 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
         isGenerationPaused: data.is_generation_paused,
         videoModel: data.video_model ?? null,
         videoResolution: data.video_resolution ?? null,
+        blockbusterCandidates: data.blockbuster_candidates || [],
+        blockbusterVoteCounts: data.blockbuster_vote_counts || null,
         adsConfig: data.ads_config,
         selectedOption: data.selected_option,
         wasRandomPick: data.was_random_pick,
@@ -1056,13 +1106,45 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
         updatedAt: data.updated_at
       };
 
-      // Backfill video config from the bible dual-write when cinema_state predates the columns
-      if (record.videoModel == null || record.videoResolution == null) {
-        const bibleState = await loadBibleLiveState(supabase, record.movieId);
-        if (bibleState) {
-          record.videoModel = record.videoModel ?? bibleState.videoModel ?? null;
-          record.videoResolution = record.videoResolution ?? bibleState.videoResolution ?? null;
-        }
+      // Merge with the bible dual-write. The bible JSON always carries the newest
+      // state (it is written in the same transaction) and survives when cinema_state
+      // columns are pending migrations — this is what makes admin preferences
+      // (video model/resolution, blockbuster votes, ads config) persist across
+      // processes and restarts.
+      const bibleState = await loadBibleLiveState(supabase, record.movieId);
+      if (bibleState) {
+        const cinemaUpdated = record.updatedAt ? new Date(record.updatedAt).getTime() : 0;
+        const bibleUpdated = bibleState.updatedAt ? new Date(bibleState.updatedAt).getTime() : 0;
+        const bibleFresh = bibleUpdated >= cinemaUpdated;
+
+        return {
+          movieId: record.movieId ?? bibleState.movieId,
+          phase: bibleFresh ? bibleState.phase : record.phase,
+          timeRemaining: bibleFresh ? bibleState.timeRemaining : record.timeRemaining,
+          currentStep: bibleFresh ? bibleState.currentStep : record.currentStep,
+          totalAudience: bibleFresh ? bibleState.totalAudience : record.totalAudience,
+          votesA: bibleFresh ? bibleState.votesA : record.votesA,
+          votesB: bibleFresh ? bibleState.votesB : record.votesB,
+          isLive: bibleFresh ? bibleState.isLive : record.isLive,
+          isPaused: bibleFresh ? bibleState.isPaused : record.isPaused,
+          isGenerationPaused: bibleFresh ? bibleState.isGenerationPaused : record.isGenerationPaused,
+          videoModel: bibleState.videoModel ?? record.videoModel ?? null,
+          videoResolution: bibleState.videoResolution ?? record.videoResolution ?? null,
+          blockbusterCandidates: (bibleState.blockbusterCandidates && bibleState.blockbusterCandidates.length > 0)
+            ? bibleState.blockbusterCandidates
+            : (record.blockbusterCandidates ?? []),
+          blockbusterVoteCounts: bibleState.blockbusterVoteCounts ?? record.blockbusterVoteCounts ?? null,
+          activeAd: bibleFresh ? (bibleState.activeAd || null) : undefined,
+          adsConfig: bibleFresh ? bibleState.adsConfig : record.adsConfig,
+          selectedOption: bibleFresh ? bibleState.selectedOption : record.selectedOption,
+          wasRandomPick: bibleFresh ? bibleState.wasRandomPick : record.wasRandomPick,
+          phaseStartedAt: bibleFresh ? bibleState.phaseStartedAt : record.phaseStartedAt,
+          phaseEndsAt: bibleFresh ? bibleState.phaseEndsAt : record.phaseEndsAt,
+          phaseDuration: bibleFresh ? bibleState.phaseDuration : record.phaseDuration,
+          workerId: record.workerId ?? bibleState.workerId ?? null,
+          workerHeartbeat: record.workerHeartbeat ?? bibleState.workerHeartbeat ?? null,
+          updatedAt: bibleFresh ? bibleState.updatedAt : record.updatedAt
+        };
       }
 
       return record;
