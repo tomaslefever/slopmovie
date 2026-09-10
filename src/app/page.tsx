@@ -744,7 +744,7 @@ export default function CinemaStreamingPage() {
     }
   };
 
-  // Vote for the next blockbuster movie during the 30s BLOCKBUSTER_VOTING stage
+  // Vote for the next blockbuster movie during the 60s BLOCKBUSTER_VOTING stage
   const handleBlockbusterVote = async (candidateId: 'A' | 'B' | 'C' | 'D') => {
     if (!cinemaState || cinemaState.phase !== 'BLOCKBUSTER_VOTING') return;
     if (blockbusterUserVoted === candidateId) return;
@@ -933,7 +933,7 @@ export default function CinemaStreamingPage() {
                 onVote={handleVote}
               />
 
-              {/* Next Blockbuster Audience Vote (30s, 4 candidate films) */}
+              {/* Next Blockbuster Audience Vote (60s, 4 candidate films) */}
               {cinemaState.phase === 'BLOCKBUSTER_VOTING' && (
                 <BlockbusterVoting
                   candidates={cinemaState.blockbusterCandidates || []}

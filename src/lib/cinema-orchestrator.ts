@@ -163,7 +163,7 @@ class CinemaOrchestrator {
     isRealAiGenerated: boolean;
   } | null = null;
 
-  // Next-blockbuster audience voting (30s, 4 candidates)
+  // Next-blockbuster audience voting (60s, 4 candidates)
   public blockbusterCandidates: BlockbusterCandidate[] = [];
   public blockbusterVoteCounts: Record<'A' | 'B' | 'C' | 'D', number> = { A: 0, B: 0, C: 0, D: 0 };
   private blockbusterUserVotes: Map<string, 'A' | 'B' | 'C' | 'D'> = new Map();
@@ -625,7 +625,7 @@ class CinemaOrchestrator {
   private async handlePhaseTransition(workerId?: string) {
     if (!this.movie) return;
 
-    // ── NEXT BLOCKBUSTER AUDIENCE VOTE CONCLUDED (30s) ───────────────────────
+    // ── NEXT BLOCKBUSTER AUDIENCE VOTE CONCLUDED (60s) ───────────────────────
     if (this.phase === 'BLOCKBUSTER_VOTING') {
       const winner = this.resolveBlockbusterVote();
       this.blockbusterCandidates = [];
@@ -845,7 +845,7 @@ class CinemaOrchestrator {
         });
 
         // REQUISITO: Al terminar una película, la audiencia elige la siguiente entre 4 candidatas.
-        // startNextBlockbusterMovie es ASYNC y no bloquea: la votación de 30s se abre de inmediato
+        // startNextBlockbusterMovie es ASYNC y no bloquea: la votación de 60s se abre de inmediato
         // y la película ganadora se genera en segundo plano, transmitiéndose al terminar.
         this.addSystemMessage(`🎟️ MASTERPIECE COMPLETE: Opening the NEXT BLOCKBUSTER audience vote...`);
         try {
