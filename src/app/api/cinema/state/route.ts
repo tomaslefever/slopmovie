@@ -4,6 +4,10 @@ import {
   loadActiveMovieFromDb, 
   loadLiveCinemaStateFromDb, 
   loadUserVoteForStep, 
+  loadUserBlockbusterVote,
+  loadBlockbusterVoteCountsFromDb,
+  persistBlockbusterVote,
+  broadcastCinemaEvent,
   loadViewerPreferences,
   loadRecentChatMessagesFromDb,
   recordVisit,
@@ -49,6 +53,9 @@ export async function GET(request: Request) {
   }
   if (liveState?.blockbusterVoteCounts) {
     cinemaEngine.blockbusterVoteCounts = liveState.blockbusterVoteCounts;
+  }
+  if (liveState?.phase) {
+    cinemaEngine.phase = liveState.phase;
   }
 
   // If the live-state movie id points at an archived/completed movie (stale pointer),
@@ -107,6 +114,21 @@ export async function GET(request: Request) {
   const hasUserVoted = activeMovie 
     ? await loadUserVoteForStep(activeMovie.id, currentStepNum, userId)
     : null;
+
+  // Load aggregate blockbuster votes and user's specific blockbuster pick
+  if (activeMovie) {
+    const dbCounts = await loadBlockbusterVoteCountsFromDb(activeMovie.id);
+    cinemaEngine.blockbusterVoteCounts = {
+      A: Math.max(cinemaEngine.blockbusterVoteCounts?.A || 0, liveState?.blockbusterVoteCounts?.A || 0, dbCounts.A || 0),
+      B: Math.max(cinemaEngine.blockbusterVoteCounts?.B || 0, liveState?.blockbusterVoteCounts?.B || 0, dbCounts.B || 0),
+      C: Math.max(cinemaEngine.blockbusterVoteCounts?.C || 0, liveState?.blockbusterVoteCounts?.C || 0, dbCounts.C || 0),
+      D: Math.max(cinemaEngine.blockbusterVoteCounts?.D || 0, liveState?.blockbusterVoteCounts?.D || 0, dbCounts.D || 0),
+    };
+  }
+
+  const blockbusterUserVoted = activeMovie
+    ? await loadUserBlockbusterVote(activeMovie.id, userId)
+    : cinemaEngine.getBlockbusterUserVote(userId);
 
   // Load viewer preferences from Supabase
   const viewerPreferences = await loadViewerPreferences(userId, activeMovie?.id);
@@ -170,6 +192,7 @@ export async function GET(request: Request) {
     videoResolution: cinemaEngine.videoResolution,
     blockbusterCandidates: cinemaEngine.blockbusterCandidates,
     blockbusterVoteCounts: cinemaEngine.blockbusterVoteCounts,
+    blockbusterUserVoted,
     activeAd: liveState?.activeAd || null,
     adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
     apiStatus: {
@@ -233,10 +256,54 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Candidata de película inválida' }, { status: 400 });
       }
 
-      const voteResult = cinemaEngine.castBlockbusterVote(userId || 'anonymous', optionId as 'A' | 'B' | 'C' | 'D');
+      // Sync cinemaEngine with Supabase live state if necessary (multi-process / serverless resilience)
+      const liveState = await loadLiveCinemaStateFromDb();
+      if (liveState) {
+        if (liveState.phase === 'BLOCKBUSTER_VOTING') {
+          cinemaEngine.phase = 'BLOCKBUSTER_VOTING';
+          cinemaEngine.timeRemaining = liveState.timeRemaining;
+          cinemaEngine.phaseEndsAt = typeof liveState.phaseEndsAt === 'number'
+            ? liveState.phaseEndsAt
+            : (liveState.phaseEndsAt ? new Date(liveState.phaseEndsAt).getTime() : Date.now() + 60000);
+        }
+        if (Array.isArray(liveState.blockbusterCandidates) && liveState.blockbusterCandidates.length > 0) {
+          cinemaEngine.blockbusterCandidates = liveState.blockbusterCandidates;
+        }
+        if (liveState.movieId && (!cinemaEngine.movie || cinemaEngine.movie.id !== liveState.movieId)) {
+          const m = await loadActiveMovieFromDb(liveState.movieId);
+          if (m) cinemaEngine.movie = m;
+        }
+      }
+
+      if (!cinemaEngine.movie) {
+        const activeMovie = await loadActiveMovieFromDb();
+        if (activeMovie) cinemaEngine.movie = activeMovie;
+      }
+
+      cinemaEngine.castBlockbusterVote(userId || 'anonymous', optionId as 'A' | 'B' | 'C' | 'D');
+
+      const targetMovieId = cinemaEngine.movie?.id || liveState?.movieId;
+      if (targetMovieId) {
+        await persistBlockbusterVote(targetMovieId, userId || 'anonymous', optionId as 'A' | 'B' | 'C' | 'D');
+        const authoritativeCounts = await loadBlockbusterVoteCountsFromDb(targetMovieId);
+        cinemaEngine.blockbusterVoteCounts = {
+          A: Math.max(cinemaEngine.blockbusterVoteCounts.A, authoritativeCounts.A),
+          B: Math.max(cinemaEngine.blockbusterVoteCounts.B, authoritativeCounts.B),
+          C: Math.max(cinemaEngine.blockbusterVoteCounts.C, authoritativeCounts.C),
+          D: Math.max(cinemaEngine.blockbusterVoteCounts.D, authoritativeCounts.D),
+        };
+      }
+
+      await cinemaEngine.persistCurrentStateToSupabase();
+
+      broadcastCinemaEvent('blockbuster_vote_update', {
+        counts: cinemaEngine.blockbusterVoteCounts,
+        timeRemaining: cinemaEngine.timeRemaining
+      });
+
       return NextResponse.json({
-        success: voteResult.success,
-        counts: voteResult.counts,
+        success: true,
+        counts: cinemaEngine.blockbusterVoteCounts,
         userVoted: optionId
       });
     }

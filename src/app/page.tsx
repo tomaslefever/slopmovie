@@ -86,6 +86,9 @@ export default function CinemaStreamingPage() {
           if (data.hasUserVoted) {
             setUserVoted(data.hasUserVoted);
           }
+          if (data.blockbusterUserVoted) {
+            setBlockbusterUserVoted(data.blockbusterUserVoted);
+          }
           if (data.viewerPreferences) {
             setSubtitlesEnabled(data.viewerPreferences.subtitlesEnabled !== false);
             setSubtitleLanguage(data.viewerPreferences.subtitleLanguage === 'es' ? 'es' : 'en');
@@ -897,6 +900,9 @@ export default function CinemaStreamingPage() {
         const data = await res.json();
         if (data.counts) {
           setCinemaState((prev) => prev ? { ...prev, blockbusterVoteCounts: data.counts } : prev);
+        }
+        if (data.userVoted) {
+          setBlockbusterUserVoted(data.userVoted);
         }
       }
     } catch (err) {

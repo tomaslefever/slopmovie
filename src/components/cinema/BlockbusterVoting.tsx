@@ -25,7 +25,13 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
   onVote
 }) => {
   const currentSeconds = Math.max(0, Math.min(60, timeRemaining));
-  const totalVotes = counts.A + counts.B + counts.C + counts.D;
+  const safeCounts: Record<'A' | 'B' | 'C' | 'D', number> = {
+    A: Number(counts?.A) || 0,
+    B: Number(counts?.B) || 0,
+    C: Number(counts?.C) || 0,
+    D: Number(counts?.D) || 0,
+  };
+  const totalVotes = safeCounts.A + safeCounts.B + safeCounts.C + safeCounts.D;
 
   const handleCastVote = (candidateId: 'A' | 'B' | 'C' | 'D') => {
     if (userVoted === candidateId) return;
@@ -109,10 +115,10 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
       {/* Candidates grid */}
       <div className="relative z-10 w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
         {candidates.map((candidate, idx) => {
-          const votes = counts[candidate.id] || 0;
+          const votes = safeCounts[candidate.id] || 0;
           const percent = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
           const isSelected = userVoted === candidate.id;
-          const leading = votes > 0 && votes === Math.max(...Object.values(counts));
+          const leading = votes > 0 && votes === Math.max(safeCounts.A, safeCounts.B, safeCounts.C, safeCounts.D);
 
           return (
             <motion.button
@@ -121,7 +127,7 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: 0.08 * idx, ease: [0.16, 1, 0.3, 1] }}
               onClick={() => handleCastVote(candidate.id)}
-              className={`relative group text-left p-3 md:p-4 rounded-2xl border backdrop-blur-xl transition-all flex flex-col gap-2 md:gap-3 ${
+              className={`relative group text-left p-3 md:p-4 rounded-2xl border backdrop-blur-xl transition-all flex flex-col gap-2 md:gap-3 cursor-pointer ${
                 isSelected
                   ? 'bg-purple-500/15 border-purple-400/70 shadow-[0_0_30px_rgba(168,85,247,0.35)] ring-1 ring-purple-400/50'
                   : 'bg-neutral-950/70 border-white/10 hover:border-purple-400/50 hover:bg-neutral-900/80 hover:scale-[1.02] active:scale-[0.98]'

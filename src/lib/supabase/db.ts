@@ -971,6 +971,37 @@ export async function loadBlockbusterVoteCountsFromDb(
 }
 
 /**
+ * Load an individual user's blockbuster vote for a movie.
+ */
+export async function loadUserBlockbusterVote(
+  movieId: string,
+  userId: string
+): Promise<'A' | 'B' | 'C' | 'D' | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase || !movieId || !userId) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('blockbuster_votes')
+      .select('candidate_id')
+      .eq('movie_id', movieId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!error && data?.candidate_id) {
+      const id = data.candidate_id as string;
+      if (id === 'A' || id === 'B' || id === 'C' || id === 'D') {
+        return id;
+      }
+    }
+  } catch (err) {
+    console.error('[Supabase] Exception in loadUserBlockbusterVote:', err);
+  }
+
+  return null;
+}
+
+/**
  * Record a real viewer visit (unique per viewer per day). Called on every
  * viewer page load so `last_seen` stays fresh for the active-viewers count.
  */

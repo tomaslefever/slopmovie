@@ -189,6 +189,7 @@ export interface CinemaState {
   votesA: number;
   votesB: number;
   hasUserVoted?: 'A' | 'B' | null;
+  blockbusterUserVoted?: 'A' | 'B' | 'C' | 'D' | null;
   activeStep: MovieStep;
   isLive: boolean;
   isPaused?: boolean;

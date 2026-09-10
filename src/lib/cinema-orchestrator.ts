@@ -1248,11 +1248,17 @@ class CinemaOrchestrator {
    * Persisted in Supabase (blockbuster_votes, realtime-published) as well as memory.
    */
   public castBlockbusterVote(userId: string, candidateId: 'A' | 'B' | 'C' | 'D'): { success: boolean; counts: Record<'A' | 'B' | 'C' | 'D', number> } {
-    if (this.phase !== 'BLOCKBUSTER_VOTING') {
+    if (!['A', 'B', 'C', 'D'].includes(candidateId)) {
       return { success: false, counts: this.blockbusterVoteCounts };
     }
-    if (!this.blockbusterCandidates.some(c => c.id === candidateId)) {
+
+    if (this.blockbusterCandidates.length > 0 && !this.blockbusterCandidates.some(c => c.id === candidateId)) {
       return { success: false, counts: this.blockbusterVoteCounts };
+    }
+
+    // Ensure phase matches BLOCKBUSTER_VOTING even if in-memory state lagged behind DB
+    if (this.phase !== 'BLOCKBUSTER_VOTING') {
+      this.phase = 'BLOCKBUSTER_VOTING';
     }
 
     const previousVote = this.blockbusterUserVotes.get(userId);
@@ -1260,8 +1266,10 @@ class CinemaOrchestrator {
       return { success: true, counts: this.blockbusterVoteCounts };
     }
 
-    if (previousVote) this.blockbusterVoteCounts[previousVote] = Math.max(0, this.blockbusterVoteCounts[previousVote] - 1);
-    this.blockbusterVoteCounts[candidateId]++;
+    if (previousVote) {
+      this.blockbusterVoteCounts[previousVote] = Math.max(0, (this.blockbusterVoteCounts[previousVote] || 0) - 1);
+    }
+    this.blockbusterVoteCounts[candidateId] = (this.blockbusterVoteCounts[candidateId] || 0) + 1;
 
     this.blockbusterUserVotes.set(userId, candidateId);
 
@@ -1272,12 +1280,21 @@ class CinemaOrchestrator {
       });
     }
 
+    // Persist live state to Supabase cinema_state so counts are never wiped out by subsequent polls/snapshots
+    this.persistCurrentStateToSupabase().catch((err) => {
+      console.warn('[Cinema] Failed to persist live state on blockbuster vote:', err);
+    });
+
     broadcastCinemaEvent('blockbuster_vote_update', {
       counts: this.blockbusterVoteCounts,
       timeRemaining: this.timeRemaining
     });
 
     return { success: true, counts: this.blockbusterVoteCounts };
+  }
+
+  public getBlockbusterUserVote(userId: string): 'A' | 'B' | 'C' | 'D' | null {
+    return this.blockbusterUserVotes.get(userId) || null;
   }
 
   /**
