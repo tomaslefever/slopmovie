@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Film, LayoutGrid, Radio } from 'lucide-react';
+import { Film, LayoutGrid, Radio, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
 
@@ -12,6 +12,7 @@ interface NavbarProps {
   isGalleryOpen: boolean;
   currentStep?: number;
   totalSteps?: number;
+  onOpenBuyAds?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,10 +20,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleGallery,
   isGalleryOpen,
   currentStep = 1,
-  totalSteps = 50
+  totalSteps = 50,
+  onOpenBuyAds
 }) => {
   const progressPercent = Math.min(100, Math.max(0, Math.round((currentStep / (totalSteps || 50)) * 100)));
-  const lemonSqueezyUrl = process.env.NEXT_PUBLIC_LEMON_SQUEEZY_URL || 'https://lemon-squeezy.com';
 
   return (
     <header className="h-14 bg-[#07080b]/90 border-b border-white/10 px-4 md:px-6 flex items-center justify-between backdrop-blur-xl z-40 select-none">
@@ -70,18 +71,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Right Controls */}
       <div className="flex items-center space-x-3">
-        {/* Buy Ads (Lemon Squeezy Link) */}
-        <a
-          href={lemonSqueezyUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => audioCues.playClick()}
+        {/* Buy Ads Modal Trigger */}
+        <button
+          onClick={() => {
+            audioCues.playClick();
+            onOpenBuyAds?.();
+          }}
           className="px-3.5 py-1.5 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/20 to-yellow-500/10 hover:from-amber-500/30 hover:to-yellow-500/20 text-amber-300 hover:text-amber-200 text-xs font-mono font-bold flex items-center space-x-1.5 shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all hover:scale-105 active:scale-95 group"
-          title="Buy Ads via Lemon Squeezy"
+          title="Learn about Immersive Cinema Ads and Buy a Showcase"
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 group-hover:animate-ping" />
+          <Sparkles className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
           <span>Buy Ads</span>
-        </a>
+        </button>
 
         {/* Gallery Toggle */}
         <button

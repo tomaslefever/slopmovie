@@ -157,7 +157,7 @@ export async function generateContinuityKeyframeWithFlux(prompt: string): Promis
   try {
     fal.config({ credentials: falKey });
 
-    const keyframePrompt = `Cinematic film still, first frame of a scene, faithful to the following shot description — characters, costumes, props, environment, lighting and color grade must match exactly: ${prompt}. 35mm anamorphic framing, high detail, photorealistic.`;
+    const keyframePrompt = `Master cinematic film still, opening composition of a scene. Photorealistic 16:9 theatrical master, 35mm anamorphic framing. Faithful to the exact characters, costumes, key props, spatial geometry, lighting physics, and color grade: ${prompt}. Pristine optical texture, Kodak Vision3 500T grain profile, master color grade, zero digital artifacts, photorealistic cinema.`;
 
     console.log('[fal.ai] Generating continuity keyframe with Flux Schnell...');
     const response: any = await fal.subscribe('fal-ai/flux/schnell', {
@@ -230,7 +230,11 @@ export async function generateVideoWithFal({
     continuityContext += ` [VOICE & AUDIO DESIGN: ${voiceDirection}].`;
   }
 
-  const fullPrompt = `${prompt}.${continuityContext} Camera cinematography: ${cameraMotion}. Professional 35mm anamorphic grading, 24fps film motion blur.`;
+  // Cinematique Layered Synthesis for fal.ai / MiniMax:
+  // Layer 1: [Visual Scene & Characters]
+  // Layer 2: [Cinematography & Camera Motion Cadence]
+  // Layer 3: [Color Science & Film Stock Texture]
+  const fullPrompt = `${prompt}.${continuityContext} Camera cinematography: ${cameraMotion}. Panavision anamorphic optics, organic 35mm film grain, 24fps cinematic motion blur.`;
 
   if (falKey) {
     try {

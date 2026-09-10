@@ -25,6 +25,7 @@ interface CinemaPlayerProps {
   onChangeSubtitleLanguage?: (lang: 'en' | 'es') => void;
   onPlaybackEnded?: () => void;
   onAdCompleted?: () => void;
+  onOpenBuyAds?: () => void;
 }
 
 const CINEMA_FALLBACK_VIDEOS = [
@@ -51,7 +52,8 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
   onToggleSubtitles,
   onChangeSubtitleLanguage,
   onPlaybackEnded,
-  onAdCompleted
+  onAdCompleted,
+  onOpenBuyAds
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -289,6 +291,7 @@ export const CinemaPlayer: React.FC<CinemaPlayerProps> = ({
           }} 
           timeRemaining={timeRemaining} 
           onAdCompleted={onAdCompleted} 
+          onOpenBuyAds={onOpenBuyAds}
         />
       )}
 

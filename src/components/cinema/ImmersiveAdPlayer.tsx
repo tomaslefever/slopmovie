@@ -10,12 +10,14 @@ interface ImmersiveAdPlayerProps {
   ad: ImmersiveAd;
   timeRemaining: number;
   onAdCompleted?: () => void;
+  onOpenBuyAds?: () => void;
 }
 
 export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   ad,
   timeRemaining,
-  onAdCompleted
+  onAdCompleted,
+  onOpenBuyAds
 }) => {
   // Ads play WITH SOUND by default; browsers that block autoplay-with-sound fall back to muted.
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -275,6 +277,19 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
             <span className="text-[11px] font-mono text-green-400 font-semibold animate-pulse text-center">
               ✓ Reward Activated!
             </span>
+          )}
+
+          {onOpenBuyAds && (
+            <button
+              type="button"
+              onClick={() => {
+                audioCues.playClick();
+                onOpenBuyAds();
+              }}
+              className="text-[10px] font-mono text-neutral-400 hover:text-amber-300 underline underline-offset-4 transition-colors text-center w-full block pt-1"
+            >
+              Want to feature your brand in this infinite film? Buy Ad Showcase
+            </button>
           )}
         </div>
       </motion.div>

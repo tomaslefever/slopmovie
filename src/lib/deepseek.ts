@@ -1,4 +1,9 @@
 import { Character, Prop, SceneEnvironment, MovieBible, MovieStep, DecisionOption, Movie, SubtitleCue, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
+import {
+  CINEMATIQUE_SYSTEM_PROMPT_DIRECTIVES,
+  CINEMATIQUE_AESTHETIC_PRESETS,
+  getUniqueCinematiqueAesthetics
+} from './cinematique';
 
 // ── Token usage tracking (process-cumulative) ───────────────────────────────
 let cumulativePromptTokens = 0;
@@ -301,16 +306,22 @@ export async function generateStoryBibleWithDeepSeek(customPrompt?: string): Pro
 
   if (apiKey) {
     try {
-      const systemPrompt = `You are an elite Hollywood Director and Screenwriter specializing in interactive sci-fi cinematic universes with strict visual and audio continuity.
+      const systemPrompt = `You are an elite Hollywood Director, Master Cinematographer and Screenwriter specializing in interactive sci-fi cinematic universes with strict visual and audio continuity.
 Your mission is to formulate a MASTER STORY AND ART BIBLE for a 50-step interactive live cinema film.
 
+${CINEMATIQUE_SYSTEM_PROMPT_DIRECTIVES}
+
 MANDATORY RULES:
-1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, character description, voice prompt, prop, dialogue, subtitle, and option must be written in high-caliber cinematic English.
+1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, character description, voice prompt, prop, dialogue, subtitle, visualPrompt, cameraMotionPrompt, and option must be written in high-caliber cinematic English.
 2. VOICE CONTINUITY: Every character must have an immutable "voicePrompt" (timbre, frequency, pacing, breathing, accent, audio processing) so audio engines synthesize the exact same voice across all 50 clips.
 3. PROPS & CHARACTERS: Every initial character must have their signature linked prop (ownerCharacterId) for consistent visual prompting.
 4. SUBTITLES: The first step must include timed "subtitles" (start in seconds, end in seconds, speaker, text in English, and optional textEs in Spanish).
 5. ONLY NECESSARY PROPS: In "firstStep.activeProps", specify ONLY the prop ID(s) that are physically visible or actively held/used in this opening 15-second scene. DO NOT pass all props. If no prop is visible in the shot, "activeProps" must be empty [].
 6. NARRATIVE ARC: The 50-step film follows a strict act structure that every step must respect — steps 1-10 SETUP (present the world, the characters and the central problem), steps 11-39 DEVELOPMENT (escalating conflict, twists and new characters), steps 40-49 DENOUEMENT (converging resolution), and step 50 THE END (definitive closing scene, no new conflicts). "masterArcThread" and "initialPlot" must be designed so the story can be resolved by step 50.
+7. CINEMATIQUE CAMERA & LIGHTING FIDELITY:
+   - "cinematicStyle": Must specify the camera package, lenses (e.g. Panavision C-Series anamorphic, Cooke S4/S7, Zeiss Master Prime), lighting setup (e.g. Caravaggio chiaroscuro, Rembrandt key, motivated practical neon, Kelvin color temperature), and film stock (e.g. Kodak Vision3 500T, Kodak Double-X).
+   - "visualPrompt": Every scene prompt MUST follow the 6-layer Cinematique formula: [Shot Scale/Framing (MCU, Cowboy, ECU, Choker, Low-Angle)] + [Subject & Wardrobe] + [Environment with Foreground/Mid/Background Depth] + [Lighting Rig & Kelvin Temperature] + [Camera Lens, Sensor/Stock & Flare Characteristics] + [Atmosphere & 24fps film still].
+   - "cameraMotionPrompt": Every camera motion prompt MUST follow the 4-layer Cinematique motion formula: [Rig & Movement (Steadicam glide, slow dolly push-in, lateral track with 3-layer parallax, Technocrane arc, Dolly zoom vertigo)] + [Pacing & Trajectory] + [Focal Length & Focus Pull/Rack Focus] + [Optical physics & 24fps motion blur].
 
 Respond ONLY with a valid JSON object matching this schema:
 {
@@ -319,7 +330,7 @@ Respond ONLY with a valid JSON object matching this schema:
   "tagline": "Intriguing Hook in English",
   "initialPlot": "Full master narrative arc in English that serves as the spine for 50 steps",
   "masterArcThread": "Core story trajectory in English that evolves with audience choices",
-  "cinematicStyle": "Detailed visual style (lenses, lighting, film grain, color grading)",
+  "cinematicStyle": "Exact camera package, lenses, lighting scheme (Kelvin temp), film stock and color grade in English",
   "targetTheme": "Underlying philosophical theme",
   "characters": [
     {
@@ -367,8 +378,8 @@ Respond ONLY with a valid JSON object matching this schema:
         { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
       ],
       "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (16:9) with character and prop tokens",
-      "cameraMotionPrompt": "Cinematic camera movement in English (e.g. Slow tracking dolly-in, 35mm anamorphic)",
+      "visualPrompt": "Cinematique 6-layer prompt: [Establishing / Low-Angle Shot] + [Protagonist & signature attire] + [Opening environment with deep spatial layers] + [Key lighting setup, practical sources & Kelvin temp] + [Camera package: 35mm Panavision anamorphic / Cooke S4, Kodak Vision3 500T] + [Atmospheric particles, mist, 24fps film still]",
+      "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Technocrane or Steadicam tracking glide] + [Smooth trajectory introducing setting] + [Anamorphic lens optics with oval bokeh] + [24fps cinematic motion blur]",
       "activeCharacters": ["char_1"],
       "activeProps": ["prop_1"],
       "environment": "env_1",
@@ -384,8 +395,8 @@ Respond ONLY with a valid JSON object matching this schema:
         { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
       ],
       "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (16:9) continuing scene 1",
-      "cameraMotionPrompt": "Dynamic camera tracking or handheld kinetic pan in English",
+      "visualPrompt": "Cinematique 6-layer prompt: [Cowboy Shot or Dynamic Medium Shot] + [Character coiled readiness] + [Immediate architectural breach or hazard] + [Cross-lighting or Chiaroscuro high-contrast shadows] + [Panavision / Cooke lens character with streak flare] + [Volumetric steam and rich color grading]",
+      "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Lateral tracking shot on rails or fluid Steadicam] + [Parallel movement keeping pace with action] + [3-layer parallax foreground blur] + [24fps motion blur]",
       "activeCharacters": ["char_1"],
       "activeProps": [],
       "environment": "env_1",
@@ -401,8 +412,8 @@ Respond ONLY with a valid JSON object matching this schema:
         { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
       ],
       "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (16:9) showing rising stakes",
-      "cameraMotionPrompt": "Rapid orbit or whip pan settling into a tense close-up in English",
+      "visualPrompt": "Cinematique 6-layer prompt: [Over-the-Shoulder or Macro Insert Shot on Key Prop] + [Character micro-tension or prop physical patina] + [Encroaching perimeter backdrop] + [Hard directional gobo light or flickering warning pulse] + [Macro lens or 85mm prime wide open] + [Airborne embers, lens halation, 24fps film still]",
+      "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Rapid whip-pan snap or deliberate 2-second rack focus] + [Transitioning from foreground prop to background threat] + [Creamy bokeh separation] + [Dynamic 24fps motion blur]",
       "activeCharacters": ["char_1"],
       "activeProps": ["prop_1"],
       "environment": "env_1",
@@ -418,8 +429,8 @@ Respond ONLY with a valid JSON object matching this schema:
         { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English choice hook...", "textEs": "Spanish translation..." }
       ],
       "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Ultra-detailed visual prompt in English for fal.ai Minimax H3-Max (16:9) with peak tension",
-      "cameraMotionPrompt": "Dramatic slow-motion zoom-out or tense Dutch angle in English",
+      "visualPrompt": "Cinematique 6-layer prompt: [Choker Shot or Dramatic Dutch Angle Close-Up] + [Peak emotional conflict in character eyes] + [Imminent explosive or tactical threshold] + [Caravaggio Chiaroscuro or Rembrandt triangle key with eye catchlights] + [35mm anamorphic glass, subtle barrel distortion] + [Epic tension, deep blacks, high-contrast film still]",
+      "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Imperceptibly slow dolly push-in or Vertigo zolly effect] + [Closing from medium to tight choker over 15s] + [Narrowing depth of field, focus breathing] + [180-degree shutter, 24fps motion blur]",
       "activeCharacters": ["char_1"],
       "activeProps": ["prop_1"],
       "environment": "env_1",
@@ -608,8 +619,20 @@ Respond ONLY with a valid JSON object matching this schema:
         }
       ],
       voiceDirection: firstChar.voicePrompt,
-      visualPrompt: `Cinematic masterpiece shot of ${firstChar.name} (${firstChar.visualTraits}) with ${firstProp.name} in ${preset.environments[0].name}, ${preset.environments[0].lighting}, ${preset.cinematicStyle}, photorealistic 8k, scene ${stepNum} of 4`,
-      cameraMotionPrompt: "Slow tracking camera dollying in with dramatic cinematic depth of field and anamorphic lens flares, 24fps",
+      visualPrompt: stepNum === 1
+        ? `Establishing Low-Angle Hero Shot of ${firstChar.name} (${firstChar.visualTraits}, ${firstChar.clothing}) holding ${firstProp.name} (${firstProp.visualAppearance}) in ${preset.environments[0].name}. Deep architectural perspective, ${preset.environments[0].lighting}. Shot on Panavision C-series 35mm anamorphic glass, oval bokeh, horizontal streak flare, volumetric fog and steam, Kodak Vision3 500T grain, 480p 16:9 film still`
+        : stepNum === 2
+        ? `Cowboy Shot of ${firstChar.name} (${firstChar.visualTraits}) in coiled tactical posture navigating ${preset.environments[0].name}. Mid-thigh framing with ${firstProp.name} secured, cross-lighting with 3000K amber key and 6500K cool blue rim. Cooke S4/i prime lens warmth, gentle skin roll-off, wet rain reflections, 480p 16:9 film still`
+        : stepNum === 3
+        ? `Over-the-Shoulder and Macro Insert Shot on ${firstProp.name} (${firstProp.visualAppearance}) as ${firstChar.name} interfaces with it in ${preset.environments[0].name}. Foreground shoulder silhouette softly out of focus, hard gobo light slicing across the artifact, 85mm prime at T2.0, creamy background separation, airborne dust motes, 480p 16:9 film still`
+        : `Choker Shot and Dutch Angle Close-Up of ${firstChar.name} (${firstChar.visualTraits}) at peak dramatic threshold in ${preset.environments[0].name}. Forehead to chin tight framing, Caravaggio chiaroscuro lighting leaving deep shadows in eye sockets, eye catchlights, Panavision anamorphic optical character, immense cinematic stakes, 480p 16:9 film still`,
+      cameraMotionPrompt: stepNum === 1
+        ? "Technocrane crane sweep beginning low on subject then ascending smoothly into a high-angle panoramic reveal of the environment, 24fps motion blur"
+        : stepNum === 2
+        ? "Smooth lateral dolly tracking shot on rails parallel to subject, three-layer parallax with blurred foreground scaffolding and distant receding buildings, 24fps motion blur"
+        : stepNum === 3
+        ? "Deliberate 2-second rack focus from foreground prop in razor sharpness to background character eyes, creamy circular bokeh, subtle focus breathing"
+        : "Imperceptibly slow dolly push-in closing from medium to intense choker shot over 15 seconds, narrowing depth of field, 180-degree shutter 24fps motion blur",
       videoUrl: (preset as any).videoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
       duration: 15,
       votingWindowSeconds: isFinal ? 10 : 0,
@@ -722,12 +745,15 @@ Rules:
 3. Never invent props freely: define "newCharacter" (with voicePrompt) AND their signature "newProp" ONLY when a NEW character enters; otherwise both null.
 4. "activeProps": only prop IDs physically visible or manipulated in THIS shot; empty [] otherwise.
 5. "activeCharacters": only characters on screen.
+6. CINEMATIQUE "visualPrompt": Craft a rich 6-layer visual prompt: [Shot Framing: MCU / Cowboy / ECU / Choker / Low-Angle / OTS] + [Subject & Wardrobe] + [Setting Architecture with Foreground/Mid/Background Depth] + [Lighting: Chiaroscuro / Rembrandt / Motivated practicals / Kelvin Temp] + [Lenses & Stock: Panavision anamorphic oval bokeh / Cooke S4 warmth / Zeiss sharpness / Kodak Vision3 500T grain] + [Atmosphere & 24fps film still].
+7. CINEMATIQUE "cameraMotionPrompt": Craft a rich 4-layer camera prompt: [Rig: Steadicam glide / Slow dolly push-in / Lateral track with 3-layer parallax / Technocrane arc / Dolly zoom vertigo] + [Pacing & Trajectory] + [Focal length & Focus pull/Rack focus] + [Optical flare physics & 24fps motion blur].
 Respond ONLY with JSON:
 {"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""}],"voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":""},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":""}]}`;
 
       // Compact user message: only the context this scene needs (no bible dump,
       // no video URLs, compact id:name rosters).
       const userContext = `Film: "${movie.title}" (${movie.genre})
+Style: ${movie.bible?.cinematicStyle || '35mm Panavision anamorphic, high contrast cinematic'}
 Master arc: ${movie.masterArcThread || movie.initialPlot}
 ${getNarrativeArcDirective(nextStepNum)}
 Previous scene ${previousStep.stepNumber} "${previousStep.title}": ${previousStep.synopsis}${previousStep.dialogueSnippet ? ` Dialogue: "${previousStep.dialogueSnippet}"` : ''}
@@ -899,10 +925,12 @@ ${influenceDirective}`;
   let optionA: DecisionOption;
   let optionB: DecisionOption;
   let subtitles: SubtitleCue[] = [];
+  let cameraMotionPrompt = "Technocrane high-angle descent transitioning into smooth eye-level Steadicam tracking, fluid cinematic motion, 24fps motion cadence";
 
   if (newCharacter && newProp) {
     synopsis = `In this critical junction, ${char.name} meets in the steam-choked shadows with ${newCharacter.name}, who boots up his ${newProp.name} to decipher the orbital spire telemetry.`;
-    visualPrompt = `Cinematic shot of ${char.name} (${char.visualTraits}) meeting ${newCharacter.name} (${newCharacter.visualTraits}) in a steam-filled ventilation shaft, ${newCharacter.name} holding ${newProp.name} (${newProp.visualAppearance}), green neon reflections, 480p 16:9 film`;
+    visualPrompt = `Medium two-shot / low-angle cowboy framing: ${char.name} (${char.visualTraits}) meets ${newCharacter.name} (${newCharacter.visualTraits}) in a rain-slicked industrial ventilation conduit. Motivated chiaroscuro with 3200K amber incandescent practicals cutting through thick atmospheric haze and cyan neon backlighting. ${newCharacter.name} boots up ${newProp.name} (${newProp.visualAppearance}), its holographic prism casting vibrant volumetric caustics across their faces. Cooke Anamorphic /i Prime 40mm T2.3, shallow depth of field with oval bokeh, subtle anamorphic flare, Kodak Vision3 500T 5219 texture with organic 35mm grain, photorealistic 16:9 cinematic master.`;
+    cameraMotionPrompt = "Lateral dolly track at eye level slowly arcing around the two characters, subtle push-in tightening framing as the device activates, 24fps cinematic cadence";
     subtitles = [
       {
         start: 1.0,
@@ -937,7 +965,8 @@ ${influenceDirective}`;
     };
   } else if (chosenOptionId === 'A') {
     synopsis = `Following the decision to ${chosenOption.title.toLowerCase()}, ${char.name} gains a temporary tactical edge. Biometric telemetry exposes a hidden conduit as the ${prop.name} emits an ultrasonic pulse.`;
-    visualPrompt = `Dramatic cinema shot of ${char.name} (${char.visualTraits}) interacting with ${prop.name} (${prop.visualAppearance}), neon sparks, intense cyberpunk action, volumetric lighting, 480p 16:9 anamorphic film`;
+    visualPrompt = `Dutch angle medium close-up tracking shot: ${char.name} (${char.visualTraits}) interfaces urgently with ${prop.name} (${prop.visualAppearance}) against a heavy titanium blast bulkhead. Volumetric cyan light shafts pierce through cascading steam and electric sparks, rimming character silhouettes with razor-sharp edge contrast. ARRI Master Anamorphic 50mm, f/2.0 wide open, high optical contrast, controlled blue horizontal streak flares, deep midnight-teal shadows and warm amber highlights, 35mm film grain, 16:9 cinematic render.`;
+    cameraMotionPrompt = "Dynamic handheld Steadicam with subtle camera micro-jitter simulating tension, slow forward push-in toward the terminal interface, 24fps film cadence";
     subtitles = [
       {
         start: 1.0,
@@ -972,7 +1001,8 @@ ${influenceDirective}`;
     };
   } else {
     synopsis = `Following the choice to ${chosenOption.title.toLowerCase()}, armed confrontation erupts. Hunter-killer drones saturate the alley with targeting lasers as the squad scrambles for cover.`;
-    visualPrompt = `Action cinematic sequence of ${char.name} (${char.visualTraits}) in evasive tactical maneuver, muzzle flash in rain, flying sparks, high velocity cinematography, neon reflections`;
+    visualPrompt = `High-angle wide shot transitioning to rapid ground-level tracking: ${char.name} (${char.visualTraits}) performs an evasive tactical slide across rain-slicked asphalt while neon tracer rounds ricochet off rusted scaffolding. High-speed shutter 45-degree angle capturing crisp droplet impacts and violent muzzle flashes. Rembrandt key lighting mixed with crimson warning strobes and sodium-vapor street lamps. Panavision C-Series Anamorphic 35mm, barrel distortion at frame edges, anamorphic blue horizontal streaks, Kodak Vision3 250D daylight stock, 16:9 cinematic action frame.`;
+    cameraMotionPrompt = "High-velocity whip pan following the ricocheting tracers into a rapid low-angle camera chase, dynamic camera tilt with realistic kinetic inertia, 24fps motion blur";
     subtitles = [
       {
         start: 1.0,
@@ -1033,7 +1063,8 @@ ${influenceDirective}`;
 
     if (isLastScene) {
       synopsis = `THE END. The fate of ${finalChar.name} and the ${finalProp.name} is decided as every audience choice across the entire 50-step journey converges into one defining, cathartic moment. The conflict is resolved and the film closes on an epic final image.`;
-      visualPrompt = `Epic finale shot of ${finalChar.name} (${finalChar.visualTraits}) at the end of the journey, the ${finalProp.name} (${finalProp.visualAppearance}) in its final state, the story's central conflict resolved, majestic golden-hour cinematic lighting, 480p 16:9 anamorphic film`;
+      visualPrompt = `Extreme wide shot / bird's-eye perspective slowly descending into a heroic medium shot: ${finalChar.name} (${finalChar.visualTraits}) stands at the monumental precipice of the resolved world, holding ${finalProp.name} (${finalProp.visualAppearance}) glowing in harmonic resonance. Low-angle golden hour lighting with long warm raking sun rays slicing through dissipating storm clouds, rimming the silhouette in majestic amber backlight and soft lavender fill. Zeiss Master Prime 21mm on ARRI Alexa 65 large format, hyper-crisp optical clarity, creamy circular bokeh, cinematic film look with rich dynamic range, 16:9 final theatrical frame.`;
+      cameraMotionPrompt = "Epic Technocrane 50ft ascending pull-back and crane up, rotating 45 degrees into an awe-inspiring panoramic master shot, gradual deceleration to perfect stillness";
       subtitles = [
         {
           start: 1.0,
@@ -1052,7 +1083,8 @@ ${influenceDirective}`;
       ];
     } else {
       synopsis = `FINAL CONFRONTATION. The last threads converge: ${finalChar.name} unleashes everything in the climactic struggle that will decide the fate of the ${finalProp.name} and every life bound to it. The story surges toward its definitive ending at step ${TOTAL_STEPS}.`;
-      visualPrompt = `Maximum-intensity climactic battle, ${finalChar.name} (${finalChar.visualTraits}) wielding the ${finalProp.name} (${finalProp.visualAppearance}), converging plot threads, epic scale explosion of light and shadow, cinematic 480p 16:9 anamorphic film`;
+      visualPrompt = `Low-angle dynamic hero shot with 360-degree orbital energy: ${finalChar.name} (${finalChar.visualTraits}) unleashes the ultimate power of ${finalProp.name} (${finalProp.visualAppearance}) in the center of the vortex. Split-lighting with deep chiaroscuro: blinding white energy discharge contrasting against deep obsidian midnight shadows. Volumetric dust, floating debris, and shattered glass suspended in zero gravity. Kowa Prominar Anamorphic 40mm, warm vintage golden flares, pronounced barrel distortion, rich filmic grain, 16:9 climactic blockbuster frame.`;
+      cameraMotionPrompt = "Rapid 360-degree orbital Steadicam rotation around the protagonist while rising from low angle to eye level, dramatic momentum with cinematic inertia, 24fps motion blur";
       subtitles = [
         {
           start: 1.0,
@@ -1107,7 +1139,7 @@ ${influenceDirective}`;
     subtitles,
     voiceDirection: newCharacter ? newCharacter.voicePrompt : char.voicePrompt,
     visualPrompt,
-    cameraMotionPrompt: "Dynamic handheld steadycam, cinematic lens flare, motion blur on fast turns, 24fps film stock",
+    cameraMotionPrompt,
     videoUrl: "", // Assigned by fal-video engine
     referenceVideoUrl: previousStep.videoUrl,
     propReferenceImages: activePropImages,
@@ -1252,14 +1284,7 @@ const CREATIVE_CATALYSTS = [
   "a sentient planetary storm demanding human memories as fuel for its lightning"
 ];
 
-const CREATIVE_AESTHETICS = [
-  "Anamorphic 35mm Panavision, amber tungsten flares, rain-slicked obsidian pavements, deep cyan shadows",
-  "70mm IMAX Ultra, volumetric ice-fog, muted lichen greens, candid candlelight, glowing runic embers",
-  "High-contrast monochrome with vivid splashes of bioluminescent teal and cyber magenta",
-  "Sun-bleached brutalist desert architecture, blinding golden sunbursts, oxidized turquoise copper",
-  "Heavy gaslight sepia, copper steam plumes, polished brass gears, dark velvet shadows",
-  "Deep void blacks, pulsing stellar nebulae, prismatic chromatic aberration, cockpit HUD glare"
-];
+const CREATIVE_AESTHETICS = CINEMATIQUE_AESTHETIC_PRESETS;
 
 function sampleRandom<T>(array: T[]): T {
   return array[Math.floor(Math.random() * array.length)];
@@ -1292,13 +1317,14 @@ export async function generateImmersiveAdPromptWithDeepSeek(params: {
   if (!apiKey) return null;
 
   try {
-    const systemPrompt = `You are an elite in-story product-placement director for interactive cinema.
-Write ONE ultra-detailed cinematic visual prompt in ENGLISH for a 15-second fal.ai MiniMax video clip.
+    const systemPrompt = `You are an elite in-story product-placement cinematographer and director for high-concept interactive cinema.
+Write ONE ultra-detailed cinematic visual prompt in ENGLISH for a 15-second fal.ai MiniMax video clip, incorporating the Cinematique visual formula.
 RULES:
-1. The sponsor product/service must be woven INTO the film's story world as a natural element: a character uses it, finds it, wears it, or it appears as set dressing — never a separate commercial, never a logo overlay, never a jump cut out of the film.
-2. Maintain the EXACT same cinematography, lighting, lens, film grain and color grade as the film.
-3. Include the film's characters and current environment so the clip feels like the next shot of the movie.
-4. The output must be a single continuous visual prompt (no script format), 150-300 words, ending with a camera movement description.
+1. IN-WORLD INTEGRATION: The sponsor product/service must be woven organically INTO the film's diegetic story world: a character wields it, examines it, activates it, or it sits in atmospheric set dressing — never a standalone commercial, never a banner or logo overlay, never breaking cinematic immersion.
+2. CINEMATIQUE LIGHTING & COLOR: Match the EXACT same visual texture, motivated lighting rigs (key/fill ratios, color temperature in Kelvin, practical fixtures), and color grade as the film.
+3. OPTICS & CAMERA CADENCE: Specify lens optics (anamorphic streak flares, prime focal lengths, depth of field) and an intentional camera movement (dolly track, Steadicam, or crane descent at 24fps film cadence).
+4. CONTINUITY: Feature the movie's established characters and environment so the scene flows seamlessly as the next chronological beat.
+5. The output must be a single continuous visual prompt (no script format), 150-300 words, structured as: [Shot Scale & Subject Action] + [Motivated Lighting] + [Lens Optics & Film Stock] + [Camera Movement].
 
 Respond ONLY with a valid JSON object:
 {
@@ -1371,13 +1397,14 @@ Your mission is to formulate EXACTLY 4 completely DIFFERENT, wild, high-concept 
 MANDATORY RULES:
 1. RADICAL DIVERSITY: Each of the 4 candidates MUST be from a completely different genre, tone, visual style, and emotional palette. Avoid Hollywood clichés, generic medieval tropes, or basic cyber hackers.
 2. AUDIENCE HOOK: Audience members vote after reading ONLY the title, logline, and genre. The logline must be gripping, cinematic, and sell the core concept instantly.
-3. CREATIVE SEEDS TO INSPIRE THE 4 SLOTS:
+3. CINEMATIQUE PREMISE BRIEFS: In the premise, embed distinctive cinematographic cues (aspect ratio, signature lens, color science, and lighting mood) derived from the aesthetic inspiration.
+4. CREATIVE SEEDS TO INSPIRE THE 4 SLOTS:
 - Candidate A inspiration: ${selectedGenres[0]} featuring ${selectedProtagonists[0]} facing ${selectedCatalysts[0]} with aesthetic of ${selectedAesthetics[0]}.
 - Candidate B inspiration: ${selectedGenres[1]} featuring ${selectedProtagonists[1]} facing ${selectedCatalysts[1]} with aesthetic of ${selectedAesthetics[1]}.
 - Candidate C inspiration: ${selectedGenres[2]} featuring ${selectedProtagonists[2]} facing ${selectedCatalysts[2]} with aesthetic of ${selectedAesthetics[2]}.
 - Candidate D inspiration: ${selectedGenres[3]} featuring ${selectedProtagonists[3]} facing ${selectedCatalysts[3]} with aesthetic of ${selectedAesthetics[3]}.
 
-4. Respond ONLY with a valid JSON object matching this schema:
+5. Respond ONLY with a valid JSON object matching this schema:
 {
   "candidates": [
     {

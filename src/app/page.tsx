@@ -8,6 +8,7 @@ import { BlockbusterVoting } from '@/components/cinema/BlockbusterVoting';
 import { AudienceChat } from '@/components/cinema/AudienceChat';
 import { GalleryView } from '@/components/gallery/GalleryView';
 import { Navbar } from '@/components/layout/Navbar';
+import { BuyAdsModal } from '@/components/cinema/BuyAdsModal';
 import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function CinemaStreamingPage() {
@@ -22,6 +23,7 @@ export default function CinemaStreamingPage() {
   const [subtitleLanguage, setSubtitleLanguage] = useState<'en' | 'es'>('en');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
   const [isGalleryOpen, setIsGalleryOpen] = useState<boolean>(false);
+  const [isBuyAdsModalOpen, setIsBuyAdsModalOpen] = useState<boolean>(false);
   const [topVotedMessages, setTopVotedMessages] = useState<ChatMessage[]>([]);
 
   // Fetch chat messages and top-voted comments from Supabase / API
@@ -892,6 +894,7 @@ export default function CinemaStreamingPage() {
         isGalleryOpen={isGalleryOpen}
         currentStep={cinemaState.movie.currentStep}
         totalSteps={cinemaState.movie.totalSteps}
+        onOpenBuyAds={() => setIsBuyAdsModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -938,6 +941,7 @@ export default function CinemaStreamingPage() {
                         clicks: 0
                       } : null)
                 }
+                onOpenBuyAds={() => setIsBuyAdsModalOpen(true)}
               />
 
               {/* Voting & Decision Overlay (stays centered until next clip starts) */}
@@ -981,6 +985,12 @@ export default function CinemaStreamingPage() {
           </>
         )}
       </main>
+
+      {/* Buy Ads Modal (Immersive Ads Explanation & Showcase Checkout) */}
+      <BuyAdsModal 
+        isOpen={isBuyAdsModalOpen} 
+        onClose={() => setIsBuyAdsModalOpen(false)} 
+      />
     </div>
   );
 }
