@@ -1,4 +1,4 @@
-import { Character, Prop, SceneEnvironment, MovieBible, MovieStep, DecisionOption, Movie, SubtitleCue, ChatMessage } from '@/types/cinema';
+import { Character, Prop, SceneEnvironment, MovieBible, MovieStep, DecisionOption, Movie, SubtitleCue, BlockbusterCandidate } from '@/types/cinema';
 
 export interface GeneratedStoryBible {
   title: string;
@@ -551,23 +551,39 @@ export function getNarrativeArcDirective(stepNum: number): string {
   return `NARRATIVE ARC PHASE — SETUP / EXPOSITION (steps 1-19): The story is in its opening act. These scenes must plant the problem and present the situation: introduce the world, the protagonist, the central conflict and the stakes. Establish mood, tone and the rules of the universe. Near step 20 the protagonist must be locked into the main quest at the point of no return.`;
 }
 
+/**
+ * Audience influence for ONE option of the next step. The comment is consumed
+ * at prompt-generation time: the influenced option is conceived FROM the
+ * comment's idea, while the other option is generated free of audience input.
+ */
+export interface CommentInfluence {
+  commentId: string;
+  userName: string;
+  text: string;
+  optionId: 'A' | 'B';
+}
+
 export async function generateNextStepWithDeepSeek(
   movie: Movie,
   chosenOptionId: 'A' | 'B',
   previousStep: MovieStep,
-  audienceComments?: ChatMessage[]
+  commentInfluence?: CommentInfluence
 ): Promise<MovieStep> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   const nextStepNum = previousStep.stepNumber + 1;
   const chosenOption = previousStep.options.find(o => o.id === chosenOptionId) || previousStep.options[0];
 
-  const audienceSuggestionsText = audienceComments && audienceComments.length > 0
-    ? `\n\nLIVE AUDIENCE CHAT SUGGESTIONS & TOP-VOTED IDEAS (Last 30 seconds):
-${audienceComments.map(c => `- @${c.userName} (Votes: ${c.votesCount || 0}): "${c.text}"`).join('\n')}
-
-AUDIENCE INSPIRATION DIRECTIVE:
-The interactive audience has posted the above comments and ideas in the live chat during the last 30 seconds.
-Carefully review their suggestions. If any comment features an intriguing twist, clever dialogue idea, or dramatic escalation that complements the winning option (${chosenOptionId}: "${chosenOption.title}"), incorporate or be inspired by this audience concept to give a surprising twist to this scene while maintaining film continuity!`
+  // The selected comment influences the generation of exactly ONE option:
+  // that option is written as the dramatic realization of the audience's idea,
+  // the other one follows the pure story logic with no audience input at all.
+  const influenceDirective = commentInfluence
+    ? `
+AUDIENCE INFLUENCE (OPTION ${commentInfluence.optionId} ONLY):
+The audience member @${commentInfluence.userName} proposed the idea: "${commentInfluence.text}".
+When you GENERATE the two options for this step:
+- OPTION ${commentInfluence.optionId} must be conceived directly FROM this audience idea. Its title, text, dramatic hook and expected consequence must make it the branch where the audience's idea becomes reality. Weave the idea into that option's dramatic identity so voters can recognize it.
+- OPTION ${commentInfluence.optionId === 'A' ? 'B' : 'A'} must follow the pure cinematic logic of the story with ZERO audience influence — a normal continuation of the narrative, as if no audience idea existed.
+The scene content itself must stay neutral and foreshadow BOTH options equally.`
     : '';
 
   if (apiKey) {
@@ -577,7 +593,7 @@ The audience just voted for OPTION ${chosenOptionId}: "${chosenOption.title}" ($
 You are generating STEP ${nextStepNum} of 100 (exactly a 15-second cinematic clip for MiniMax H3-Max in 480p 16:9).
 
 ${getNarrativeArcDirective(nextStepNum)}
-
+${influenceDirective}
 CRITICAL REQUIREMENTS:
 1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, dialogue snippet, subtitle, option, and hook must be in evocative, cinematic English.
 2. SUBTITLES: Include timed "subtitles" array (start, end, speaker, text in English, and optional textEs translation in Spanish).
@@ -640,7 +656,7 @@ Previous step (${previousStep.stepNumber}): "${previousStep.synopsis}".
 Previous video URL reference: "${previousStep.videoUrl}".
 Audience-voted winning option: "${chosenOption.text}" (Expected consequence: ${chosenOption.expectedConsequence}).
 Existing characters: ${JSON.stringify(movie.bible.characters.map(c => ({ id: c.id, name: c.name, role: c.role })))};
-Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p.name, owner: p.ownerCharacterName })))};${audienceSuggestionsText}`;
+Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p.name, owner: p.ownerCharacterName })))};`;
 
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
@@ -1100,4 +1116,111 @@ In the final confrontation, the audience made the ultimate high-risk gamble: det
     finalSynopsis,
     finalSummary
   };
+}
+
+/**
+ * Generate 4 varied blockbuster movie candidates for the 30-second audience
+ * "next blockbuster" voting stage. Each candidate carries a display title,
+ * logline and genre, plus a full premise string used to build the story bible
+ * when the candidate wins.
+ */
+export async function generateBlockbusterCandidatesWithDeepSeek(): Promise<BlockbusterCandidate[]> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+
+  if (apiKey) {
+    try {
+      const systemPrompt = `You are the Head of Development at a blockbuster interactive cinema studio.
+Generate EXACTLY 4 completely DIFFERENT high-concept interactive film pitches for a live 100-step audience-driven movie.
+Each pitch must be from a distinctly different genre and tone. Be wildly varied and creative.
+Audience members will vote for their favorite after reading ONLY the title, logline and genre, so make each one instantly compelling.
+
+Respond ONLY with a valid JSON object:
+{
+  "candidates": [
+    {
+      "title": "Compelling Cinematic Title",
+      "logline": "One gripping logline sentence that sells the premise instantly",
+      "genre": "Genre / Subgenre",
+      "premise": "A full creative brief for the screenwriter: world, protagonist, central conflict, villain, key location and the central audience choice that will define the 100-step arc"
+    }
+  ]
+}`;
+
+      const response = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: "Create 4 varied blockbuster candidates for the audience vote. Different genres, tones and protagonists for each." }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.9
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const parsed = JSON.parse(data.choices[0]?.message?.content);
+        const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [];
+
+        const candidates: BlockbusterCandidate[] = rawCandidates.slice(0, 4).map((c: any, idx: number) => ({
+          id: (['A', 'B', 'C', 'D'] as const)[idx],
+          title: String(c.title || `Untitled Blockbuster ${idx + 1}`).slice(0, 90),
+          logline: String(c.logline || 'A new interactive cinematic odyssey.').slice(0, 220),
+          genre: String(c.genre || 'Sci-Fi / Thriller').slice(0, 60),
+          premise: String(c.premise || `${c.title || 'Untitled'} — ${c.genre || 'Sci-Fi'}.`).slice(0, 900)
+        }));
+
+        if (candidates.length === 4) {
+          return candidates;
+        }
+      }
+    } catch (err) {
+      console.warn('DeepSeek blockbuster candidates generation failed, using curated rotation candidates:', err);
+    }
+  }
+
+  return getFallbackBlockbusterCandidates();
+}
+
+/**
+ * Curated fallback: 4 varied candidates derived from the blockbuster rotation genres.
+ */
+export function getFallbackBlockbusterCandidates(): BlockbusterCandidate[] {
+  const picks = [
+    {
+      title: 'Project Nemesis: Protocol 2099',
+      logline: 'A neural detective races a megacorporation to decrypt a prism that holds humanity\'s last free will.',
+      genre: 'Cyberpunk / Neo-Noir Thriller',
+      premise: 'Cyberpunk neo-noir thriller about a rogue neural detective uncovering a megacorporate conspiracy to overwrite human free will with a quantum brain-prism. The audience decides at every step whether to trust the shadows or burn the system down.'
+    },
+    {
+      title: 'The Shattered Crown: Chronicles of Eldoria',
+      logline: 'A fallen knight and a shadow-witch hunt a stolen crown before a sleeping dragon empire awakens.',
+      genre: 'Dark Epic Fantasy / Mythic Saga',
+      premise: 'Dark epic fantasy saga where a disgraced knight and a blood-sorceress chase a cursed crown across ruined kingdoms while a dragon empire stirs beneath the mountains. The audience steers alliances, betrayals and the fate of the realm.'
+    },
+    {
+      title: 'Aegis Horizon: Deep Void Protocol',
+      logline: 'The last human carrier answers a dying alien signal from inside a Dyson megastructure.',
+      genre: 'Cosmic Space Opera / Sci-Fi Odyssey',
+      premise: 'Cosmic space opera following the crew of the last human carrier as they cross a Dyson megastructure answering an alien distress signal that predates humanity. Every vote decides first contact, survival or sacrifice.'
+    },
+    {
+      title: 'The Sun Engine: Ashes of Meridian',
+      logline: 'Scavenger clans race to reignite the Sun Engine before the last great city freezes.',
+      genre: 'Post-Apocalyptic Solarpunk / Mech Wasteland',
+      premise: 'Post-apocalyptic solarpunk wasteland where rival scavenger clans pilot colossal repurposed mechs to reignite the legendary Sun Engine before the final city freezes over. The audience picks leaders, gambles alliances and reshapes the wasteland.'
+    }
+  ];
+
+  return picks.map((p, idx) => ({
+    id: (['A', 'B', 'C', 'D'] as const)[idx],
+    ...p
+  }));
 }

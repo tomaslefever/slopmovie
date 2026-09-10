@@ -115,11 +115,20 @@ export interface ChatMessage {
   createdAtMs?: number;
   isSystem?: boolean;
   votedOption?: 'A' | 'B';
+  usedForInfluence?: boolean;
   votesCount?: number;
   hasUserVoted?: boolean;
 }
 
-export type PlaybackPhase = 'PLAYING' | 'VOTING' | 'GENERATING' | 'COMMERCIAL_BREAK';
+export type PlaybackPhase = 'PLAYING' | 'VOTING' | 'GENERATING' | 'COMMERCIAL_BREAK' | 'BLOCKBUSTER_VOTING';
+
+export interface BlockbusterCandidate {
+  id: 'A' | 'B' | 'C' | 'D';
+  title: string;
+  logline: string;
+  genre: string;
+  premise: string;
+}
 
 export type ImmersiveAdType = 'commercial_break' | 'in_scene_overlay';
 
@@ -182,6 +191,8 @@ export interface CinemaState {
   isGenerationPaused?: boolean;
   videoModel?: string;
   videoResolution?: string | null;
+  blockbusterCandidates?: BlockbusterCandidate[];
+  blockbusterVoteCounts?: Record<'A' | 'B' | 'C' | 'D', number>;
   activeAd?: ImmersiveAd | null;
   adsConfig?: AdsConfig;
   apiStatus?: {

@@ -138,6 +138,8 @@ export async function GET(request: Request) {
     isGenerationPaused: liveState?.isGenerationPaused ?? false,
     videoModel: cinemaEngine.videoModel,
     videoResolution: cinemaEngine.videoResolution,
+    blockbusterCandidates: cinemaEngine.blockbusterCandidates,
+    blockbusterVoteCounts: cinemaEngine.blockbusterVoteCounts,
     activeAd: liveState?.activeAd || null,
     adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
     apiStatus: {
@@ -192,6 +194,19 @@ export async function POST(request: Request) {
         success: voteResult.success,
         votesA: voteResult.votesA,
         votesB: voteResult.votesB,
+        userVoted: optionId
+      });
+    }
+
+    if (action === 'blockbuster_vote') {
+      if (!optionId || !['A', 'B', 'C', 'D'].includes(optionId)) {
+        return NextResponse.json({ error: 'Candidata de película inválida' }, { status: 400 });
+      }
+
+      const voteResult = cinemaEngine.castBlockbusterVote(userId || 'anonymous', optionId as 'A' | 'B' | 'C' | 'D');
+      return NextResponse.json({
+        success: voteResult.success,
+        counts: voteResult.counts,
         userVoted: optionId
       });
     }

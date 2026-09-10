@@ -1,5 +1,6 @@
-import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig } from '@/types/cinema';
-import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek } from './deepseek';
+import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate } from '@/types/cinema';
+import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek } from './deepseek';
+import type { CommentInfluence } from './deepseek';
 import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel } from './fal-video';
 import type { VideoModelId, VideoResolution } from './fal-video';
 
@@ -29,8 +30,7 @@ import {
   loadLiveCinemaStateFromDb,
   recordUserVoteInDb,
   voteChatMessageInDb,
-  loadTopVotedCommentsFromDb,
-  loadUserVotedCommentIdsFromDb,
+  markChatMessageUsedForInfluence,
   updateMovieInDb,
   deleteMovieFromDb
 } from './supabase/db';
@@ -111,6 +111,8 @@ class CinemaOrchestrator {
   public totalAudience: number = 142; // Dynamic audience count
   public chatMessages: ChatMessage[] = [];
   public commentVotes: Map<string, Set<string>> = new Map();
+  /** Comment ids already consumed for narrative influence — never reconsidered. */
+  private usedInfluenceCommentIds: Set<string> = new Set();
   public isRunning: boolean = false;
   public isPaused: boolean = false;
   public isGenerationPaused: boolean = false;
@@ -144,6 +146,23 @@ class CinemaOrchestrator {
    * narrative continuity. Reset to null once consumed by the step generator.
    */
   private preAdVideoUrl: string | null = null;
+
+  /**
+   * Ad clip pre-generated together with the story clip, so when the commercial break
+   * starts the ad is already rendered and only needs to be played back.
+   */
+  private pendingPreGeneratedAd: {
+    ad: ImmersiveAd;
+    stepNumber: number;
+    videoUrl: string;
+    thumbnailUrl: string;
+    isRealAiGenerated: boolean;
+  } | null = null;
+
+  // Next-blockbuster audience voting (30s, 4 candidates)
+  public blockbusterCandidates: BlockbusterCandidate[] = [];
+  public blockbusterVoteCounts: Record<'A' | 'B' | 'C' | 'D', number> = { A: 0, B: 0, C: 0, D: 0 };
+  private blockbusterUserVotes: Map<string, 'A' | 'B' | 'C' | 'D'> = new Map();
 
   // Historical archive of previous generated ad clips for replay mode
   public generatedAdVideoArchive: string[] = [
@@ -208,7 +227,30 @@ class CinemaOrchestrator {
     return CinemaOrchestrator.instance;
   }
 
-  public async initializeMovie(customPrompt?: string): Promise<Movie> {
+  private initializeMoviePromise: Promise<Movie> | null = null;
+  /**
+   * True while forceReset is generating a brand-new movie. The background worker
+   * must not auto-initialize another movie during this window (race that resurrects
+   * an automatic movie instead of the director's).
+   */
+  public isResetting: boolean = false;
+
+  /**
+   * Deduplicated entry point: concurrent callers (worker tick, API routes) join
+   * the SAME in-flight initialization instead of generating competing movies.
+   */
+  public initializeMovie(customPrompt?: string): Promise<Movie> {
+    if (this.initializeMoviePromise) {
+      console.log('[Cinema] initializeMovie already in progress — joining existing initialization.');
+      return this.initializeMoviePromise;
+    }
+    this.initializeMoviePromise = this.doInitializeMovie(customPrompt).finally(() => {
+      this.initializeMoviePromise = null;
+    });
+    return this.initializeMoviePromise;
+  }
+
+  private async doInitializeMovie(customPrompt?: string): Promise<Movie> {
     // Try to restore existing streaming or paused movie from Supabase if available
     if (isSupabaseConfigured() && !customPrompt) {
       try {
@@ -246,6 +288,10 @@ class CinemaOrchestrator {
 
           const dbChats = await loadRecentChatMessagesFromDb(savedMovie.id);
           if (dbChats.length > 0) this.chatMessages = dbChats;
+          // Restore the influence-consumed marks so used comments are never picked again
+          for (const msg of dbChats) {
+            if (msg.usedForInfluence) this.usedInfluenceCommentIds.add(msg.id);
+          }
 
           // Restore paused and generation paused states accurately
           if (savedMovie.status === 'paused') {
@@ -380,6 +426,10 @@ class CinemaOrchestrator {
    */
   public async syncFromDatabase() {
     if (!isSupabaseConfigured()) return;
+    if (this.isResetting) {
+      console.log('[CinemaEngine] Skipping DB sync: a movie reset is in progress.');
+      return;
+    }
     try {
       const savedMovie = await loadActiveMovieFromDb();
       if (savedMovie && savedMovie.steps.length > 0) {
@@ -432,8 +482,34 @@ class CinemaOrchestrator {
    */
   public async tickWorker(workerId: string) {
     if (!this.movie) {
+      // A forceReset (new blockbuster rotation) is mid-flight: the worker must NOT
+      // auto-generate a competing movie while the director's/rotation's movie is being created.
+      if (this.isResetting) {
+        console.log('[CinemaEngine] Movie reset in progress — worker skips auto-initialization this tick.');
+        return;
+      }
       await this.initializeMovie();
       if (!this.movie) return;
+    }
+
+    // Blockbuster rotation watchdog: if a film completed but its rotation flow was
+    // lost (serverless restart / swallowed error), rotate automatically.
+    if (this.movie.status === 'completed') {
+      // During the async generation of the winning blockbuster, never auto-rotate on top of it.
+      if (this.phase === 'GENERATING') {
+        return;
+      }
+      // During the blockbuster audience vote, fall through to the normal timer/grace
+      // handling so the vote resolves (random winner with zero voters) when no client
+      // completes the stage.
+      if (this.phase !== 'BLOCKBUSTER_VOTING') {
+        const completedAtMs = this.movie.completedAt ? new Date(this.movie.completedAt).getTime() : 0;
+        if (completedAtMs && Date.now() - completedAtMs > 8000 && !this.isResetting) {
+          console.log('[CinemaEngine] Completed movie detected without rotation — auto-starting next blockbuster.');
+          await this.startNextBlockbusterMovie();
+        }
+        return;
+      }
     }
 
     // If stream is paused by director, refresh heartbeat in Supabase without advancing timers
@@ -519,6 +595,42 @@ class CinemaOrchestrator {
   private async handlePhaseTransition(workerId?: string) {
     if (!this.movie) return;
 
+    // ── NEXT BLOCKBUSTER AUDIENCE VOTE CONCLUDED (30s) ───────────────────────
+    if (this.phase === 'BLOCKBUSTER_VOTING') {
+      const winner = this.resolveBlockbusterVote();
+      this.blockbusterCandidates = [];
+      this.blockbusterUserVotes.clear();
+
+      this.setPhase('GENERATING', 4);
+
+      broadcastCinemaEvent('blockbuster_vote_ended', {
+        winner: winner ? { title: winner.title, logline: winner.logline, genre: winner.genre } : null
+      });
+      broadcastCinemaEvent('phase_change', {
+        phase: 'GENERATING',
+        timeRemaining: 4,
+        phaseDuration: 4,
+        phaseStartedAt: this.phaseStartedAt,
+        phaseEndsAt: this.phaseEndsAt
+      });
+
+      if (winner) {
+        this.addSystemMessage(`🏆 NEXT BLOCKBUSTER: "${winner.title}" (${winner.genre}) won the audience vote! Generating now — the premiere begins automatically when it's ready.`);
+        // ASYNC BY DESIGN: does not await. The new movie broadcasts new_movie_started
+        // and starts playing when its generation finishes.
+        this.startNextBlockbusterMovie(winner.premise).catch((err) => {
+          console.error('[Cinema] Async blockbuster generation failed:', err);
+        });
+      } else {
+        this.startNextBlockbusterMovie().catch((err) => {
+          console.error('[Cinema] Async blockbuster generation failed:', err);
+        });
+      }
+
+      await this.broadcastStateSnapshot(workerId);
+      return;
+    }
+
     const currentStep = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
       || this.movie.steps[this.movie.steps.length - 1];
 
@@ -574,6 +686,9 @@ class CinemaOrchestrator {
         await this.triggerCommercialBreak(undefined, 'VOTING');
         return;
       }
+
+      // No break this time — drop any stale pre-generated ad clip
+      this.pendingPreGeneratedAd = null;
 
       // Enter 10-second VOTING phase!
       this.setPhase('VOTING', 10);
@@ -663,11 +778,16 @@ class CinemaOrchestrator {
           movie: this.movie
         });
 
-        // REQUISITO: Las películas se crean automáticamente cuando finaliza una con rotación de temáticas de taquilla
-        this.addSystemMessage(`🎬 PREMIERING NEXT BLOCKBUSTER: Auto-generating new film with rotated blockbuster genre in 5 seconds...`);
-        setTimeout(async () => {
-          await this.startNextBlockbusterMovie();
-        }, 5000);
+        // REQUISITO: Al terminar una película, la audiencia elige la siguiente entre 4 candidatas.
+        // startNextBlockbusterMovie es ASYNC y no bloquea: la votación de 30s se abre de inmediato
+        // y la película ganadora se genera en segundo plano, transmitiéndose al terminar.
+        this.addSystemMessage(`🎟️ MASTERPIECE COMPLETE: Opening the NEXT BLOCKBUSTER audience vote...`);
+        try {
+          await this.prepareBlockbusterVoting();
+        } catch (err) {
+          console.error('[Cinema] Blockbuster voting preparation failed, auto-rotating:', err);
+          this.startNextBlockbusterMovie().catch((e) => console.error('[Cinema] Fallback rotation failed:', e));
+        }
         return;
       }
 
@@ -752,17 +872,18 @@ class CinemaOrchestrator {
         return;
       }
 
-      // Extract recent (last 30 seconds) and top-voted chat comments to inspire DeepSeek
-      const audienceComments = this.getRecentAndTopChatComments(30);
+      // Rule: take the last 30 comments, pick ONE at random, and let it influence
+      // exactly ONE of the two next options (the other follows the normal route).
+      // The picked comment is marked as used and never reconsidered in later rounds.
+      const commentInfluence = await this.selectCommentForInfluence();
 
       // Generate step n + 1 with DeepSeek and fal.ai MiniMax H3-Max in 480p 16:9
       let nextStep: MovieStep | null = null;
       try {
-        const nextStepRaw = await generateNextStepWithDeepSeek(this.movie, chosenOption, currentStep, audienceComments);
+        const nextStepRaw = await generateNextStepWithDeepSeek(this.movie, chosenOption, currentStep, commentInfluence ?? undefined);
 
-        if (audienceComments.length > 0 && (audienceComments[0].votesCount || 0) > 0) {
-          const topIdea = audienceComments[0];
-          this.addSystemMessage(`💡 Narrative twist influenced by @${topIdea.userName}'s top idea (${topIdea.votesCount} votes): "${topIdea.text}"`);
+        if (commentInfluence) {
+          this.addSystemMessage(`💡 La idea de @${commentInfluence.userName} moldea la Opción ${commentInfluence.optionId} de esta ronda (comentario marcado como usado).`);
         }
         
         // PROPS SE CREAN SÓLO CUANDO EL LLM DEBE INTEGRAR UN NUEVO PERSONAJE
@@ -815,6 +936,11 @@ class CinemaOrchestrator {
         // If we just came from a COMMERCIAL_BREAK, use preAdVideoUrl (the clip before the ad)
         // instead of the last step's videoUrl, so the ad has zero influence on narrative continuity.
         const storyReferenceUrl = this.preAdVideoUrl ?? currentStep.videoUrl;
+
+        // If this new step will trigger a commercial break when it finishes playing,
+        // pre-generate the ad clip IN PARALLEL so the break starts with the ad already rendered.
+        this.preGenerateUpcomingAd(nextStepRaw.stepNumber, storyReferenceUrl);
+
         const videoRes = await generateVideoWithFal({
           prompt: nextStepRaw.visualPrompt,
           cameraMotion: nextStepRaw.cameraMotionPrompt,
@@ -905,26 +1031,136 @@ class CinemaOrchestrator {
   }
 
   /**
-   * Extract recent comments (default last 30 seconds) and top-voted chat ideas
-   * to influence the next narrative scene.
+   * Prepare the 30-second NEXT BLOCKBUSTER audience voting stage:
+   * generates 4 varied candidate movies (title, logline, genre) and enters BLOCKBUSTER_VOTING.
    */
-  public getRecentAndTopChatComments(seconds: number = 30): ChatMessage[] {
-    const cutoff = Date.now() - seconds * 1000;
-    const userComments = this.chatMessages.filter(m => !m.isSystem && m.text.trim().length > 0);
+  public async prepareBlockbusterVoting(): Promise<BlockbusterCandidate[]> {
+    let candidates: BlockbusterCandidate[] = [];
+    try {
+      candidates = await generateBlockbusterCandidatesWithDeepSeek();
+    } catch (err) {
+      console.error('[Cinema] Error generating blockbuster candidates:', err);
+    }
 
-    const candidates = userComments.filter(m => {
-      const isRecent = (m.createdAtMs && m.createdAtMs >= cutoff) || true;
-      const hasVotes = (m.votesCount && m.votesCount > 0);
-      return isRecent || hasVotes;
+    this.blockbusterCandidates = candidates;
+    this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
+    this.blockbusterUserVotes.clear();
+
+    this.setPhase('BLOCKBUSTER_VOTING', 30);
+    this.addSystemMessage(`🎟️ NEXT BLOCKBUSTER VOTE: The audience has 30 seconds to pick the next film!`);
+
+    broadcastCinemaEvent('phase_change', {
+      phase: 'BLOCKBUSTER_VOTING',
+      timeRemaining: 30,
+      phaseDuration: 30,
+      phaseStartedAt: this.phaseStartedAt,
+      phaseEndsAt: this.phaseEndsAt,
+      blockbusterCandidates: this.blockbusterCandidates
+    });
+    await this.broadcastStateSnapshot();
+    return candidates;
+  }
+
+  /**
+   * Cast a vote for the next blockbuster movie during the BLOCKBUSTER_VOTING stage.
+   */
+  public castBlockbusterVote(userId: string, candidateId: 'A' | 'B' | 'C' | 'D'): { success: boolean; counts: Record<'A' | 'B' | 'C' | 'D', number> } {
+    if (this.phase !== 'BLOCKBUSTER_VOTING') {
+      return { success: false, counts: this.blockbusterVoteCounts };
+    }
+    if (!this.blockbusterCandidates.some(c => c.id === candidateId)) {
+      return { success: false, counts: this.blockbusterVoteCounts };
+    }
+
+    const previousVote = this.blockbusterUserVotes.get(userId);
+    if (previousVote === candidateId) {
+      return { success: true, counts: this.blockbusterVoteCounts };
+    }
+
+    if (previousVote) this.blockbusterVoteCounts[previousVote] = Math.max(0, this.blockbusterVoteCounts[previousVote] - 1);
+    this.blockbusterVoteCounts[candidateId]++;
+
+    this.blockbusterUserVotes.set(userId, candidateId);
+
+    broadcastCinemaEvent('blockbuster_vote_update', {
+      counts: this.blockbusterVoteCounts,
+      timeRemaining: this.timeRemaining
     });
 
-    return candidates
-      .sort((a, b) => {
-        const diffVotes = (b.votesCount || 0) - (a.votesCount || 0);
-        if (diffVotes !== 0) return diffVotes;
-        return (b.createdAtMs || 0) - (a.createdAtMs || 0);
-      })
-      .slice(0, 8);
+    return { success: true, counts: this.blockbusterVoteCounts };
+  }
+
+  /**
+   * Resolve the blockbuster vote winner and START generating the selected movie.
+   * ASYNC BY DESIGN: generation runs in the background and the stream switches
+   * (new_movie_started) automatically when the new movie finishes generating.
+   */
+  private resolveBlockbusterVote(): BlockbusterCandidate | null {
+    if (this.blockbusterCandidates.length === 0) return null;
+
+    const maxVotes = Math.max(...(['A', 'B', 'C', 'D'] as const).map(id => this.blockbusterVoteCounts[id]));
+    const leaders = this.blockbusterCandidates.filter(c => this.blockbusterVoteCounts[c.id] === maxVotes);
+    const winner = leaders.length > 0
+      ? leaders[Math.floor(Math.random() * leaders.length)]
+      : this.blockbusterCandidates[Math.floor(Math.random() * this.blockbusterCandidates.length)];
+
+    return winner;
+  }
+
+  /**
+   * Influence rule: take the last 30 audience comments, pick ONE at random and
+   * mark it as used (in memory + DB) so it is never considered again. The pick
+   * influences exactly one of the two next options, chosen at random.
+   */
+  private async selectCommentForInfluence(): Promise<CommentInfluence | null> {
+    // Merge the DB's last comments (source of truth across processes) with live
+    // memory so the picker always sees the true "last 30" regardless of which
+    // process advances the film.
+    if (this.movie && isSupabaseConfigured()) {
+      try {
+        const dbComments = await loadRecentChatMessagesFromDb(this.movie.id, 30);
+        const known = new Map(this.chatMessages.map(m => [m.id, m]));
+        for (const dbMsg of dbComments) {
+          if (dbMsg.usedForInfluence) this.usedInfluenceCommentIds.add(dbMsg.id);
+          if (!known.has(dbMsg.id)) known.set(dbMsg.id, dbMsg);
+        }
+        this.chatMessages = Array.from(known.values())
+          .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+      } catch {
+        // Fall back to in-memory comments
+      }
+    }
+
+    const candidates = this.chatMessages
+      .filter(m =>
+        !m.isSystem &&
+        !m.votedOption &&
+        m.text.trim().length > 0 &&
+        !this.usedInfluenceCommentIds.has(m.id)
+      )
+      .slice(-30);
+
+    if (candidates.length === 0) return null;
+
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+
+    // Mark as used: never considered in a future round
+    this.usedInfluenceCommentIds.add(pick.id);
+    pick.usedForInfluence = true;
+    if (this.movie) {
+      markChatMessageUsedForInfluence(pick.id).catch(() => {
+        // Non-blocking
+      });
+    }
+
+    const optionId: 'A' | 'B' = Math.random() < 0.5 ? 'A' : 'B';
+
+    return {
+      commentId: pick.id,
+      userName: pick.userName,
+      text: pick.text.trim(),
+      optionId
+    };
   }
 
   /**
@@ -1005,43 +1241,67 @@ class CinemaOrchestrator {
     });
   }
 
-  private injectSimulatedAudienceActivity() {
-    const audienceNames = ["NeoViewer_99", "SarahCyber", "ZeroCool", "Elena_Films", "LucasSciFi", "Cinephile2099", "PixelRider"];
-    const reactions = [
-      "Noooo, watch out for the ambush!",
-      "Vote A! It's the only way to safeguard the neural prism",
-      "Option B is definitely going to have way more firefights 🔥",
-      "The anamorphic lighting in this clip is incredible",
-      "Kael's voice direction is super consistent!",
-      "Look at the new character who just entered the scene!",
-      "Key milestone coming up, let's go!"
-    ];
+  /**
+   * Pick a random active commercial-break ad.
+   */
+  private pickRandomCommercialAd(): ImmersiveAd | undefined {
+    const activeAds = this.adsList.filter(a => a.isActive && a.type === 'commercial_break');
+    if (activeAds.length === 0) return undefined;
+    return activeAds[Math.floor(Math.random() * activeAds.length)];
+  }
 
-    const randomName = audienceNames[Math.floor(Math.random() * audienceNames.length)];
-    const randomText = reactions[Math.floor(Math.random() * reactions.length)];
+  /**
+   * Build the fal.ai generation prompt for an immersive ad.
+   */
+  private buildAdGenerationPrompt(ad: ImmersiveAd): string {
+    const rawPrompt = ad.cinematicPrompt
+      || `A character naturally interacts with or observes "${ad.brandName}". ${ad.tagline || ''}. Maintain identical cinematic lighting, colors, lens flare, and environment as the previous shot.`;
 
-    this.addChatMessage({
-      id: `sim_${Date.now()}`,
-      userId: `user_${randomName.toLowerCase()}`,
-      userName: randomName,
-      text: randomText,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const promptPrefix = "Continúa la escena e integra este anuncio de forma natural en la historia: ";
+    return rawPrompt.startsWith(promptPrefix) ? rawPrompt : `${promptPrefix}${rawPrompt}`;
+  }
+
+  /**
+   * Pre-generate the upcoming commercial ad clip IN PARALLEL with the story clip
+   * generation. By the time the story clip finishes playing and the break starts,
+   * the ad is already rendered and only needs to be played back.
+   */
+  private preGenerateUpcomingAd(stepNumber: number, referenceVideoUrl: string): void {
+    if (!this.adsConfig.autoAdsEnabled) return;
+    if (this.isGenerationPaused) return;
+    if (stepNumber <= 0) return;
+    if (stepNumber % this.adsConfig.adIntervalSteps !== 0) return;
+    if (stepNumber === this.adsConfig.lastAdStep) return;
+    if (stepNumber >= 97) return; // Never break during the epic finale: scene 100 must end the film
+
+    const ad = this.pickRandomCommercialAd();
+    if (!ad) return;
+
+    const adPrompt = this.buildAdGenerationPrompt(ad);
+
+    console.log(`[Cinema] 🎬 Pre-generating ad clip for "${ad.brandName}" in parallel with story clip (Step ${stepNumber})...`);
+
+    generateVideoWithFal({
+      prompt: adPrompt,
+      cameraMotion: "Smooth dolly or static hold, matching the previous scene's camera language",
+      stepNumber,
+      previousVideoUrl: referenceVideoUrl || undefined,
+      model: this.videoModel,
+      resolution: this.videoResolution || undefined
+    }).then((adVideo) => {
+      if (!this.adsConfig.autoAdsEnabled) return; // Auto-ads disabled while rendering: discard
+      if (this.movie && this.movie.steps.length !== stepNumber) return; // Timeline moved on: discard
+      this.pendingPreGeneratedAd = {
+        ad,
+        stepNumber,
+        videoUrl: adVideo.videoUrl,
+        thumbnailUrl: adVideo.thumbnailUrl,
+        isRealAiGenerated: adVideo.isRealAiGenerated
+      };
+      console.log(`[Cinema] ✅ Pre-generated ad clip ready for "${ad.brandName}" (will play instantly at break time).`);
+    }).catch((err) => {
+      console.warn('[Cinema] Pre-generation of ad clip failed; will generate on demand at break time:', err);
     });
-
-    // In voting phase, sometimes simulated viewers also vote
-    if (this.phase === 'VOTING' && Math.random() > 0.4) {
-      const voteChoice: 'A' | 'B' = Math.random() > 0.5 ? 'A' : 'B';
-      if (voteChoice === 'A') this.votesA++;
-      else this.votesB++;
-
-      broadcastCinemaEvent('vote_update', {
-        votesA: this.votesA,
-        votesB: this.votesB,
-        totalVotes: this.votesA + this.votesB,
-        timeRemaining: this.timeRemaining,
-        totalAudience: this.totalAudience
-      });
-    }
   }
 
   /**
@@ -1050,7 +1310,8 @@ class CinemaOrchestrator {
    * Flow:
    *  1. Capture the last story clip URL as preAdVideoUrl (preserved for the NEXT story step).
    *  2. Switch phase to COMMERCIAL_BREAK immediately so clients show the break screen.
-   *  3. Generate the ad clip via fal.ai using the story clip as visual reference and
+   *  3. If the ad clip was pre-generated with the story clip, play it directly; otherwise
+   *     generate the ad clip via fal.ai using the story clip as visual reference and
    *     the ad's cinematicPrompt as the screenplay — so the ad feels like it continues
    *     the film world, not an external interruption.
    *  4. Broadcast the generated ad video to all connected clients.
@@ -1058,14 +1319,31 @@ class CinemaOrchestrator {
    *     the commercial has zero influence on future narrative direction.
    */
   public async triggerCommercialBreak(customAd?: ImmersiveAd, nextPhase: PlaybackPhase = 'VOTING'): Promise<boolean> {
-    const activeAds = this.adsList.filter(a => a.isActive && a.type === 'commercial_break');
-    const adToPlay = customAd || activeAds[Math.floor(Math.random() * activeAds.length)] || DEFAULT_IMMERSIVE_ADS[0];
+    const adToPlay = customAd || this.pickRandomCommercialAd() || DEFAULT_IMMERSIVE_ADS[0];
 
     if (!adToPlay) return false;
 
     // ── Step 1: Capture pre-ad story clip before switching phase ──────────────
     const lastStoryStep = this.movie?.steps[this.movie.steps.length - 1];
     this.preAdVideoUrl = lastStoryStep?.videoUrl || null;
+
+    // ── Step 1b: Resolve the pre-generated ad clip (generated together with the story clip) ──
+    let preGenerated: { ad: ImmersiveAd; stepNumber: number; videoUrl: string; thumbnailUrl: string; isRealAiGenerated: boolean } | null = null;
+    const currentStepCount = this.movie?.steps.length ?? 0;
+    if (!customAd && !this.isGenerationPaused) {
+      if (
+        this.pendingPreGeneratedAd &&
+        this.pendingPreGeneratedAd.ad.id === adToPlay.id &&
+        this.pendingPreGeneratedAd.stepNumber === currentStepCount
+      ) {
+        preGenerated = this.pendingPreGeneratedAd;
+        this.pendingPreGeneratedAd = null; // Consumed — never reuse
+      }
+    }
+    // Manual/custom breaks or stale/mismatched pending clips invalidate any pre-generated clip
+    if (customAd || (!preGenerated && this.pendingPreGeneratedAd)) {
+      this.pendingPreGeneratedAd = null;
+    }
 
     // ── Step 2: Switch phase immediately so UI enters COMMERCIAL_BREAK ────────
     this.returnPhaseAfterAd = nextPhase;
@@ -1077,9 +1355,21 @@ class CinemaOrchestrator {
     adToPlay.impressions = (adToPlay.impressions || 0) + 1;
     recordAdMetric(adToPlay.id, 'impression');
 
-    this.addSystemMessage(`📺 INCOMING SPONSOR TRANSMISSION: "${adToPlay.brandName}" presents: ${adToPlay.title}`);
+    // If the clip is already rendered, wire it into the ad BEFORE broadcasting so
+    // clients play it directly instead of showing a placeholder.
+    if (preGenerated) {
+      adToPlay.generatedAdVideoUrl = preGenerated.videoUrl;
+      adToPlay.isArchiveReplay = false;
+      if (preGenerated.videoUrl && !this.generatedAdVideoArchive.includes(preGenerated.videoUrl)) {
+        this.generatedAdVideoArchive.push(preGenerated.videoUrl);
+      }
+      persistImmersiveAd(adToPlay);
+      this.addSystemMessage(`📺 INCOMING SPONSOR TRANSMISSION: "${adToPlay.brandName}" presents: ${adToPlay.title} (clip pre-rendered with the scene).`);
+    } else {
+      this.addSystemMessage(`📺 INCOMING SPONSOR TRANSMISSION: "${adToPlay.brandName}" presents: ${adToPlay.title}`);
+    }
 
-    // Broadcast initial break — clients show placeholder or static videoUrl while fal.ai renders
+    // Broadcast initial break — clients play the pre-rendered clip immediately or a placeholder while fal.ai renders
     broadcastCinemaEvent('ad_break_started', {
       ad: adToPlay,
       timeRemaining: this.timeRemaining,
@@ -1090,8 +1380,16 @@ class CinemaOrchestrator {
     });
     await this.broadcastStateSnapshot();
 
-    // ── Step 3: Handle ad playback — Replay previous versions if paused, or generate with fal.ai ──
-    if (this.isGenerationPaused) {
+    // ── Step 3: Handle ad playback — pre-generated clip, archive replay, or live generation ──
+    if (preGenerated) {
+      // Clip was generated together with the story clip — nothing to wait for.
+      broadcastCinemaEvent('ad_video_generated', {
+        adId: adToPlay.id,
+        generatedAdVideoUrl: preGenerated.videoUrl,
+        isRealAiGenerated: preGenerated.isRealAiGenerated,
+        isPreGenerated: true
+      });
+    } else if (this.isGenerationPaused) {
       // Replay previous generated version of this ad or from the archive pool (zero fal.ai calls)
       const allPreviousAdVideos = Array.from(new Set([
         ...this.generatedAdVideoArchive,
@@ -1123,11 +1421,7 @@ class CinemaOrchestrator {
         await this.broadcastStateSnapshot();
       }
     } else if (this.preAdVideoUrl || adToPlay.cinematicPrompt) {
-      const rawPrompt = adToPlay.cinematicPrompt
-        || `A character naturally interacts with or observes "${adToPlay.brandName}". ${adToPlay.tagline || ''}. Maintain identical cinematic lighting, colors, lens flare, and environment as the previous shot.`;
-
-      const promptPrefix = "Continúa la escena e integra este anuncio de forma natural en la historia: ";
-      const adPrompt = rawPrompt.startsWith(promptPrefix) ? rawPrompt : `${promptPrefix}${rawPrompt}`;
+      const adPrompt = this.buildAdGenerationPrompt(adToPlay);
 
       generateVideoWithFal({
         prompt: adPrompt,
@@ -1203,6 +1497,8 @@ class CinemaOrchestrator {
       ...this.adsConfig,
       ...config
     };
+    // Config change invalidates any pre-generated ad clip
+    this.pendingPreGeneratedAd = null;
     broadcastCinemaEvent('ads_config_update', this.adsConfig);
   }
 
@@ -1249,34 +1545,61 @@ class CinemaOrchestrator {
    * then generates a brand-new film using real AI APIs (DeepSeek + fal.ai).
    * Call this after adding API keys so the mockup content is discarded.
    */
-  public async forceReset(customPrompt?: string): Promise<Movie> {
-    // Stop the current engine loop
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
+  private resetPromise: Promise<Movie> | null = null;
+
+  /**
+   * Hard reset: clears in-memory state + archives old Supabase movie,
+   * then generates a brand-new film using real AI APIs (DeepSeek + fal.ai).
+   * Deduplicated: concurrent callers join the same in-flight reset.
+   */
+  public forceReset(customPrompt?: string): Promise<Movie> {
+    if (this.resetPromise) {
+      console.log('[Cinema] forceReset already in progress — joining in-flight reset.');
+      return this.resetPromise;
     }
-    this.isRunning = false;
+    this.resetPromise = this.doForceReset(customPrompt).finally(() => {
+      this.resetPromise = null;
+    });
+    return this.resetPromise;
+  }
 
-    // Clear in-memory state
-    this.movie = null;
-    this.phase = 'PLAYING';
-    this.timeRemaining = 15;
-    this.votesA = 0;
-    this.votesB = 0;
-    this.userVotes.clear();
-    this.activeAd = null;
+  private async doForceReset(customPrompt?: string): Promise<Movie> {
+    this.isResetting = true;
+    try {
+      // Stop the current engine loop
+      if (this.timerInterval) {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+      }
+      this.isRunning = false;
 
-    // Archive old movie(s) in Supabase so they won't be restored
-    await archiveAllStreamingMovies();
+      // Clear in-memory state. NOTE: phase is NOT forced to PLAYING here — during the
+      // async generation clients stay in GENERATING until the new movie is ready.
+      this.movie = null;
+      this.timeRemaining = 15;
+      this.votesA = 0;
+      this.votesB = 0;
+      this.userVotes.clear();
+      this.activeAd = null;
+      this.pendingPreGeneratedAd = null;
+      this.blockbusterCandidates = [];
+      this.blockbusterUserVotes.clear();
+      this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
 
-    this.addSystemMessage('🔄 Cinema engine reset. Generating new film with real AI...');
+      // Archive old movie(s) in Supabase so they won't be restored
+      await archiveAllStreamingMovies();
 
-    // Now initialize fresh with real AI (customPrompt bypasses Supabase restore)
-    const freshPrompt = customPrompt || `force_reset_${Date.now()}`;
-    const newMovie = await this.initializeMovie(freshPrompt);
-    broadcastCinemaEvent('new_movie_started', { movie: newMovie });
-    await this.broadcastStateSnapshot();
-    return newMovie;
+      this.addSystemMessage('🔄 Cinema engine reset. Generating new film with real AI...');
+
+      // Now initialize fresh with real AI (customPrompt bypasses Supabase restore)
+      const freshPrompt = customPrompt || `force_reset_${Date.now()}`;
+      const newMovie = await this.initializeMovie(freshPrompt);
+      broadcastCinemaEvent('new_movie_started', { movie: newMovie });
+      await this.broadcastStateSnapshot();
+      return newMovie;
+    } finally {
+      this.isResetting = false;
+    }
   }
 
   public getState(userId?: string): CinemaState {
@@ -1324,6 +1647,8 @@ class CinemaOrchestrator {
       isGenerationPaused: this.isGenerationPaused,
       videoModel: this.videoModel,
       videoResolution: this.videoResolution,
+      blockbusterCandidates: this.blockbusterCandidates,
+      blockbusterVoteCounts: this.blockbusterVoteCounts,
       activeAd: this.activeAd,
       adsConfig: this.adsConfig,
       apiStatus: {
@@ -1521,6 +1846,10 @@ class CinemaOrchestrator {
     this.votesB = 0;
     this.userVotes.clear();
     this.activeAd = null;
+    this.pendingPreGeneratedAd = null; // Timeline jumped — pre-generated ad is stale
+    this.blockbusterCandidates = [];
+    this.blockbusterUserVotes.clear();
+    this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
 
     persistMovie(this.movie);
 
@@ -1597,6 +1926,10 @@ class CinemaOrchestrator {
     this.votesB = 0;
     this.userVotes.clear();
     this.activeAd = null;
+    this.pendingPreGeneratedAd = null; // Movie switched — pre-generated ad is stale
+    this.blockbusterCandidates = [];
+    this.blockbusterUserVotes.clear();
+    this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
 
     persistMovie(this.movie);
 
@@ -1766,7 +2099,9 @@ class CinemaOrchestrator {
       isPaused: state.isPaused,
       isGenerationPaused: state.isGenerationPaused,
       videoModel: state.videoModel,
-      videoResolution: state.videoResolution
+      videoResolution: state.videoResolution,
+      blockbusterCandidates: state.blockbusterCandidates,
+      blockbusterVoteCounts: state.blockbusterVoteCounts
     });
   }
 }

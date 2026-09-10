@@ -174,6 +174,7 @@ export async function persistChatMessage(movieId: string, msg: ChatMessage): Pro
       text: msg.text,
       is_system: msg.isSystem || false,
       voted_option: msg.votedOption || null,
+      used_for_influence: msg.usedForInfluence || false,
       created_at: new Date().toISOString(),
       votes_count: msg.votesCount || 0
     }, { onConflict: 'id' });
@@ -646,11 +647,34 @@ export async function loadRecentChatMessagesFromDb(movieId: string, limit = 50):
       createdAtMs: new Date(msg.created_at).getTime(),
       isSystem: msg.is_system,
       votedOption: msg.voted_option,
+      usedForInfluence: msg.used_for_influence || false,
       votesCount: msg.votes_count || 0
     }));
   } catch (err) {
     console.error('[Supabase] Exception in loadRecentChatMessagesFromDb:', err);
     return [];
+  }
+}
+
+/**
+ * Mark a chat comment as already used for narrative influence so the random
+ * comment picker never considers it again in a later round.
+ */
+export async function markChatMessageUsedForInfluence(commentId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from('chat_messages')
+      .update({ used_for_influence: true })
+      .eq('id', commentId);
+
+    if (error) {
+      logSupabaseError('markChatMessageUsedForInfluence', error);
+    }
+  } catch (err) {
+    console.error('[Supabase] Exception in markChatMessageUsedForInfluence:', err);
   }
 }
 

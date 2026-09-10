@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CinemaState, ChatMessage, PlaybackPhase, MovieStep } from '@/types/cinema';
 import { CinemaPlayer } from '@/components/cinema/CinemaPlayer';
 import { VotingOverlay } from '@/components/cinema/VotingOverlay';
+import { BlockbusterVoting } from '@/components/cinema/BlockbusterVoting';
 import { AudienceChat } from '@/components/cinema/AudienceChat';
 import { GalleryView } from '@/components/gallery/GalleryView';
 import { Navbar } from '@/components/layout/Navbar';
@@ -12,6 +13,7 @@ import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supab
 export default function CinemaStreamingPage() {
   const [cinemaState, setCinemaState] = useState<CinemaState | null>(null);
   const [userVoted, setUserVoted] = useState<'A' | 'B' | null>(null);
+  const [blockbusterUserVoted, setBlockbusterUserVoted] = useState<'A' | 'B' | 'C' | 'D' | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [supabaseReady, setSupabaseReady] = useState(false);
   const [userId, setUserId] = useState<string>('');
@@ -101,7 +103,8 @@ export default function CinemaStreamingPage() {
         adsConfig?.autoAdsEnabled &&
         stepCount > 0 &&
         stepCount % (adsConfig.adIntervalSteps || 5) === 0 &&
-        stepCount !== adsConfig.lastAdStep
+        stepCount !== adsConfig.lastAdStep &&
+        stepCount < 97
       );
 
       if (isAdDue) {
@@ -133,6 +136,14 @@ export default function CinemaStreamingPage() {
         ...prev,
         phase: 'GENERATING',
         timeRemaining: 4
+      } : null);
+    } else if (completedPhase === 'BLOCKBUSTER_VOTING') {
+      setBlockbusterUserVoted(null);
+      setCinemaState((prev) => prev ? {
+        ...prev,
+        phase: 'GENERATING',
+        timeRemaining: 4,
+        blockbusterCandidates: []
       } : null);
     }
 
@@ -281,37 +292,84 @@ export default function CinemaStreamingPage() {
     return () => clearInterval(timer);
   }, [cinemaState?.phase, cinemaState?.isPaused]);
 
+  // 3b. Fixed 30-second timeout for BLOCKBUSTER_VOTING stage.
+  // Audience picks the next film from 4 candidates; when time runs out the winner resolves.
+  useEffect(() => {
+    if (!cinemaState || cinemaState.phase !== 'BLOCKBUSTER_VOTING' || cinemaState.isPaused) return;
+
+    console.log('[CinemaPage] Next-blockbuster vote started. Running 30s voting timeout...');
+
+    const startTime = Date.now();
+    const durationSec = 30;
+
+    // Reset local timeRemaining to 30s
+    setCinemaState(prev => prev ? { ...prev, timeRemaining: 30 } : prev);
+
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const remaining = Math.max(0, durationSec - elapsed);
+
+      setCinemaState(prev => {
+        if (!prev || prev.phase !== 'BLOCKBUSTER_VOTING') return prev;
+        return { ...prev, timeRemaining: remaining };
+      });
+
+      if (remaining <= 0) {
+        clearInterval(timer);
+        console.log('[CinemaPage] 30s blockbuster vote elapsed. Resolving winner...');
+        handleStageComplete('BLOCKBUSTER_VOTING');
+      }
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [cinemaState?.phase, cinemaState?.isPaused]);
+
   // 4. Dedicated polling ONLY while in GENERATING state until the next scene is synthesized and ready.
-  // Stops immediately as soon as phase transitions to PLAYING.
+  // Stops immediately as soon as the response carries the new generated video link (or the phase leaves GENERATING).
   useEffect(() => {
     if (cinemaState?.phase !== 'GENERATING') return;
 
     let isSubscribed = true;
-    console.log('[CinemaPage] Phase is GENERATING: polling until new scene is synthesized...');
+    let stopped = false;
+    const generatingStepNum = cinemaState.movie?.currentStep;
+    console.log('[CinemaPage] Phase is GENERATING: polling until new scene video link arrives...');
+
+    const applyReadyState = (data: any) => {
+      console.log(`[CinemaPage] Scene ready! Generated video link received (Step ${data.activeStep?.stepNumber}). Stopping GENERATING polling.`);
+      setCinemaState((prev) => {
+        if (!prev) return data;
+        return {
+          ...prev,
+          ...data,
+          movie: data.movie ?? prev.movie,
+          activeStep: data.activeStep ?? prev.activeStep,
+          phase: data.phase,
+          timeRemaining: 15,
+          votesA: 0,
+          votesB: 0,
+          hasUserVoted: null
+        };
+      });
+      setUserVoted(null);
+    };
 
     const pollUntilReady = async () => {
+      if (stopped || !isSubscribed) return;
       try {
         const res = await fetch('/api/cinema/state');
-        if (res.ok && isSubscribed) {
+        if (res.ok && isSubscribed && !stopped) {
           const data = await res.json();
-          // As soon as generation completes and phase is no longer GENERATING (e.g. PLAYING)
-          if (data.phase && data.phase !== 'GENERATING') {
-            console.log(`[CinemaPage] Scene ready! New phase: ${data.phase}, Step: ${data.activeStep?.stepNumber}. Stopping GENERATING polling.`);
-            setCinemaState((prev) => {
-              if (!prev) return data;
-              return {
-                ...prev,
-                ...data,
-                movie: data.movie ?? prev.movie,
-                activeStep: data.activeStep ?? prev.activeStep,
-                phase: data.phase,
-                timeRemaining: 15,
-                votesA: 0,
-                votesB: 0,
-                hasUserVoted: null
-              };
-            });
-            setUserVoted(null);
+          // Stop polling as soon as the response includes the newly generated video link
+          const newVideoLinkReady = Boolean(
+            data.activeStep?.videoUrl &&
+            data.activeStep.stepNumber !== generatingStepNum
+          );
+          // Or as soon as generation completed and phase is no longer GENERATING
+          if (newVideoLinkReady || (data.phase && data.phase !== 'GENERATING')) {
+            stopped = true;
+            clearInterval(interval);
+            clearTimeout(initialCheck);
+            applyReadyState(data);
           }
         }
       } catch (err) {
@@ -324,10 +382,11 @@ export default function CinemaStreamingPage() {
 
     return () => {
       isSubscribed = false;
+      stopped = true;
       clearInterval(interval);
       clearTimeout(initialCheck);
     };
-  }, [cinemaState?.phase]);
+  }, [cinemaState?.phase, cinemaState?.movie?.currentStep]);
 
   // SUPABASE REALTIME SUBSCRIPTION
   useEffect(() => {
@@ -367,7 +426,9 @@ export default function CinemaStreamingPage() {
             adsConfig: snapshot.adsConfig ?? prev.adsConfig,
             isLive: snapshot.isLive ?? prev.isLive,
             isPaused: snapshot.isPaused !== undefined ? snapshot.isPaused : prev.isPaused,
-            isGenerationPaused: snapshot.isGenerationPaused !== undefined ? snapshot.isGenerationPaused : prev.isGenerationPaused
+            isGenerationPaused: snapshot.isGenerationPaused !== undefined ? snapshot.isGenerationPaused : prev.isGenerationPaused,
+            blockbusterCandidates: snapshot.blockbusterCandidates ?? prev.blockbusterCandidates,
+            blockbusterVoteCounts: snapshot.blockbusterVoteCounts ?? prev.blockbusterVoteCounts
           };
         });
       })
@@ -494,6 +555,11 @@ export default function CinemaStreamingPage() {
           };
         });
       })
+      .on('broadcast', { event: 'blockbuster_vote_update' }, (payload: any) => {
+        if (payload.payload?.counts) {
+          setCinemaState((prev) => prev ? { ...prev, blockbusterVoteCounts: payload.payload.counts } : prev);
+        }
+      })
       .on('broadcast', { event: 'ad_break_ended' }, (payload: any) => {
         setCinemaState((prev) => {
           if (!prev) return prev;
@@ -519,6 +585,7 @@ export default function CinemaStreamingPage() {
       })
       .on('broadcast', { event: 'new_movie_started' }, (payload: any) => {
         setUserVoted(null);
+        setBlockbusterUserVoted(null);
         if (payload.payload?.movie) {
           setCinemaState((prev) => {
             if (!prev) return prev;
@@ -642,9 +709,47 @@ export default function CinemaStreamingPage() {
     }
   };
 
+  // Vote for the next blockbuster movie during the 30s BLOCKBUSTER_VOTING stage
+  const handleBlockbusterVote = async (candidateId: 'A' | 'B' | 'C' | 'D') => {
+    if (!cinemaState || cinemaState.phase !== 'BLOCKBUSTER_VOTING') return;
+    if (blockbusterUserVoted === candidateId) return;
+
+    const previousPick = blockbusterUserVoted;
+    setBlockbusterUserVoted(candidateId);
+
+    // Optimistic local counts update
+    setCinemaState((prev) => {
+      if (!prev) return prev;
+      const counts = { ...(prev.blockbusterVoteCounts || { A: 0, B: 0, C: 0, D: 0 }) };
+      if (previousPick) counts[previousPick] = Math.max(0, counts[previousPick] - 1);
+      counts[candidateId]++;
+      return { ...prev, blockbusterVoteCounts: counts };
+    });
+
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'blockbuster_vote',
+          optionId: candidateId,
+          userId
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.counts) {
+          setCinemaState((prev) => prev ? { ...prev, blockbusterVoteCounts: data.counts } : prev);
+        }
+      }
+    } catch (err) {
+      console.error('Error casting blockbuster vote:', err);
+    }
+  };
+
   // Send chat message handler (requires nickname)
-  const handleSendMessage = async (text: string) => {
-    if (!nickname) return;
+  const handleSendMessage = async (text: string) => {    if (!nickname) return;
 
     try {
       await fetch('/api/cinema/chat', {
@@ -791,6 +896,17 @@ export default function CinemaStreamingPage() {
                 wasRandomPick={cinemaState.activeStep.wasRandomPick}
                 onVote={handleVote}
               />
+
+              {/* Next Blockbuster Audience Vote (30s, 4 candidate films) */}
+              {cinemaState.phase === 'BLOCKBUSTER_VOTING' && (
+                <BlockbusterVoting
+                  candidates={cinemaState.blockbusterCandidates || []}
+                  counts={cinemaState.blockbusterVoteCounts || { A: 0, B: 0, C: 0, D: 0 }}
+                  timeRemaining={cinemaState.timeRemaining}
+                  userVoted={blockbusterUserVoted}
+                  onVote={handleBlockbusterVote}
+                />
+              )}
             </div>
 
             {/* Right Live Audience Chat */}

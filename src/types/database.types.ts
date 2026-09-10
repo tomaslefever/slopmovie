@@ -24,6 +24,7 @@ export type Database = {
           user_avatar: string | null
           user_id: string
           user_name: string
+          used_for_influence: boolean
           voted_option: string | null
           votes_count: number
         }
@@ -36,6 +37,7 @@ export type Database = {
           user_avatar?: string | null
           user_id: string
           user_name: string
+          used_for_influence?: boolean
           voted_option?: string | null
           votes_count?: number
         }
@@ -48,6 +50,7 @@ export type Database = {
           user_avatar?: string | null
           user_id?: string
           user_name?: string
+          used_for_influence?: boolean
           voted_option?: string | null
           votes_count?: number
         }

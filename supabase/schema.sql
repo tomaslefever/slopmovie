@@ -82,6 +82,7 @@ create table if not exists public.chat_messages (
   text text not null,
   is_system boolean not null default false,
   voted_option text check (voted_option in ('A', 'B')),
+  used_for_influence boolean not null default false,
   created_at timestamptz not null default now()
 );
 
