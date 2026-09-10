@@ -1,5 +1,20 @@
 import { Character, Prop, SceneEnvironment, MovieBible, MovieStep, DecisionOption, Movie, SubtitleCue, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
 
+// ── Token usage tracking (process-cumulative) ───────────────────────────────
+let cumulativePromptTokens = 0;
+let cumulativeCompletionTokens = 0;
+
+export function getDeepseekTokenUsage(): { promptTokens: number; completionTokens: number } {
+  return { promptTokens: cumulativePromptTokens, completionTokens: cumulativeCompletionTokens };
+}
+
+function trackDeepseekUsage(label: string, usage?: { prompt_tokens?: number; completion_tokens?: number } | null): void {
+  if (!usage) return;
+  cumulativePromptTokens += usage.prompt_tokens || 0;
+  cumulativeCompletionTokens += usage.completion_tokens || 0;
+  console.log(`[DeepSeek tokens] ${label}: prompt=${usage.prompt_tokens ?? '?'} completion=${usage.completion_tokens ?? '?'} (cumulative: ${cumulativePromptTokens}/${cumulativeCompletionTokens})`);
+}
+
 export interface GeneratedStoryBible {
   title: string;
   genre: string;
@@ -445,12 +460,14 @@ Respond ONLY with a valid JSON object matching this schema:
             { role: "user", content: userMessage }
           ],
           response_format: { type: "json_object" },
-          temperature: 0.85
+          temperature: 0.85,
+          max_tokens: 6000
         })
       });
 
       if (response.ok) {
         const data = await response.json();
+        trackDeepseekUsage('story-bible', data.usage);
         const content = data.choices[0]?.message?.content;
         const parsed = JSON.parse(content);
         
@@ -695,75 +712,29 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
 
   if (apiKey) {
     try {
-      const systemPrompt = `You are an elite Interactive Cinema AI Director. The film spans a coherent 50-step arc.
-The audience just voted for OPTION ${chosenOptionId}: "${chosenOption.title}" (${chosenOption.text}).
-You are generating STEP ${nextStepNum} of ${TOTAL_STEPS} (exactly a 15-second cinematic clip for MiniMax H3-Max in 480p 16:9).
+      // STATIC system prompt (no per-request interpolation): DeepSeek's context
+      // caching reuses the cached prefix across all 46+ scene calls, slashing
+      // input-token cost. All dynamic content lives in the user message.
+      const systemPrompt = `You are an elite Interactive Cinema AI Director writing ONE 15-second scene of a 50-step interactive film for MiniMax H3-Max (480p 16:9).
+Rules:
+1. ALL output in cinematic ENGLISH.
+2. Include timed "subtitles" (start, end, speaker, text EN, textEs ES).
+3. Never invent props freely: define "newCharacter" (with voicePrompt) AND their signature "newProp" ONLY when a NEW character enters; otherwise both null.
+4. "activeProps": only prop IDs physically visible or manipulated in THIS shot; empty [] otherwise.
+5. "activeCharacters": only characters on screen.
+Respond ONLY with JSON:
+{"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""}],"voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":""},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":""}]}`;
 
+      // Compact user message: only the context this scene needs (no bible dump,
+      // no video URLs, compact id:name rosters).
+      const userContext = `Film: "${movie.title}" (${movie.genre})
+Master arc: ${movie.masterArcThread || movie.initialPlot}
 ${getNarrativeArcDirective(nextStepNum)}
-${influenceDirective}
-CRITICAL REQUIREMENTS:
-1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, dialogue snippet, subtitle, option, and hook must be in evocative, cinematic English.
-2. SUBTITLES: Include timed "subtitles" array (start, end, speaker, text in English, and optional textEs translation in Spanish).
-3. PROPS & CHARACTERS: Props are NEVER created arbitrarily. They are created ONLY when the narrative introduces a NEW CHARACTER to the story:
-   - If a new character enters in this step (informant, enforcer, rogue AI, fixer, operative), define "newCharacter" (with immutable acoustic voicePrompt in English) AND SIMULTANEOUSLY define their signature "newProp" (their weapon, gadget, or device essential for visual consistency).
-   - If no new character enters in this step, both "newCharacter" and "newProp" must be null.
-4. ONLY NECESSARY PROPS: In "activeProps", include ONLY the specific prop IDs that physically appear or are actively manipulated on screen in this specific 15-second shot. DO NOT pass all movie props. If the scene is pure dialogue or movement without an on-screen prop, "activeProps" MUST be empty []. Passing unnecessary props degrades video generation quality.
-
-Respond ONLY with valid JSON:
-{
-  "stepNumber": ${nextStepNum},
-  "title": "Scene Title in English",
-  "synopsis": "Action taking place during these 15 seconds in English",
-  "dialogueSnippet": "Short spoken line or voiceover in English",
-  "subtitles": [
-    {
-      "start": 1.0,
-      "end": 7.0,
-      "speaker": "Speaker Name",
-      "text": "First spoken line in English...",
-      "textEs": "Línea en español..."
-    },
-    {
-      "start": 7.5,
-      "end": 14.0,
-      "speaker": "Speaker Name",
-      "text": "Second spoken line in English...",
-      "textEs": "Segunda línea en español..."
-    }
-  ],
-  "voiceDirection": "Vocal direction in English based on the speaking character's voicePrompt",
-  "visualPrompt": "Cinematic visual prompt in English for fal.ai minimax/h3-max with consistency tokens",
-  "cameraMotionPrompt": "Cinematic camera movement in English (dolly, pan, tracking, lens specs)",
-  "activeCharacters": ["char_kael"],
-  "activeProps": [], // ONLY include prop IDs if actively held or visible in these 15 seconds! Otherwise empty [].
-  "newCharacter": null, 
-  "newProp": null,
-  "environment": "env_sublevel",
-  "options": [
-    {
-      "id": "A",
-      "title": "Option A Short Title in English",
-      "text": "Proposed immediate action in English",
-      "dramaticHook": "Suspense hook in English",
-      "expectedConsequence": "Estimated consequence if Option A wins"
-    },
-    {
-      "id": "B",
-      "title": "Option B Short Title in English",
-      "text": "Radical alternative action in English",
-      "dramaticHook": "Suspense hook in English",
-      "expectedConsequence": "Estimated consequence if Option B wins"
-    }
-  ]
-}`;
-
-      const userContext = `Film: "${movie.title}".
-Master plot: "${movie.initialPlot}".
-Previous step (${previousStep.stepNumber}): "${previousStep.synopsis}".
-Previous video URL reference: "${previousStep.videoUrl}".
-Audience-voted winning option: "${chosenOption.text}" (Expected consequence: ${chosenOption.expectedConsequence}).
-Existing characters: ${JSON.stringify(movie.bible.characters.map(c => ({ id: c.id, name: c.name, role: c.role })))};
-Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p.name, owner: p.ownerCharacterName })))};`;
+Previous scene ${previousStep.stepNumber} "${previousStep.title}": ${previousStep.synopsis}${previousStep.dialogueSnippet ? ` Dialogue: "${previousStep.dialogueSnippet}"` : ''}
+Audience chose OPTION ${chosenOptionId}: "${chosenOption.title}" — ${chosenOption.text}${chosenOption.expectedConsequence ? ` (${chosenOption.expectedConsequence})` : ''}
+Characters: ${movie.bible.characters.map(c => `${c.id}:${c.name}(${c.role})`).join('; ') || 'none'}
+Props: ${movie.bible.props.map(p => `${p.id}:${p.name}`).join('; ') || 'none'}
+${influenceDirective}`;
 
       const response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
@@ -778,12 +749,14 @@ Existing props: ${JSON.stringify(movie.bible.props.map(p => ({ id: p.id, name: p
             { role: "user", content: userContext }
           ],
           response_format: { type: "json_object" },
-          temperature: 0.8
+          temperature: 0.8,
+          max_tokens: 2500
         })
       });
 
       if (response.ok) {
         const data = await response.json();
+        trackDeepseekUsage('next-step', data.usage);
         const parsed = JSON.parse(data.choices[0]?.message?.content);
 
         // Formulate new character and associated prop if introduced
@@ -1186,12 +1159,14 @@ Major milestones: ${movie.steps.slice(0, 15).map(s => `Step ${s.stepNumber}: Opt
             { role: "user", content: userContent }
           ],
           response_format: { type: "json_object" },
-          temperature: 0.7
+          temperature: 0.7,
+          max_tokens: 1200
         })
       });
 
       if (response.ok) {
         const data = await response.json();
+        trackDeepseekUsage('final-summary', data.usage);
         const parsed = JSON.parse(data.choices[0]?.message?.content);
         return {
           finalSynopsis: parsed.finalSynopsis || movie.initialPlot,
@@ -1350,12 +1325,14 @@ PRODUCT DESCRIPTION: ${params.description || 'No description — infer a plausib
           { role: "user", content: userContent }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.8
+        temperature: 0.8,
+        max_tokens: 600
       })
     });
 
     if (response.ok) {
       const data = await response.json();
+      trackDeepseekUsage('immersive-ad-prompt', data.usage);
       const parsed = JSON.parse(data.choices[0]?.message?.content);
       const adPrompt = parsed.adPrompt;
       if (typeof adPrompt === 'string' && adPrompt.trim().length > 40) {
@@ -1425,12 +1402,14 @@ MANDATORY RULES:
             { role: "user", content: `Generate 4 wildly different, fresh and compelling blockbuster candidate pitches now. Timestamp entropy: ${Date.now()}` }
           ],
           response_format: { type: "json_object" },
-          temperature: 1.0
+          temperature: 1.0,
+          max_tokens: 1200
         })
       });
 
       if (response.ok) {
         const data = await response.json();
+        trackDeepseekUsage('blockbuster-candidates', data.usage);
         const parsed = JSON.parse(data.choices[0]?.message?.content);
         const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [];
 
