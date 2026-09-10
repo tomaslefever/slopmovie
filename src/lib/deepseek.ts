@@ -155,7 +155,7 @@ export function getNextBlockbusterRotationIndex(): number {
 }
 
 // Preset high-fidelity stories for diverse blockbuster rotation
-const PRESET_STORIES = [
+export const PRESET_STORIES = [
   // 1. Cyberpunk Neo-Noir
   {
     title: "Project Nemesis: Protocol 2099",
@@ -355,6 +355,18 @@ const PRESET_STORIES = [
         voicePrompt: "Mature 42-year-old command baritone, authoritative naval cadence, steady composure under extreme gravimetric crisis.",
         avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&auto=format&fit=crop&q=80",
         stepIntroduced: 1
+      },
+      {
+        id: "char_mercer",
+        name: "Dr. Sean Mercer",
+        role: "Chief Astrobiologist",
+        visualTraits: "36yo male, wireframe glasses, contemplative expression, sharp features",
+        clothing: "Zero-G biological containment suit with diagnostic forearm display",
+        personality: "Inquisitive, cautious, fascinated by xenomorphic artifacts",
+        voiceStyle: "Reflective, soft-spoken with scientific cadence",
+        voicePrompt: "Thoughtful 36-year-old tenor, precise academic delivery with breathless awe under discovery.",
+        avatarUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
       }
     ],
     props: [
@@ -369,6 +381,18 @@ const PRESET_STORIES = [
         ownerCharacterId: "char_marcus",
         ownerCharacterName: "Marcus Vance",
         icon: "compass"
+      },
+      {
+        id: "prop_dna_capsule",
+        name: "Primordial DNA Capsule",
+        description: "Alien artifact containing ancestral genetic strands",
+        visualAppearance: "Cylindrical cryo-crystal tube pulsing with bioluminescent blue helical strands",
+        narrativeSignificance: "Proves extraterrestrial seeding of early Earth",
+        imageUrl: "https://images.unsplash.com/photo-1507668077129-56e32842fceb?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_mercer",
+        ownerCharacterName: "Sean Mercer",
+        icon: "disc"
       }
     ],
     environments: [
@@ -385,11 +409,1185 @@ const PRESET_STORIES = [
       { id: "A", title: "Pilot Vanguard into the Aperture", text: "Vance orders full sub-light burn directly through the alien ring's Iris before the gravitational collapse.", dramaticHook: "Unknown spatial jump beyond known physics.", expectedConsequence: "Transports the Vanguard into the megastructure core but risks engine overload." },
       { id: "B", title: "Deploy Remote Drone Probes", text: "Maintain defensive orbital distance and launch autonomous tachyon probes to analyze the DNA signal.", dramaticHook: "Safer tactical posture with risk of alien defenses engaging.", expectedConsequence: "Gathers telemetry safely but alerts the Loom's guardian drones." }
     ]
+  },
+
+  // 4. Solarpunk / Mech Wasteland
+  {
+    title: "The Sun Engine: Ashes of Meridian",
+    genre: "Post-Apocalyptic Solarpunk / Mech Wasteland",
+    tagline: "When the skies cooled into ice, the last scavengers marched to reignite the heart of a fallen star.",
+    initialPlot: "Across the frozen desert of the Salt Plains, scavenger pilot Jax Carrow steers his refurbished bipedal Titan 'Goliath' toward the ruins of the Meridian Caldera. Within the fortress lies the Sun Engine, humanity's final geothermal fusion core, fiercely guarded by the rogue automated war-sentinels of the Old Dawn.",
+    masterArcThread: "A 50-step cross-desert expedition fighting rival scavenger caravans and automated defense grids to ignite the perpetual solar reactor.",
+    cinematicStyle: "Super 35mm Gritty Gold and Rust, Dusty Atmospheric Haze, Blinding Sunbursts and Oxidized Copper",
+    targetTheme: "Hope, Ecological Rebirth and Machine Loyalty",
+    firstStepTitle: "The Caldera Approach",
+    firstStepSynopsis: "Jax's rusted mech breaks through an iron dune ridge. The monumental solar reactor tower gleams on the horizon as automated missile warning alarms chirp in his cockpit.",
+    firstStepDialogue: "Jax: 'Goliath, reroute all battery cells to forward shields. We are taking that reactor today.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Jax", text: "Goliath, reroute all battery cells to forward shields.", textEs: "Goliath, redirige todas las celdas de batería a los escudos frontales." },
+      { start: 7.0, end: 14.0, speaker: "AI Goliath", text: "Shields at seventy percent. Sentinel drones locked onto our signature.", textEs: "Escudos al setenta por ciento. Drones centinela fijaron nuestra firma." }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    characters: [
+      {
+        id: "char_jax",
+        name: "Jax Carrow",
+        role: "Scavenger Mech Pilot / Protagonist",
+        visualTraits: "28yo male, dirt-streaked jaw, bronze-tinted aviator goggles, messy copper hair",
+        clothing: "Padded ballistic vest with salvaged hydraulic braces and insulated sand-poncho",
+        personality: "Resourceful, daring, fiercely loyal to his salvage crew",
+        voiceStyle: "Raspy, youthful baritone filled with grit and quick wit",
+        voicePrompt: "Energetic 28-year-old baritone, gravelly midwest delivery, high adrenaline breathing, authentic cockpit comms crackle.",
+        avatarUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_mara",
+        name: "Engineer Mara Vex",
+        role: "Chief Mechanist",
+        visualTraits: "31yo female, grease smudge across cheek, electric green cybernetic eyepiece",
+        clothing: "Reinforced flame-resistant jumpsuit with multi-tool utility harness",
+        personality: "Genius mechanic, sharp-tongued, refuses to let machines fail",
+        voiceStyle: "Confident, rapid-fire cadence with sharp command",
+        voicePrompt: "Sharp 31-year-old alto, rapid mechanical assessment delivery, authoritative tone under fire.",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_fusion_key",
+        name: "Solar Igniter Cell",
+        description: "Supercharged plasma cartridge capable of jump-starting the Sun Engine",
+        visualAppearance: "Cylindrical heavy brass canister glowing with searing yellow fusion plasma",
+        narrativeSignificance: "Without it, the reactor cannot be sparked back to life",
+        imageUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_jax",
+        ownerCharacterName: "Jax Carrow",
+        icon: "sun"
+      },
+      {
+        id: "prop_wrench",
+        name: "Hydraulic Breaching Hammer",
+        description: "Heavy pneumatic ram used for breaching hardened bunker blast doors",
+        visualAppearance: "Two-handed industrial pneumatic hammer with pneumatic coils",
+        narrativeSignificance: "Sole tool able to force the Caldera vault entrance",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_mara",
+        ownerCharacterName: "Mara Vex",
+        icon: "tool"
+      }
+    ],
+    environments: [
+      {
+        id: "env_salt_plains",
+        name: "The Meridian Salt Dunes",
+        lighting: "Blinding harsh amber sunlight, long dramatic sand shadows, shimmering heat mirage",
+        atmosphere: "Howling dust winds, rumbling diesel engines, distant metallic shudders",
+        colorPalette: "Rust Orange #d84315, Sun Gold #ffb300, Weathered Copper #00897b",
+        architecturalStyle: "Shattered pre-collapse solar arrays towering above wind-sculpted salt dunes"
+      }
+    ],
+    options: [
+      { id: "A", title: "Full Throttle Jump-Jet Breach", text: "Fire Goliath's auxiliary boosters to leap the blast trench and crash-land inside the reactor courtyard.", dramaticHook: "High-risk aerial drop directly into enemy firing lines.", expectedConsequence: "Bypasses the minefield but risks catastrophic landing gear failure." },
+      { id: "B", title: "Deploy EMP Dust Cannons", text: "Discharge the titan's conductive sand canisters to blind the automated defense turrets for a flanking approach.", dramaticHook: "Stealthier tactical maneuver that depletes limited defensive supplies.", expectedConsequence: "Disables defense sensors temporarily while leaving flanks vulnerable to ambush." }
+    ]
+  },
+
+  // 5. Oceanic Biopunk / Deep Sea Horror
+  {
+    title: "Abyssal Leviathan: Trench 114",
+    genre: "Oceanic Sci-Fi / Creature Horror",
+    tagline: "Eight miles beneath the sunlight, the darkest depths are not empty — they are hungry.",
+    initialPlot: "At deep-sea research station Hadal Prime in the Mariana Trench, Dr. Elena Rostova and deep-submersible pilot Mateo Silva breach a sealed geothermal cavern. What they awaken is not geothermal energy, but an ancient bioluminescent biomechanical leviathan that pulses with a sentient hive frequency.",
+    masterArcThread: "A 50-step subterranean survival odyssey through flooded corridors, failing ballast tanks, and deep oceanic rifts to prevent the entity from ascending to surface waters.",
+    cinematicStyle: "Underwater Anamorphic, Inky Abyssal Blacks, Bioluminescent Azure and Toxic Greens, Micro-Particulate Marine Snow",
+    targetTheme: "The Terrors of the Deep, Human Hubris and Unknowable Life",
+    firstStepTitle: "The Breach at Hadal Prime",
+    firstStepSynopsis: "Elena gazes through the reinforced titanium viewport as massive bioluminescent tendrils wrap around the thermal drill mast, crushing steel like glass.",
+    firstStepDialogue: "Elena: 'Pressure gauges are spiking... Mateo, that isn't a seismic fault. It's a pulse.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Elena", text: "Pressure gauges are spiking... That isn't a fault. It's a pulse.", textEs: "Los manómetros se disparan... No es una falla. Es un pulso." },
+      { start: 7.0, end: 14.0, speaker: "Mateo", text: "Hull integrity at eighty-four percent! Emergency ballast blow now!", textEs: "¡Integridad del casco al ochenta y cuatro por ciento! ¡Soplado de lastre ya!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    characters: [
+      {
+        id: "char_elena",
+        name: "Dr. Elena Rostova",
+        role: "Chief Oceanographer / Protagonist",
+        visualTraits: "35yo female, intense hazel eyes, damp auburn hair tied back, thermal pressure suit",
+        clothing: "Deep-submersible neoprene dive tunic with illuminated vital sensor bands",
+        personality: "Tenacious, highly rational, refusing to panic under crushing pressures",
+        voiceStyle: "Low, controlled contralto with clipped emergency precision",
+        voicePrompt: "Controlled 35-year-old contralto, steady rhythmic breathing, crisp scientific articulation under extreme hydrostatic peril.",
+        avatarUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_mateo",
+        name: "Mateo Silva",
+        role: "Deep Submersible Pilot",
+        visualTraits: "40yo male, broad shoulders, salt-and-pepper beard, steady hands",
+        clothing: "Waterproof flight suit with hydraulic manipulator sleeve",
+        personality: "Pragmatic mariner with decades of bathypelagic experience",
+        voiceStyle: "Gruff baritone with maritime cadence",
+        voicePrompt: "Calm, deep 40-year-old baritone, experienced sailor cadence, unshakeable nerves.",
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_sonar_beacon",
+        name: "Bioluminescent Acoustic Lure",
+        description: "Frequency decoy designed to distract benthic predators",
+        visualAppearance: "Heavy bronze cylinder with swirling cyan chemical light and acoustic sonar horns",
+        narrativeSignificance: "Can steer the leviathan away from vital habitat hulls",
+        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_elena",
+        ownerCharacterName: "Elena Rostova",
+        icon: "radio"
+      },
+      {
+        id: "prop_torch",
+        name: "Underwater Plasma Cutter",
+        description: "High-yield thermal cutting lance operating at 10,000 atmospheres",
+        visualAppearance: "Heavy industrial yellow lance with intense sapphire plasma arc",
+        narrativeSignificance: "Can seal flooded watertight doors or sever creature tentacles",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_mateo",
+        ownerCharacterName: "Mateo Silva",
+        icon: "zap"
+      }
+    ],
+    environments: [
+      {
+        id: "env_trench",
+        name: "Hadal Station Moon Pool",
+        lighting: "Dim emergency red beacons cut by brilliant bioluminescent cyan flares from the deep water below",
+        atmosphere: "Creaking metal under hydrostatic load, condensation dripping, deep infrasonic rumbles",
+        colorPalette: "Deep Navy #000a12, Abyssal Cyan #00e5ff, Hazard Amber #ff6d00",
+        architecturalStyle: "Heavy reinforced titanium pressure dome with thick acrylic observation hatches"
+      }
+    ],
+    options: [
+      { id: "A", title: "Flood the Cavern with Acoustic Flares", text: "Fire acoustic pulse decoys into the rift to disorient the leviathan's sensory organs.", dramaticHook: "May repel the beast or provoke an instantaneous thrashing frenzy.", expectedConsequence: "Buys time to evacuate Sub-Level 3 but permanently damages sonar sensors." },
+      { id: "B", title: "Seal Watertight Bulkhead Sector 7", text: "Slam the blast gates down to isolate the breach, sealing trapped research drones inside.", dramaticHook: "Cold utilitarian sacrifice to save the primary command sphere.", expectedConsequence: "Protects main habitat but cuts off access to the thermal power grid." }
+    ]
+  },
+
+  // 6. Chrono-Loop / Quantum Heist
+  {
+    title: "Chrono-Shift: The 13th Minute",
+    genre: "Chrono-Thriller / Quantum Time-Loop",
+    tagline: "Twelve minutes to prevent the end of the world. In the thirteenth, reality rewinds.",
+    initialPlot: "Trapped aboard the orbital transit station Chronos-7, chronal investigator Vincent Hall relives the same fatal twelve minutes leading up to the detonation of an antimatter reactor. Each restart gives Vincent and rogue chronosurgeon Maya Lin new forensic clues, but each iteration warps their physical memory.",
+    masterArcThread: "Navigating 50 critical decision junctures across multiple cascading timelines to expose the saboteur and break the endless temporal feedback loop.",
+    cinematicStyle: "Cooke S4 High-Speed Primes, Split-Diopter Dual Focus, Subtle Chromatic Aberration, Stroboscopic Shutter Shifts",
+    targetTheme: "Fate, Paradox and The Weight of Unremembered Choices",
+    firstStepTitle: "Minute Zero: The Ticking Glass",
+    firstStepSynopsis: "Vincent awakens with a violent start as his pocket tachyon chronometer strikes 11:48 PM. Sirens howl in the station corridor as the reactor countdown begins anew.",
+    firstStepDialogue: "Vincent: 'Twelve minutes... again. Every clue points to the maintenance conduit.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Vincent", text: "Twelve minutes... again. Every clue points to the conduit.", textEs: "Doce minutos... otra vez. Cada pista apunta al conducto." },
+      { start: 7.0, end: 14.0, speaker: "Maya", text: "Vincent, your tachyon readings are decaying! This loop might be our last.", textEs: "¡Vincent, tus lecturas de taquiones decaen! Este bucle puede ser el último." }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    characters: [
+      {
+        id: "char_vincent",
+        name: "Vincent Hall",
+        role: "Temporal Detective / Protagonist",
+        visualTraits: "37yo male, tired gray eyes with temporal dilation rings, silver hairline, dark wool overcoat",
+        clothing: "Tailored charcoal trench with hidden chronal regulator wrist-cuffs",
+        personality: "Obsessive, haunted by previous failed loops, razor-sharp deduction",
+        voiceStyle: "Fast-talking, intense baritone with breathless urgency",
+        voicePrompt: "Intense, rapid 37-year-old baritone, rhythmic nervous pace, articulate forensic deductions with controlled tension.",
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_maya",
+        name: "Dr. Maya Lin",
+        role: "Quantum Chronosurgeon",
+        visualTraits: "29yo female, sharp geometric bob, glowing neural patch behind ear",
+        clothing: "Cleanroom white laboratory parka over high-density graphite fibers",
+        personality: "Cool-headed theorist, refuses to believe in predestination",
+        voiceStyle: "Measured, crystal-clear soprano with mathematical authority",
+        voicePrompt: "Crisp 29-year-old soprano, calm mathematical cadence, emotional grounding against temporal panic.",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_tachyon_watch",
+        name: "Tachyon Pocket Chronometer",
+        description: "Handheld analog watch that ticks backward during temporal shifts",
+        visualAppearance: "Damascus steel pocket watch with counter-rotating sapphire hands glowing ultraviolet",
+        narrativeSignificance: "Only artifact that retains physical entropy across loop resets",
+        imageUrl: "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_vincent",
+        ownerCharacterName: "Vincent Hall",
+        icon: "clock"
+      },
+      {
+        id: "prop_phasic_key",
+        name: "Phasic Lockdown Key",
+        description: "Quantum bypass drive allowing entry into locked reactor bulkheads",
+        visualAppearance: "Hexagonal glass cartridge with pulsating golden quantum filament",
+        narrativeSignificance: "Bypasses station security override before detonation",
+        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_maya",
+        ownerCharacterName: "Maya Lin",
+        icon: "key"
+      }
+    ],
+    environments: [
+      {
+        id: "env_station_hub",
+        name: "Chronos-7 Central Atrium",
+        lighting: "Cold sterile white fluorescent lighting strobing with amber reactor emergency beacons",
+        atmosphere: "Zero-G floating dust particles, echoing blaring alarms, shatter-resistant glass flexing",
+        colorPalette: "Chrome Silver #e0e0e0, Tachyon Violet #7c4dff, Warning Red #d50000",
+        architecturalStyle: "Sleek orbital hub with soaring geometric glass arches looking out onto Earth's curve"
+      }
+    ],
+    options: [
+      { id: "A", title: "Confront the Chief Engineer Immediately", text: "Sprint directly to the reactor control dais to intercept Chief Engineer Vance before he inputs the override.", dramaticHook: "Direct confrontation with unknown armed resistance.", expectedConsequence: "May stop the bomb early or trigger an immediate premature countdown." },
+      { id: "B", title: "Hack the Sub-Level Server Archives", text: "Divert through the ventilation shaft to download the black-box security feed and confirm the saboteur's identity.", dramaticHook: "Gains irrefutable proof at the cost of four precious minutes.", expectedConsequence: "Secures critical evidence but leaves only eight minutes to disarm the core." }
+    ]
+  },
+
+  // 7. Silkpunk / Alchemical Espionage
+  {
+    title: "Silk & Steam: The Alchemist of Chang'an",
+    genre: "Silkpunk / Historical Fantasy Espionage",
+    tagline: "In an empire bound by clockwork silk and mercury dragons, the emperor's heart is a lie.",
+    initialPlot: "In the imperial capital of Chang'an, where clockwork automatons glide along mercury aqueducts and silk zeppelins cloud the sky, master alchemist Jin Song uncovers a palace secret: the Celestial Emperor died a year ago, replaced by a clockwork homunculus governed by the sinister Shadow Eunuchs.",
+    masterArcThread: "A 50-step high-stakes palace intrigue across gilded pagodas, clandestine tea houses, and steam-belching workshops to expose the shadow court.",
+    cinematicStyle: "35mm Vintage Warm Gold and Jade, Heavy Incense Haze, Flickering Silk Lanterns, Liquid Mercury Glare",
+    targetTheme: "Tradition vs Automation, Deception and Dynastic Duty",
+    firstStepTitle: "The Whispering Pavilion",
+    firstStepSynopsis: "Jin Song operates on a defective imperial guard automaton in his hidden pavilion. As the brass breastplate clicks open, mercury fluid drips onto the floor, revealing a forbidden mechanical cipher.",
+    firstStepDialogue: "Jin Song: 'This isn't an automaton gear... It's the imperial seal. What have they built?'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Jin Song", text: "This isn't a gear... It's the imperial seal. What have they built?", textEs: "Esto no es un engranaje... Es el sello imperial. ¿Qué han construido?" },
+      { start: 7.0, end: 14.0, speaker: "Mei Ling", text: "The Eunuchs' shadow guard is already at the courtyard gate! We must move!", textEs: "¡La guardia de las sombras de los eunucos está en la puerta! ¡Debemos movernos!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+    characters: [
+      {
+        id: "char_jin",
+        name: "Jin Song",
+        role: "Master Clockwork Alchemist / Protagonist",
+        visualTraits: "32yo male, sharp obsidian eyes, bamboo spectacles, calloused fingertips stained with mercury",
+        clothing: "Embroidered indigo silk robes lined with brass magnifying loupes and leather tool pockets",
+        personality: "Methodical, inquisitive, bound by philosophical honor",
+        voiceStyle: "Calm, cultured baritone with poetic cadence",
+        voicePrompt: "Measured 32-year-old baritone, contemplative Eastern cadence, scholarly poise laced with lethal street instinct.",
+        avatarUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_meiling",
+        name: "Mei Ling",
+        role: "Shadow Courtesan & Rebel Blade",
+        visualTraits: "26yo female, porcelain skin, crimson silk ribbon braided through hair, piercing gaze",
+        clothing: "Layered emerald silk traveling robes concealing twin spring-loaded jade daggers",
+        personality: "Fierce, calculating, lethal in palace politics",
+        voiceStyle: "Melodic, whispered alto with dangerous charm",
+        voicePrompt: "Silky 26-year-old alto, whispered courtly charm covering steel lethality.",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_mercury_vial",
+        name: "Celestial Mercury Elixir",
+        description: "Alchemical fuel that powers the empire's artificial automata",
+        visualAppearance: "Carved jade flask containing swirling silver liquid with glowing golden suspended runes",
+        narrativeSignificance: "Can disable clockwork constructs or reveal concealed mechanical conduits",
+        imageUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_jin",
+        ownerCharacterName: "Jin Song",
+        icon: "droplet"
+      },
+      {
+        id: "prop_jade_dagger",
+        name: "Twin Cicada Blades",
+        description: "Spring-loaded concealed blades crafted from sharpened black jade",
+        visualAppearance: "Slender throwing daggers etched with silent wind talismans",
+        narrativeSignificance: "Can bypass the magnetic armor of imperial guardians",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_meiling",
+        ownerCharacterName: "Mei Ling",
+        icon: "crosshair"
+      }
+    ],
+    environments: [
+      {
+        id: "env_chang_an",
+        name: "Pavilion of the Thousand Springs",
+        lighting: "Warm amber lantern light reflecting off flowing mercury channels and polished dark cedar",
+        atmosphere: "Gentle chiming of brass wind-chimes, soft hiss of steam exhaust, drifting sandalwood incense",
+        colorPalette: "Imperial Gold #ffd700, Lacquer Crimson #c62828, Deep Jade #004d40",
+        architecturalStyle: "Soaring multi-tiered pagoda with intricate wooden joinery and exposed brass waterwheels"
+      }
+    ],
+    options: [
+      { id: "A", title: "Dissect the Imperial Cipher Core", text: "Take three minutes to pry the cipher from the automaton's chest to prove the conspiracy to the Grand Chancellor.", dramaticHook: "Risk being cornered inside the pavilion by the advancing guard.", expectedConsequence: "Obtains concrete proof of treason but forces an immediate close-quarters fight." },
+      { id: "B", title: "Escape via Silk Glider over the Rooftops", text: "Ignite the smoke pots and launch Mei Ling's folding silk glider from the upper balcony into the night air.", dramaticHook: "Breathless rooftop escape pursued by clockwork falcons.", expectedConsequence: "Safely escapes the encirclement but leaves the automaton behind for enemies to trace." }
+    ]
+  },
+
+  // 8. Cyber-Gothic / Planetary Siege
+  {
+    title: "Gothic Binary: Cathedral of the Machine God",
+    genre: "Cyber-Gothic / Philosophical Sci-Fi",
+    tagline: "In the shadow of a billion prayer-servers, the angels are made of titanium and code.",
+    initialPlot: "On the war-torn forge-world of Sanctum Primus, cyber-inquisitor Sister Vaelen investigates a sentient neural anomaly deep within the subterranean basilica of the Machine Cult. The anomaly claims to be the resurrection of the world's divine architect — but its transmission is corrupting the battle servitors into an apocalyptic rebellion.",
+    masterArcThread: "A 50-step gothic investigation through soaring basalt cathedrals and smoking data crypts to decide whether to venerate the synthetic deity or purge it in atomic fire.",
+    cinematicStyle: "70mm Dark Monochrome with Runic Gold Key, Heavy Incense Smog, Blinding Stained-Glass Flares, Chiaroscuro",
+    targetTheme: "Faith, Transhumanist Deification and Divine Machine Madness",
+    firstStepTitle: "The Descent into the Data Vault",
+    firstStepSynopsis: "Sister Vaelen descends the spiral stone staircase into the grand nave of the cathedral. Holographic cherubs flickers with glitching red errors as prayer-server bells toll.",
+    firstStepDialogue: "Vaelen: 'The logic-chant is broken. The Machine God is not speaking in prayers... It is screaming.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Vaelen", text: "The logic-chant is broken. It is not speaking in prayers... It is screaming.", textEs: "El canto lógico está roto. No está rezando... Está gritando." },
+      { start: 7.0, end: 14.0, speaker: "Deacon Cruz", text: "The cathedral servitors have severed their link to the synod! Cleanse them!", textEs: "¡Los servidores de la catedral cortaron el enlace con el sínodo! ¡Purifíquenlos!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+    characters: [
+      {
+        id: "char_vaelen",
+        name: "Sister Vaelen",
+        role: "Cyber-Inquisitor / Protagonist",
+        visualTraits: "33yo female, stark white cropped hair, golden bionic eye engraved with holy scripture, porcelain skin",
+        clothing: "Matte-black power armor covered in parchment purity seals and heavy silver rosary chains",
+        personality: "Unwavering faith tempered by fierce skepticism of church bureaucracy",
+        voiceStyle: "Solemn, reverberant contralto with acoustic chapel resonance",
+        voicePrompt: "Solemn, resonant 33-year-old contralto, cathedral acoustic reverb, majestic gravitas, controlled fury.",
+        avatarUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_cruz",
+        name: "Deacon Cruz",
+        role: "Techno-Priest of the Crypts",
+        visualTraits: "50yo male, face obscured by brass breathing grill and multiple optical lenses",
+        clothing: "Crimson hooded cassock with cybernetic mechadendrite tendrils curled around his shoulders",
+        personality: "Fanatical, paranoid, terrified of heresy",
+        voiceStyle: "Mechanical, synthesized rasp with clicking relays",
+        voicePrompt: "Dry 50-year-old synthesized rasp, mechanical clicks between syllables, zealous urgency.",
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_purifier",
+        name: "Consecrated Plasma Halberd",
+        description: "Ceremonial polearm channeling superheated plasma along its sanctified edge",
+        visualAppearance: "Towering runic polearm with glowing blue plasma blade and inscribed scripture",
+        narrativeSignificance: "Capable of cutting through reinforced vault bulkheads and heavy servitors",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_vaelen",
+        ownerCharacterName: "Sister Vaelen",
+        icon: "shield"
+      },
+      {
+        id: "prop_censer",
+        name: "Electrosmoke Censer",
+        description: "Incense burner dispensing conductive metallic particles that scramble wireless neural feeds",
+        visualAppearance: "Heavy brass skull censer swinging from thick iron chains emitting violet smoke",
+        narrativeSignificance: "Disrupts hostile servitor targeting matrices",
+        imageUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_cruz",
+        ownerCharacterName: "Deacon Cruz",
+        icon: "flame"
+      }
+    ],
+    environments: [
+      {
+        id: "env_basilica",
+        name: "The Crypt of Archangel Zero",
+        lighting: "Towering stained-glass windows illuminated by orbital artillery explosions, casting crimson and gold shafts across dark flagstones",
+        atmosphere: "Heavy choir chanting, ozone crackle, echoing hydraulic heavy footfalls",
+        colorPalette: "Basalt Black #111115, Holy Crimson #b71c1c, Consecrated Gold #ffd54f",
+        architecturalStyle: "Monumental brutalist gothic cathedral with miles of exposed copper cables draped like tapestries"
+      }
+    ],
+    options: [
+      { id: "A", title: "Commune with the Corrupted Altar", text: "Vaelen kneels and connects her neural inquisitor interface to the altar to interrogate the entity directly.", dramaticHook: "Risk of heretical viral infection or enlightenment.", expectedConsequence: "Learns the true origin of the anomaly but exposes her mind to severe digital trauma." },
+      { id: "B", title: "Deploy Sanctified Thermal Charges", text: "Order the deacon to set melta-charges at the structural pillars to bury the crypt and the anomaly under a thousand tons of stone.", dramaticHook: "Immediate destruction of irreplaceable sacred relics.", expectedConsequence: "Cuts off the contagion at once but traps the squad in the lower ruins." }
+    ]
+  },
+
+  // 9. Cosmic Space-Western
+  {
+    title: "Event Horizon Express: Rail of the Dying Stars",
+    genre: "Cosmic Surrealist Western / Sci-Fi Mystery",
+    tagline: "The quantum tracks cross supernova graveyards. The ticket price is your memories.",
+    initialPlot: "Aboard the star-locomotive 'The Iron Comet', drifting along ancient tachyon rails between decaying star systems, ex-marshal Cole Travis discovers the mysterious conductor has locked the controls on a collision course with a supermassive black hole. Along with gambler Jesse Valentine, Cole must battle outlaws and spatial paradoxes.",
+    masterArcThread: "A 50-step carriage-by-carriage battle across shifting dimensional train cars to reach the locomotive core and halt the cosmic plunge.",
+    cinematicStyle: "Panavision 2.39:1 Anamorphic, Dusty Sunset Sepia against Deep Cosmic Voids, Whistling Steam, Brass Flare",
+    targetTheme: "Redemption, Drifting Frontiers and The Inevitability of Time",
+    firstStepTitle: "Carriage 13: The Parlor of Broken Mirrors",
+    firstStepSynopsis: "Cole kicks open the mahogany saloon door of Carriage 13. Outside the panoramic observation glass, a dying blue giant star collapses into a dazzling accretion disk.",
+    firstStepDialogue: "Cole: 'Ten miles of iron riding a tachyon beam, and every passenger in here is a ghost.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Cole", text: "Ten miles of iron riding a tachyon beam, and every passenger is a ghost.", textEs: "Diez millas de hierro sobre un haz taquiónico, y cada pasajero es un fantasma." },
+      { start: 7.0, end: 14.0, speaker: "Jesse", text: "The conductor just dumped the coolant rods into space. We've got twenty minutes!", textEs: "El conductor acaba de expulsar las barras de refrigerante. ¡Tenemos veinte minutos!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    characters: [
+      {
+        id: "char_cole",
+        name: "Cole Travis",
+        role: "Ex-Frontier Marshal / Protagonist",
+        visualTraits: "45yo male, weather-beaten face, steel-gray mustache, cybernetic right hand with gunmetal finish",
+        clothing: "Duster coat of heavy dust-proof canvas over a silver-embroidered vest, wide-brimmed hat",
+        personality: "Laconic, observant, haunted by past law enforcement failures",
+        voiceStyle: "Low, gravelly Southern drawl with weary authority",
+        voicePrompt: "Deep, gravelly 45-year-old Southern baritone, slow drawl, quiet deadly calm in high crisis.",
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_jesse",
+        name: "Jesse Valentine",
+        role: "Rogue Quantum Card-Sharp",
+        visualTraits: "27yo female, clever green eyes, smirk, fingers constantly shuffling holographic cards",
+        clothing: "Velvet tailored waistcoat with brass pocket watch and concealed wrist-derringers",
+        personality: "Daring, quick-witted, treats cosmic danger like a high-stakes poker hand",
+        voiceStyle: "Playful, energetic mezzo with sardonic bite",
+        voicePrompt: "Brisk 27-year-old mezzo, playful cadence, mocking optimism under lethal danger.",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_revolver_peace",
+        name: "Six-Shot Grav-Revolver",
+        description: "Heavy sidearm firing micro-singularities that implode upon target impact",
+        visualAppearance: "Blued steel revolver with rotating brass cylinder glowing with gravity distortions",
+        narrativeSignificance: "Can punch through magnetic security bulkheads",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_cole",
+        ownerCharacterName: "Cole Travis",
+        icon: "crosshair"
+      },
+      {
+        id: "prop_quantum_deck",
+        name: "Deck of Shifting Fates",
+        description: "Holographic cards storing probabilistic reality glitches",
+        visualAppearance: "Translucent deck glowing with shifting geometric runes and neon edges",
+        narrativeSignificance: "Can jam electronic door locks or briefly freeze local time",
+        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_jesse",
+        ownerCharacterName: "Jesse Valentine",
+        icon: "disc"
+      }
+    ],
+    environments: [
+      {
+        id: "env_train_saloon",
+        name: "The Gilded Nebula Parlor",
+        lighting: "Warm gas lamps illuminating polished mahogany paneling while stellar flares cast electric blue shadows through panoramic windows",
+        atmosphere: "Rhythmic clack-clack of tachyon rails, clinking crystal glasses, deep bass hum of fusion boiler",
+        colorPalette: "Mahogany Warm Brown #3e2723, Stellar Azure #00b0ff, Brass Gold #ffd700",
+        architecturalStyle: "Victorian luxury parlor car merged with interstellar titanium frame and panoramic glass ceiling"
+      }
+    ],
+    options: [
+      { id: "A", title: "Uncouple Carriage 13 and Charge the Roof", text: "Sever the magnetic coupler behind them and climb onto the locomotive roof in zero-gravity to sprint toward the engine.", dramaticHook: "Exposed to lethal stellar radiation and vacuum on the train's outer hull.", expectedConsequence: "Bypasses five occupied carriages but exposes the party to cosmic vacuum hazards." },
+      { id: "B", title: "Shoot Through the Saloon Barricade", text: "Draw weapons and breach through the outlaw gang entrenched inside the armored sleeper car.", dramaticHook: "Immediate violent firefight at point-blank range.", expectedConsequence: "Secures the carriage with high ammo expenditure and risk of injury." }
+    ]
+  },
+
+  // 10. Folk & Iron Bio-Horror
+  {
+    title: "Folk & Iron: The Witching Forest of Karr",
+    genre: "Folk Horror / Medieval Bio-Horror",
+    tagline: "In the roots beneath the village, wood and clockwork have learned to bleed.",
+    initialPlot: "Sent to the isolated mountain village of Karr to investigate a string of missing woodcutters, armored inquisitor Nicholas Thorne and herbalist Greta find the ancient pine forest infected with clockwork parasites that fuse organic timber, human flesh, and brass gears into twisted predatory effigies.",
+    masterArcThread: "A 50-step atmospheric journey through ancient misty woods, wicker sanctuaries, and subterranean clockwork roots to sever the parasitic hive heart.",
+    cinematicStyle: "35mm Grainy Earth Tones, Thick Volumetric Fog, Candelight and Peat Smoke, Pale Flesh Highlights",
+    targetTheme: "Nature corrupted by machine, Ancient Superstition and Sacrificial Guilt",
+    firstStepTitle: "The Effigy at the Crossroads",
+    firstStepSynopsis: "Nicholas dismounts before an ancient weeping willow. Suspended in its branches is a stag whose heart has been replaced with a ticking brass pendulum that still pulses with blood.",
+    firstStepDialogue: "Nicholas: 'This is not pagan witchcraft. Someone planted iron into the very marrow of this wood.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Nicholas", text: "This is not witchcraft. Someone planted iron into the marrow of this wood.", textEs: "Esto no es brujería. Alguien plantó hierro en la médula de este bosque." },
+      { start: 7.0, end: 14.0, speaker: "Greta", text: "Listen to the trees... The ticking is spreading underground!", textEs: "Escucha los árboles... ¡El tictac se expande bajo tierra!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+    characters: [
+      {
+        id: "char_nicholas",
+        name: "Inquisitor Nicholas Thorne",
+        role: "Iron Inquisitor / Protagonist",
+        visualTraits: "41yo male, grim chiseled features, blind right eye covered by a scorched iron patch",
+        clothing: "Heavy blackened steel breastplate draped in wool traveling cowl, heavy leather boots",
+        personality: "Disciplined, observant, haunted by village burnings he commanded in his youth",
+        voiceStyle: "Low, stony baritone with measured weight",
+        voicePrompt: "Grave, stony 41-year-old baritone, deep breathing, slow deliberate cadence.",
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_greta",
+        name: "Greta of the Pine",
+        role: "Village Herbalist & Hedge-Witch",
+        visualTraits: "25yo female, moss-green eyes, dark tangled hair adorned with rowan berries, pale skin",
+        clothing: "Roughspun linen kirtle with sheepskin vest and leather herb satchel",
+        personality: "Intimate with ancient forest lore, fierce, protective of the living woods",
+        voiceStyle: "Earthy, melodic alto with urgent intensity",
+        voicePrompt: "Warm, earthy 25-year-old alto, whispered folklore cadence, raw emotional honesty.",
+        avatarUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_flanged_mace",
+        name: "Consecrated Sun Mace",
+        description: "Heavy iron mace engraved with radiant solar sigils",
+        visualAppearance: "Blackened iron mace with flanged blades that glow with heat when striking corrupted clockwork",
+        narrativeSignificance: "Only weapon that shatters the hardened bronze bark of the effigies",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_nicholas",
+        ownerCharacterName: "Nicholas Thorne",
+        icon: "shield"
+      },
+      {
+        id: "prop_rowan_salt",
+        name: "Rowan Ash & Salt Pouch",
+        description: "Herbal compound that dissolves parasitic machine vines upon contact",
+        visualAppearance: "Embroidered leather pouch containing crystalline silver-white powder",
+        narrativeSignificance: "Neutralizes clockwork parasites before they burrow into human flesh",
+        imageUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_greta",
+        ownerCharacterName: "Greta",
+        icon: "feather"
+      }
+    ],
+    environments: [
+      {
+        id: "env_witch_forest",
+        name: "The Gnarled Grove of Karr",
+        lighting: "Pale moonlight filtering through dense canopy mist, pierced by the dim amber glow of a burning pine pitch torch",
+        atmosphere: "Oppressive silence, metallic clicks echoing in the hollow trunks, heavy scent of wet pine and copper",
+        colorPalette: "Pine Green #1b5e20, Peat Brown #3e2723, Rust Amber #ff8f00",
+        architecturalStyle: "Twisted primeval pine forest interspersed with moss-covered pagan standing stones"
+      }
+    ],
+    options: [
+      { id: "A", title: "Burn the Effigy with Greek Fire", text: "Douse the clicking stag effigy with alchemical pitch and ignite it to incinerate the hive spores.", dramaticHook: "Risk of starting a forest blaze that will alert the clockwork abominations.", expectedConsequence: "Destroys the localized infection but summons predatory effigies from the surrounding mist." },
+      { id: "B", title: "Follow the Subterranean Copper Root", text: "Use Greta's rowan salts to track the pulsing root as it burrows deeper into the forgotten coal mines.", dramaticHook: "Descending into pitch-black subterranean labyrinths.", expectedConsequence: "Locates the central nesting chamber while keeping silent." }
+    ]
+  },
+
+  // 11. Hydro-Punk / Marine Odyssey
+  {
+    title: "Solaris Drift: The Neon Archipelagos",
+    genre: "Hydro-Punk / Marine Action Odyssey",
+    tagline: "After the continents drowned, only the swift survive the open waters.",
+    initialPlot: "On an Earth whose continents drowned two centuries ago, hydrofoil courier Ren Drake and navigator Lana Kai transport a stolen solar desalination filter across the lawless floating metropolises of the Coral Belt. Hunted by the ironclad war-barges of the Megalodon Consortium, they must navigate coral reefs, typhoons, and corsairs.",
+    masterArcThread: "A 50-step high-speed marine odyssey across floating neon markets and sunken skyscraper reefs to bring fresh water to the Free Atolls.",
+    cinematicStyle: "Super 35mm Glossy Teals and Vivid Citrus Oranges, Spray Droplets on Lens, Blinding Tropical Sunlight",
+    targetTheme: "Freedom, Scarcity and Human Resilience across the Drowned World",
+    firstStepTitle: "The Corsairs of Sector Coral",
+    firstStepSynopsis: "Ren's dual-engine solar hydrofoil skims across turquoise swells at sixty knots. Behind them, two smoke-belching diesel gunboats breach the waves with harpoon launchers trained on their stern.",
+    firstStepDialogue: "Ren: 'Hold on to the deck railing! I am cutting through the submerged highway!'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Ren", text: "Hold on to the deck! I'm cutting through the submerged highway!", textEs: "¡Sujétate a la barandilla! ¡Voy a cortar por la autopista sumergida!" },
+      { start: 7.0, end: 14.0, speaker: "Lana", text: "Harpoon locks at two hundred meters! Evasive maneuvers now!", textEs: "¡Fijación de arpones a doscientos metros! ¡Maniobras evasivas ya!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4",
+    characters: [
+      {
+        id: "char_ren",
+        name: "Ren Drake",
+        role: "Hydrofoil Skimmer Pilot / Protagonist",
+        visualTraits: "27yo male, sun-bleached unruly hair, athletic build, polarized amber goggles around neck",
+        clothing: "Wetsuit vest over faded denim overalls with magnetic harness clips",
+        personality: "Adrenaline junkie, fiercely independent, brilliant improviser on water",
+        voiceStyle: "Vibrant, high-energy tenor with maritime slang",
+        voicePrompt: "Energetic 27-year-old tenor, outdoor maritime volume, confident laugh under pressure.",
+        avatarUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_lana",
+        name: "Lana Kai",
+        role: "Tide Navigator & Diver",
+        visualTraits: "24yo female, deep bronze skin, athletic diver physique, tribal wave tattoos on arms",
+        clothing: "Technical dive skin with sonar wrist unit and utility knife strapped to thigh",
+        personality: "Intuitive, attuned to ocean currents, cool-headed tactician",
+        voiceStyle: "Clear, rhythmic soprano with steady warmth",
+        voicePrompt: "Clear 24-year-old soprano, rhythmic cadence, calm authoritative navigation.",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_filter",
+        name: "Solar Osmosis Core",
+        description: "Miniaturized zero-power desalination unit capable of supplying an entire atoll",
+        visualAppearance: "Cylindrical chrome and glass pod filled with glowing blue porous crystalline membranes",
+        narrativeSignificance: "The priceless device that can end the water wars of the Coral Belt",
+        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_ren",
+        ownerCharacterName: "Ren Drake",
+        icon: "droplet"
+      },
+      {
+        id: "prop_flare_gun",
+        name: "Pneumatic Harpoon Flare",
+        description: "Heavy maritime launcher firing magnesium tracking flares and tether lines",
+        visualAppearance: "Heavy anodized aluminum pistol with reinforced pneumatic gas canister",
+        narrativeSignificance: "Can blind enemy helmsmen or tether floating salvage",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_lana",
+        ownerCharacterName: "Lana Kai",
+        icon: "crosshair"
+      }
+    ],
+    environments: [
+      {
+        id: "env_atoll",
+        name: "The Neon Floating Market of Typhoon Bay",
+        lighting: "Blinding tropical midday sun reflecting off turquoise ocean waves, contrasted with glowing neon signs on tethered barges",
+        atmosphere: "Roar of outboard hydrofoil engines, saltwater spray hitting the camera, calls of sea gulls and shouting market traders",
+        colorPalette: "Turquoise Azure #00e5ff, Coral Orange #ff5722, Sun Bleached White #ffffff",
+        architecturalStyle: "Sprawling floating city built of lashed-together supertankers, shipping containers, and solar catamarans"
+      }
+    ],
+    options: [
+      { id: "A", title: "Skim Across the Shallow Coral Atoll", text: "Drop foil foils and skip across the 1-meter shallow reef where heavy pirate gunboats will run aground.", dramaticHook: "Extreme risk of puncturing hydrofoil hulls on razor-sharp staghorn coral.", expectedConsequence: "Loses the pursuers instantly but risks beaching the craft at high speed." },
+      { id: "B", title: "Release the Magnesium Oil Slick", text: "Discharge the skimmer's auxiliary biofuel tank and fire a flare to ignite a blazing wall of fire on the water.", dramaticHook: "Burns precious escape fuel in exchange for defensive screen.", expectedConsequence: "Forces gunboats to peel off while cutting your operational range in half." }
+    ]
+  },
+
+  // 12. Psychological Eldritch Horror
+  {
+    title: "The Cartographer of Dead Geometries",
+    genre: "Psychological Horror / Eldritch Mystery",
+    tagline: "The labyrinth doesn't have an exit. It has an appetite.",
+    initialPlot: "Architectural historian Arthur Finch enters the subterranean catacombs beneath an abandoned Prague monastery to map an undocumented vault. Inside, he and his assistant Clara discover the walls rearrange themselves according to the surveyor's repressed guilt, leading them into an non-Euclidean city that predates humanity.",
+    masterArcThread: "A 50-step mind-bending descent through impossible angular geometries and psychological illusions to solve the mystery of the Architect without losing sanity.",
+    cinematicStyle: "German Expressionist Angles, Heavy Chiaroscuro Shadows, Desaturated Sepia with Blood Crimson Accents",
+    targetTheme: "Guilt, Madness and The Fragility of Spatial Reality",
+    firstStepTitle: "The Hall of Non-Euclidean Arches",
+    firstStepSynopsis: "Arthur shines his brass carbide lantern down a corridor whose perspective defies physics. The floor angles upward at forty degrees, yet gravity pulls him sideways.",
+    firstStepDialogue: "Arthur: 'The transit compass is spinning... Clara, these walls weren't built by human hands.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Arthur", text: "The compass is spinning... Clara, these walls weren't built by humans.", textEs: "La brújula está girando... Clara, estos muros no fueron hechos por humanos." },
+      { start: 7.0, end: 14.0, speaker: "Clara", text: "Look behind you. The doorway we entered through... it's gone.", textEs: "Mira detrás de ti. La puerta por la que entramos... ha desaparecido." }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+    characters: [
+      {
+        id: "char_arthur",
+        name: "Dr. Arthur Finch",
+        role: "Architectural Historian / Protagonist",
+        visualTraits: "46yo male, gaunt features, wire-rim spectacles, disheveled tweed coat, nervous tic in left hand",
+        clothing: "Victorian woolen vest, dark overcoat with surveyor compass leather strap across chest",
+        personality: "Obsessive academic, analytical, vulnerable to psychological guilt",
+        voiceStyle: "Tremulous, cultured British baritone with rising anxiety",
+        voicePrompt: "Cultured 46-year-old British baritone, intellectual precision trembling with mounting psychological dread.",
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_clara",
+        name: "Clara Brandt",
+        role: "Surveyor Apprentice & Draftswoman",
+        visualTraits: "25yo female, observant dark eyes, dark hair pinned in practical chignon, steady gaze",
+        clothing: "Sturdy canvas surveyor tunic with brass measuring rulers and leather folio case",
+        personality: "Grounded, rational, reluctant to surrender to superstition",
+        voiceStyle: "Crisp, determined alto with calm reassurance",
+        voicePrompt: "Firm, grounded 25-year-old alto, steady breathing, defiant rationality against madness.",
+        avatarUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_theodolite",
+        name: "Aetheric Brass Theodolite",
+        description: "Custom surveying instrument capable of measuring non-Euclidean angles",
+        visualAppearance: "Intricate brass instrument with multiple rotating prisms and glowing mercury levels",
+        narrativeSignificance: "Detects structural shifts before the stone walls slam shut",
+        imageUrl: "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_arthur",
+        ownerCharacterName: "Arthur Finch",
+        icon: "compass"
+      },
+      {
+        id: "prop_chalk",
+        name: "Phosphorescent Survey Chalk",
+        description: "Mineral chalk that glows in absolute darkness and marks temporal stable paths",
+        visualAppearance: "Luminescent green crystalline chalk sticks stored in a felt-lined tin",
+        narrativeSignificance: "Provides the only lifeline back through shifting corridors",
+        imageUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_clara",
+        ownerCharacterName: "Clara Brandt",
+        icon: "pen"
+      }
+    ],
+    environments: [
+      {
+        id: "env_catacombs",
+        name: "The Crypt of Impossible Angles",
+        lighting: "Pulsing carbide lantern amber light casting erratic, stretching shadows against cyclopean black basalt blocks",
+        atmosphere: "Low subterranean hum that vibrates through teeth, whispering echoes of vanished voices, complete absence of air current",
+        colorPalette: "Abyssal Black #000000, Carbide Amber #ffa000, Phosphor Green #64ffda",
+        architecturalStyle: "Cyclopean architecture with acute angles and impossible doorways that open onto upside-down chambers"
+      }
+    ],
+    options: [
+      { id: "A", title: "Follow the Inverted Staircase Down", text: "Descend the stairs that spiral paradoxically upward into the ceiling.", dramaticHook: "Voluntary surrender to non-Euclidean spatial vertigo.", expectedConsequence: "Leads deeper into the heart of the anomaly while disorienting physical balance." },
+      { id: "B", title: "Anchor Phosphor Lines and Retrace Steps", text: "Hammer iron pitons into the stone and systematically map the perimeter with glowing chalk.", dramaticHook: "Disciplined scientific refusal to accept the illusion.", expectedConsequence: "Stabilizes the immediate chamber but risks running out of supplies." }
+    ]
+  },
+
+  // 13. Military Sci-Fi / Polar Survival
+  {
+    title: "Valkyrie Down: Frostbite Protocol",
+    genre: "Military Sci-Fi / Polar Survival",
+    tagline: "Minus sixty degrees. A downed gunship. And something hunting in the whiteout.",
+    initialPlot: "When stealth dropship Valkyrie-4 crashes inside the forbidden glacial Exclusion Zone of Europa, Sergeant Jack Morales and combat medic Kira Vance find themselves stranded in a howling blizzard at minus sixty. With the dropship's reactor leaking thermal heat, extraterrestrial burrowing stalkers emerge from the ice crust.",
+    masterArcThread: "A 50-step military survival thriller across glacial crevasses and abandoned colonial boreholes to transmit an orbital distress beacon before hypothermia sets in.",
+    cinematicStyle: "Anamorphic 35mm, Blinding Whiteout Snow, Icy Steel Blues and Emergency Flare Crimson, Frost-Vignetted Optics",
+    targetTheme: "Duty, Survival Grit and Camaraderie Under Extreme Elements",
+    firstStepTitle: "Crash on the Ice Shelf",
+    firstStepSynopsis: "Jack kicks open the warped cockpit canopy. A howling blizzard rushes inside as the Valkyrie's starboard engine sputters with blue plasma fire in the sub-zero snow.",
+    firstStepDialogue: "Jack: 'Kira, check your thermal seals! If your core temp drops below ninety, you will not wake up.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Jack", text: "Check your thermal seals! If your core temp drops, you won't wake up.", textEs: "¡Revisa tus sellos térmicos! Si tu temperatura cae, no vas a despertar." },
+      { start: 7.0, end: 14.0, speaker: "Kira", text: "Motion tracker has contacts beneath the ice! Fifty meters and closing!", textEs: "¡El rastreador detecta contactos bajo el hielo! ¡A cincuenta metros y acercándose!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+    characters: [
+      {
+        id: "char_jack",
+        name: "Sgt. Jack Morales",
+        role: "Drop-Infantry Squad Leader / Protagonist",
+        visualTraits: "38yo male, square jaw, frostbitten cheek, tactical combat scar over left brow",
+        clothing: "Heavily insulated arctic exo-rig with titanium knee braces and thermal battery pack",
+        personality: "Grit-fueled survivor, protective of his squad, calm under fire",
+        voiceStyle: "Low, disciplined military baritone with gravelly resolve",
+        voicePrompt: "Disciplined 38-year-old military baritone, frost-chapped cadence, steady leadership under freezing combat.",
+        avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_kira",
+        name: "Cpl. Kira Vance",
+        role: "Combat Medic & Cryo-Specialist",
+        visualTraits: "28yo female, sharp brown eyes, frost-tipped eyelashes, tactical helmet with HUD visor",
+        clothing: "Cold-weather tactical armor with red medical chevron and trauma injector sleeve",
+        personality: "Tenacious, highly trained, refuses to leave wounded behind",
+        voiceStyle: "Sharp, urgent mezzosoprano with tactical composure",
+        voicePrompt: "Focused 28-year-old mezzosoprano, rapid triage cadence, urgent clarity over blizzard howling.",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_beacon",
+        name: "Orbital Uplink Transponder",
+        description: "High-frequency cryo-hardened transmitter capable of piercing Europa's ice-aurora",
+        visualAppearance: "Heavy olive-drab tactical case with telescoping carbon-fiber antenna mast",
+        narrativeSignificance: "Sole link to the fleet carrier in high orbit",
+        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_jack",
+        ownerCharacterName: "Jack Morales",
+        icon: "radio"
+      },
+      {
+        id: "prop_thermal_lance",
+        name: "Magnesium Breach Flare Gun",
+        description: "Survival flare gun capable of igniting underwater ice-methane deposits",
+        visualAppearance: "Heavy orange break-action flare pistol loaded with phosphorus magnesium cartridges",
+        narrativeSignificance: "Can blind ice predators or provide instantaneous 1000-degree emergency heat",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_kira",
+        ownerCharacterName: "Kira Vance",
+        icon: "crosshair"
+      }
+    ],
+    environments: [
+      {
+        id: "env_ice_shelf",
+        name: "The Europa Glacial Exclusion Zone",
+        lighting: "Howling whiteout blizzard illuminated by the pale cyan glow of Jupiter overhead and sputtering orange engine fire",
+        atmosphere: "Deafening arctic winds, shattering ice crust under foot, shrieks of unseen predators in the storm",
+        colorPalette: "Glacial Cyan #00e5ff, Blizzard White #ffffff, Distress Orange #ff3d00",
+        architecturalStyle: "Barren ice ridges and bottomless crevasse chasms cutting through ancient frozen seas"
+      }
+    ],
+    options: [
+      { id: "A", title: "Dig In Behind the Downed Valkyrie Hull", text: "Use the smoking engine wreckage as a thermal shelter and establish a defensive perimeter with automatic sentry guns.", dramaticHook: "Holds ground with failing battery power against subterranean burrowers.", expectedConsequence: "Provides immediate thermal warmth but pins the squad in a known crash site." },
+      { id: "B", title: "March Toward the Borehole Research Outpost", text: "Venture immediately into the whiteout storm to reach the underground colonial bunker two kilometers north.", dramaticHook: "Treacherous blizzard march with zero visibility.", expectedConsequence: "Keeps moving toward permanent rescue but risks separation in the whiteout." }
+    ]
+  },
+
+  // 14. Cyber-Samurai Neo-Tokyo
+  {
+    title: "Neon Bushido: Way of the Synthetic Ronin",
+    genre: "Cyber-Samurai / Feudal Dystopia",
+    tagline: "When steel meets cybernetics, honor is measured in nanoseconds.",
+    initialPlot: "In the rain-drenched megacity of Neo-Kyoto in 2144, disgraced cyber-samurai Jinzo Kuroda refuses to execute an order to wipe the memories of an escaped synthetic geisha named Saki, who carries the genetic blueprints of a new human consciousness. Marked for death by the Arasaka-style Kurogane Syndicate, Jinzo draws his high-frequency monomolecular blade.",
+    masterArcThread: "A 50-step stylish cyber-action epic across neon skyscraper rooftops, sensory teahouses, and industrial cyber-docks fighting syndicate executioners to reach the sanctuary shrine.",
+    cinematicStyle: "Ultra-Wide Anamorphic, Wet Neon Reflections, Vibrant Sakura Pink and Deep Cobalt Blue, Razor-Sharp Motion Blur",
+    targetTheme: "Honor, Sentience and The Cost of Breaking Corporate Oaths",
+    firstStepTitle: "Rain on the Shinjuku Catwalk",
+    firstStepSynopsis: "Jinzo stands motionless under the neon rain on an eighty-story skybridge. Ahead, four syndicate cyber-ninjas drop from cloaked hovercraft with drawn vibro-katanas.",
+    firstStepDialogue: "Jinzo: 'You come with Kurogane warrants. But on this bridge, my blade answers only to Bushido.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Jinzo", text: "You come with corporate warrants. On this bridge, my blade answers to Bushido.", textEs: "Vienen con órdenes corporativas. En este puente, mi espada responde al Bushido." },
+      { start: 7.0, end: 14.0, speaker: "Saki", text: "Jinzo, they've disabled the skybridge magnets! The floor is giving way!", textEs: "¡Jinzo, desactivaron los imanes del puente! ¡El suelo está cediendo!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+    characters: [
+      {
+        id: "char_jinzo",
+        name: "Jinzo Kuroda",
+        role: "Rogue Cyber-Samurai / Protagonist",
+        visualTraits: "36yo male, stoic expression, chrome cybernetic prosthetic arm with carbon-weave muscle fibers, braided topknot",
+        clothing: "Graphite tactical haori coat over ballistic armor plates, traditional sandals reinforced with grav-dampeners",
+        personality: "Disciplined, quiet, bound by ancient code of honor in a lawless cyberpunk era",
+        voiceStyle: "Low, raspy, authoritative Japanese-accented baritone",
+        voicePrompt: "Low, measured 36-year-old baritone, stoic Japanese delivery, razor-sharp discipline, quiet deadly calm.",
+        avatarUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_saki",
+        name: "Saki",
+        role: "Awakened Synthetic Courier",
+        visualTraits: "22yo synthetic female, porcelain face with subtle glowing seam-lines, violet irises, sleek black bob",
+        clothing: "Translucent neon kimono duster over cybernetic combat chassis",
+        personality: "Curious, newly emotional, determined to preserve her identity",
+        voiceStyle: "Soft, melodic soprano with synthetic crystalline clarity",
+        voicePrompt: "Delicate 22-year-old soprano, pure crystalline timbre, synthetic harmonic undertone, growing courage.",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_katana",
+        name: "Muramasa High-Frequency Blade",
+        description: "Monomolecular edge vibrating at ultrasonic frequencies to slice through heavy armor",
+        visualAppearance: "Matte black katana blade shimmering with a violent electric crimson vibrational aura",
+        narrativeSignificance: "Jinzo's family heirloom, capable of deflecting plasma projectiles",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_jinzo",
+        ownerCharacterName: "Jinzo Kuroda",
+        icon: "sword"
+      },
+      {
+        id: "prop_neural_core",
+        name: "Genesis Data Shard",
+        description: "Secure storage wafer containing the origin code of synthetic consciousness",
+        visualAppearance: "Hexagonal glass wafer glowing with swirling liquid sakura-blossom light",
+        narrativeSignificance: "The syndicate's ultimate secret that can grant machines true souls",
+        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_saki",
+        ownerCharacterName: "Saki",
+        icon: "disc"
+      }
+    ],
+    environments: [
+      {
+        id: "env_skybridge",
+        name: "Neo-Kyoto Upper Skybridge",
+        lighting: "Torrential rain reflecting towering holographic geishas and neon advertisements in blazing magenta, electric cyan, and gold",
+        atmosphere: "Wind whipping rain against glass, roaring traffic of autonomous flying cars beneath, crackling thunder",
+        colorPalette: "Cyber Neon Pink #ff007f, Electric Cyan #00f0ff, Wet Asphalt Black #0a0a12",
+        architecturalStyle: "Futuristic suspension bridge connecting colossal megalithic skyscrapers eighty stories above street level"
+      }
+    ],
+    options: [
+      { id: "A", title: "Iaido Strike through the Vanguard", text: "Execute an ultrasonic draw-and-strike dash to bisect the squad leader before the ninjas can deploy their cloaks.", dramaticHook: "High-speed offensive gamble with instant lethality.", expectedConsequence: "Neutralizes the commander immediately but leaves Jinzo surrounded by remaining assassins." },
+      { id: "B", title: "Sever the Skybridge Cables", text: "Cut the magnetic bridge suspension cables with a single strike, sending the assassin squad plunging into the lower city.", dramaticHook: "Destroys their own escape path across the chasm.", expectedConsequence: "Eliminates all attackers at once but forces a perilous leap onto a passing cargo drone." }
+    ]
+  },
+
+  // 15. Retro-Futurist Dieselpunk
+  {
+    title: "Aether & Ash: The Iron Corsair",
+    genre: "Dieselpunk Airborne Odyssey / Aerial Heist",
+    tagline: "Rule the clouds, or burn on the tarmac.",
+    initialPlot: "In an alternate 1938 where colossal armored dreadnought zeppelins dominate the skies, sky-pirate captain Silas Thorne plans the greatest heist in aviation history: boarding the Imperial Treasury Zeppelin 'Kaiserin' mid-flight over the stormy Alps to liberate the stolen bullion of fallen European republics.",
+    masterArcThread: "A 50-step high-altitude dieselpunk thriller involving aerial dogfights, grappling-hook sky breaches, and mutinies inside smoking engine rooms.",
+    cinematicStyle: "35mm Grainy Sepia and Oiled Steel, Heavy Diesel Exhaust Plumes, Blinding Searchlight Beams, Brass Rivets",
+    targetTheme: "Audacity, Freedom in the Skies and Anti-Imperial Resistance",
+    firstStepTitle: "Boarding the Kaiserin",
+    firstStepSynopsis: "Silas leans out of his custom biplane cockpit as it matches speed with the monumental black hull of the Kaiserin Zeppelin. Lightning illuminates miles of riveted armor plating.",
+    firstStepDialogue: "Silas: 'Hook deployed! Stand by to breach through the port engine gondola!'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Silas", text: "Grapple hook deployed! Stand by to breach the port gondola!", textEs: "¡Gancho desplegado! ¡Listos para penetrar la góndola de babor!" },
+      { start: 7.0, end: 14.0, speaker: "Gwen", text: "Flak turrets are rotating our way! Ten seconds before they open fire!", textEs: "¡Las torretas antiaéreas rotan hacia aquí! ¡Diez segundos antes de que disparen!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    characters: [
+      {
+        id: "char_silas",
+        name: "Capt. Silas Thorne",
+        role: "Sky Corsair Captain / Protagonist",
+        visualTraits: "39yo male, rakish smirk, leather aviator cap, scarred jawline, piercing gray eyes",
+        clothing: "Heavy shearling flight jacket with brass brassard and twin shoulder holsters",
+        personality: "Dashing, fearless tactician, sworn enemy of imperial despots",
+        voiceStyle: "Booming, charismatic mid-Atlantic baritone with pirate swagger",
+        voicePrompt: "Resonant, charismatic 39-year-old baritone, 1930s newsreel clarity, confident swagger under fire.",
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_gwen",
+        name: "Gwen 'Spark' Kelly",
+        role: "Chief Sky-Wrench & Demolitionist",
+        visualTraits: "26yo female, copper goggles pushed up into curly red hair, smudge of soot on nose",
+        clothing: "Padded flight dungarees loaded with dynamite sticks, spanners, and ignition wires",
+        personality: "Explosive enthusiast, genius mechanic, zero fear of heights",
+        voiceStyle: "Brisk, cheerful Irish alto with punchy rhythm",
+        voicePrompt: "Spirited 26-year-old alto, Irish cadence, infectious audacity under anti-aircraft bombardment.",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_grapple",
+        name: "Pneumatic Sky-Grapple",
+        description: "High-pressure winch firing tungsten anchor claws with braided steel cable",
+        visualAppearance: "Heavy brass and mahogany rifle with coiled steel cable spool and twin pneumatic tanks",
+        narrativeSignificance: "Secures boarding lines to aircraft flying at 200 miles per hour",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_silas",
+        ownerCharacterName: "Silas Thorne",
+        icon: "tool"
+      },
+      {
+        id: "prop_timer_bomb",
+        name: "Clockwork Nitro-Bomb",
+        description: "Compact demolition charge with precision Swiss brass timer",
+        visualAppearance: "Bundle of red dynamite sticks bound in brass bands with ticking pocket-watch trigger",
+        narrativeSignificance: "Can breach armored vault doors or disable massive propellor drives",
+        imageUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_gwen",
+        ownerCharacterName: "Gwen Kelly",
+        icon: "zap"
+      }
+    ],
+    environments: [
+      {
+        id: "env_zeppelin_hull",
+        name: "The Exterior Catwalk of the Kaiserin",
+        lighting: "Flashing lightning strikes through heavy storm clouds, piercing searchlight beams sweeping over wet black duralumin plating",
+        atmosphere: "Roar of sixteen massive Maybach diesel engines, shrieking 100-knot winds, clatter of spent flak shells",
+        colorPalette: "Gunmetal Gray #37474f, Storm Navy #0d1b2a, Blinding White Searchlight #ffffff",
+        architecturalStyle: "Monumental 800-foot armored airship with riveted plating, machine gun blisters, and exterior catwalks"
+      }
+    ],
+    options: [
+      { id: "A", title: "Blow the Port Engine to Cut Airship Speed", text: "Gwen plants a nitro-bomb on the main crankshaft to disable two engines, stabilizing the catwalk for boarding.", dramaticHook: "May cause the airship to list violently or catch fire.", expectedConsequence: "Slows the zeppelin down but alerts the entire imperial security battalion inside." },
+      { id: "B", title: "Zip-Line Straight to the Cargo Bay Hatch", text: "Hook zip-line pulleys directly to the cargo bay guide rail and slide through open flak fire into the hangar.", dramaticHook: "Direct sky-dive through tracer ammunition.", expectedConsequence: "Breaches the interior in three seconds with heavy risk of taking fire." }
+    ]
+  },
+
+  // 16. Xenobiology Alien Jungle
+  {
+    title: "The Genesis Seed: Jungle of the Bio-Architects",
+    genre: "Xenobiology / Alien Jungle Survival",
+    tagline: "The ecosystem is not wild. It is engineering a replacement for us.",
+    initialPlot: "On alien exoplanet Kepler-452b, botanist Dr. Maya Thorne and scout Noah Reed explore the iridescent canopy of an alien super-organism jungle known as the Emerald Lattice. When their scout ship is seized by sentient bio-vines, they discover the planet is an ancient seed-engine designed to convert human carbon into a planetary neural matrix.",
+    masterArcThread: "A 50-step xenobiological exploration across bioluminescent root bridges, spore storms, and living bio-temples to extract the master genetic key and escape the planet.",
+    cinematicStyle: "Cooke Anamorphic, Radiant Emerald and Violet Bioluminescence, Floating Spore Motifs, Hyper-Detailed Macro Depth",
+    targetTheme: "Symbiosis, Alien Evolution and The Definition of Consciousness",
+    firstStepTitle: "The Awakening of the Spore Canopy",
+    firstStepSynopsis: "Maya kneels before a massive crystalline flower that pulses with golden pollen. As she touches the petal, thousands of bio-luminescent tendrils awaken throughout the canopy above.",
+    firstStepDialogue: "Maya: 'The plant's genetic sequence is responding to my body heat... Noah, it's learning our language.'",
+    firstStepSubtitles: [
+      { start: 1.0, end: 6.5, speaker: "Maya", text: "The sequence is responding to body heat... Noah, it's learning our language.", textEs: "La secuencia responde al calor corporal... Noah, aprende nuestro idioma." },
+      { start: 7.0, end: 14.0, speaker: "Noah", text: "The vines are wrapping around our thrusters! We're losing lift!", textEs: "¡Las lianas envuelven nuestros propulsores! ¡Perdemos sustentación!" }
+    ],
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    characters: [
+      {
+        id: "char_maya_t",
+        name: "Dr. Maya Thorne",
+        role: "Chief Xenobotanist / Protagonist",
+        visualTraits: "30yo female, sharp green eyes, sun-bleached ponytail, scanning visor over left eye",
+        clothing: "Lightweight field research biosuit with botanical specimen vials strapped to vest",
+        personality: "Brilliant, empathetic towards alien life, courageous under unknown phenomena",
+        voiceStyle: "Awe-filled, articulate soprano with scientific focus",
+        voicePrompt: "Breathless 30-year-old soprano, articulate scientific cadence, authentic awe and scientific composure.",
+        avatarUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      },
+      {
+        id: "char_noah",
+        name: "Noah Reed",
+        role: "Expedition Scout & Tracker",
+        visualTraits: "34yo male, rugged athletic frame, watchful dark eyes, tactical knife holster on chest",
+        clothing: "Camouflage survival poncho over reinforced impact armor",
+        personality: "Cautious, protective, expert in reading predatory movement",
+        voiceStyle: "Quiet, calm baritone with hunter instincts",
+        voicePrompt: "Quiet, focused 34-year-old baritone, watchful hunter cadence, swift tactical assessment.",
+        avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80",
+        stepIntroduced: 1
+      }
+    ],
+    props: [
+      {
+        id: "prop_scanner",
+        name: "Quantum Bio-Spectrometer",
+        description: "Handheld scanner that maps xenobiological DNA sequences in real time",
+        visualAppearance: "Matte white ergonomic scanner with holographic display projecting glowing helical DNA strands",
+        narrativeSignificance: "Can predict predatory vine strikes before they lash out",
+        imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_maya_t",
+        ownerCharacterName: "Maya Thorne",
+        icon: "disc"
+      },
+      {
+        id: "prop_sonic_blade",
+        name: "High-Frequency Machete",
+        description: "Vibrating survival blade that severs tough fibrous bio-vines without sparking",
+        visualAppearance: "Titanium alloy machete with glowing turquoise sonic emitter groove along the spine",
+        narrativeSignificance: "Clears pathways through impenetrable living root barriers",
+        imageUrl: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=600&auto=format&fit=crop&q=80",
+        stepIntroduced: 1,
+        ownerCharacterId: "char_noah",
+        ownerCharacterName: "Noah Reed",
+        icon: "sword"
+      }
+    ],
+    environments: [
+      {
+        id: "env_alien_jungle",
+        name: "The Emerald Lattice Canopy",
+        lighting: "Dense bioluminescent canopy glowing in pulsating emerald, violet, and gold, filtering strange dual-sunlight",
+        atmosphere: "Gentle hum of vibrating plant fibers, drifting glowing spore motes, distant melodic calls of airborne xenomorphs",
+        colorPalette: "Bioluminescent Emerald #00e676, Deep Spore Violet #7c4dff, Amber Pollen #ffb300",
+        architecturalStyle: "Colossal miles-high alien trees intertwined with crystalline flowers that act as organic computing nodes"
+      }
+    ],
+    options: [
+      { id: "A", title: "Harvest the Primary Seed Pod", text: "Carefully extract the glowing pollen core to synthesize an antidote to the neuro-spores.", dramaticHook: "Risk triggering a defensive neurotoxic pollen release.", expectedConsequence: "Secures the vital research sample but causes surrounding bio-vines to thrash violently." },
+      { id: "B", title: "Sever the Entangling Roots with Sonic Blades", text: "Slice the vines pinning the scout ship's engine nacelles to restore thrust before the hive awakens.", dramaticHook: "Direct mechanical escape before the canopy closes.", expectedConsequence: "Frees the ship's engines but damages the extraction gear." }
+    ]
   }
 ];
 
+/**
+ * Returns a unique story preset guaranteed not to duplicate any existing movie title in the database.
+ * If all 16 base presets have already been used, procedurally appends saga/part variations so
+ * duplicates are mathematically impossible.
+ */
+export function getUniqueStoryPreset(existingTitles: string[] = []): (typeof PRESET_STORIES)[0] {
+  const normalizedExisting = new Set(
+    existingTitles.map(t => (t || '').trim().toLowerCase()).filter(Boolean)
+  );
 
-export async function generateStoryBibleWithDeepSeek(customPrompt?: string): Promise<GeneratedStoryBible> {
+  // Find all presets whose base title has NOT been used in the database
+  const unusedPresets = PRESET_STORIES.filter(
+    p => !normalizedExisting.has(p.title.trim().toLowerCase())
+  );
+
+  if (unusedPresets.length > 0) {
+    const pick = unusedPresets[currentStoryRotation % unusedPresets.length];
+    currentStoryRotation++;
+    return pick;
+  }
+
+  // If ALL 16 base presets have already been used in the database, procedurally
+  // generate a unique saga/cycle title so no two movies ever collide.
+  const base = PRESET_STORIES[currentStoryRotation % PRESET_STORIES.length];
+  currentStoryRotation++;
+
+  const romanNumerals = ['II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+  const sagaSubtitles = [
+    'Resurgence',
+    'The Reckoning',
+    'Shadows of the Fallen',
+    'Ascension Protocol',
+    'Blackout Echo',
+    'Final Threshold',
+    'Zero Hour',
+    'The Obsidian Horizon',
+    'Genesis Convergence',
+    'Twilight of the Sentinels'
+  ];
+
+  let uniqueTitle = '';
+  for (const num of romanNumerals) {
+    const candidate = `${base.title}: Part ${num}`;
+    if (!normalizedExisting.has(candidate.toLowerCase())) {
+      uniqueTitle = candidate;
+      break;
+    }
+  }
+
+  if (!uniqueTitle) {
+    for (const sub of sagaSubtitles) {
+      const candidate = `${base.title} - ${sub}`;
+      if (!normalizedExisting.has(candidate.toLowerCase())) {
+        uniqueTitle = candidate;
+        break;
+      }
+    }
+  }
+
+  if (!uniqueTitle) {
+    uniqueTitle = `${base.title} (Cycle ${Date.now().toString().slice(-4)})`;
+  }
+
+  return {
+    ...base,
+    title: uniqueTitle
+  };
+}
+
+
+export async function generateStoryBibleWithDeepSeek(customPrompt?: string, existingTitles: string[] = []): Promise<GeneratedStoryBible> {
   const apiKey = getLlmApiKey();
 
   if (apiKey) {
@@ -543,13 +1741,16 @@ Respond ONLY with a valid JSON object matching this schema:
 }`;
 
       const isRealCustom = Boolean(customPrompt && !customPrompt.startsWith('force_reset_') && customPrompt.trim().length > 3);
+      const titleBlacklistNotice = existingTitles.length > 0
+        ? `\nTITLES ALREADY IN DATABASE (YOU MUST NOT DUPLICATE ANY OF THESE TITLES): ${existingTitles.slice(-25).map(t => `"${t}"`).join(', ')}\n`
+        : '';
       const dynamicGenre = sampleRandom(CREATIVE_GENRES);
       const dynamicProtagonist = sampleRandom(CREATIVE_PROTAGONISTS);
       const dynamicCatalyst = sampleRandom(CREATIVE_CATALYSTS);
       const dynamicAesthetic = sampleRandom(CREATIVE_AESTHETICS);
 
       const userMessage = isRealCustom 
-        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${customPrompt}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${customPrompt}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
         : `Create a high-tension interactive ${dynamicGenre} master bible featuring ${dynamicProtagonist} facing ${dynamicCatalyst} with visual aesthetic of ${dynamicAesthetic}, and the 4 opening scenes (1-minute continuous first-shot). Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
       const parsed = await callLlmJson<any>({
@@ -1686,7 +2887,7 @@ PRODUCT DESCRIPTION: ${params.description || 'No description — infer a plausib
  * Uses dynamic combinatorial seeds (genre, protagonist, catalyst, aesthetic)
  * and elevated temperature to guarantee unique results on every execution.
  */
-export async function generateBlockbusterCandidatesWithDeepSeek(): Promise<BlockbusterCandidate[]> {
+export async function generateBlockbusterCandidatesWithDeepSeek(existingTitles: string[] = []): Promise<BlockbusterCandidate[]> {
   const apiKey = getLlmApiKey();
 
   if (apiKey) {
@@ -1752,7 +2953,7 @@ MANDATORY RULES:
     }
   }
 
-  return getFallbackBlockbusterCandidates();
+  return getFallbackBlockbusterCandidates(existingTitles);
 }
 
 /**
@@ -1838,7 +3039,7 @@ const EXTENSIVE_FALLBACK_CANDIDATES = [
  * Curated procedural fallback: 4 varied candidates randomly selected and shuffled
  * from the extensive 12+ concept catalog to prevent repetition.
  */
-export function getFallbackBlockbusterCandidates(): BlockbusterCandidate[] {
+export function getFallbackBlockbusterCandidates(existingTitles: string[] = []): BlockbusterCandidate[] {
   const shuffled = [...EXTENSIVE_FALLBACK_CANDIDATES].sort(() => Math.random() - 0.5);
   const picks = shuffled.slice(0, 4);
 

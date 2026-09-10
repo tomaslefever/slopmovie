@@ -122,6 +122,8 @@ export default function CinemaStreamingPage() {
   // its end. The stage timer must NEVER advance while this is false (the video
   // is still playing), except for the stalled-media grace fallback.
   const videoEndedRef = useRef<boolean>(false);
+  const videoStartedRef = useRef<boolean>(false);
+  const currentStepRef = useRef<number>(-1);
 
   // Compute the REAL remaining seconds of the current phase from the server's
   // phaseEndsAt. Falls back to the fixed duration when the timestamp is missing
@@ -269,67 +271,72 @@ export default function CinemaStreamingPage() {
     }
   };
 
-  // 1. Fixed 15-second timeout for PLAYING stage.
-  // The counter only tracks the scene window; the ACTUAL transition waits for
-  // the video's 'ended' event (onPlaybackEnded) so the clip is never cut short.
-  // This also guarantees clips shorter than 15s don't advance early.
+  // 1. Playback timer for PLAYING stage.
+  // - Starts counting down when the video actually starts playing.
+  // - The transition triggers immediately when the video finishes (onPlaybackEnded).
+  // - If the countdown reaches 0 while the video is still playing, it does NOT reset to 15s.
+  //   It stays at 0s and smoothly completes the stage as soon as the video ends.
   useEffect(() => {
     if (!cinemaState || cinemaState.phase !== 'PLAYING' || cinemaState.isPaused) return;
 
     const stepNum = cinemaState.movie?.currentStep;
-    console.log(`[CinemaPage] Scene started (Step ${stepNum}). Running playback timeout...`);
+    if (stepNum === undefined) return;
 
-    videoEndedRef.current = false;
+    // Reset video flags when entering a new step
+    if (currentStepRef.current !== stepNum) {
+      currentStepRef.current = stepNum;
+      videoEndedRef.current = false;
+      videoStartedRef.current = false;
+    }
 
-    const startTime = Date.now();
-    // Sync to the server's real remaining time; fall back to 15s when unknown
-    const durationSec = getSyncedPhaseRemaining(cinemaState.phaseEndsAt, 15);
+    console.log(`[CinemaPage] Scene active (Step ${stepNum}). Waiting for video playback...`);
 
-    setCinemaState(prev => prev ? { ...prev, timeRemaining: durationSec } : prev);
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
+    const durationSec = 15;
+    let remaining = durationSec;
 
-    let graceInterval: ReturnType<typeof setInterval> | null = null;
+    const startCountdown = () => {
+      if (timer) return;
+      videoStartedRef.current = true;
+      const startTime = Date.now();
 
-    const finishScene = (force: boolean) => {
-      if (graceInterval) clearInterval(graceInterval);
-      console.log(`[CinemaPage] Playback window elapsed for Step ${stepNum}${force ? ' (video never ended — grace)' : ''}. Transitioning...`);
-      handleStageComplete('PLAYING');
+      timer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        remaining = Math.max(0, durationSec - elapsed);
+
+        setCinemaState(prev => {
+          if (!prev || prev.phase !== 'PLAYING') return prev;
+          if (prev.timeRemaining === remaining) return prev;
+          return { ...prev, timeRemaining: remaining };
+        });
+
+        if (remaining <= 0) {
+          if (timer) clearInterval(timer);
+          if (videoEndedRef.current) {
+            console.log(`[CinemaPage] Playback and countdown both finished for Step ${stepNum}. Transitioning to VOTING.`);
+            handleStageComplete('PLAYING');
+          } else {
+            console.log(`[CinemaPage] 15s countdown elapsed for Step ${stepNum} but video is still playing. Waiting for onPlaybackEnded...`);
+            // Safety fallback: if video is frozen or stalled, advance after 3.5s grace
+            fallbackTimeout = setTimeout(() => {
+              console.log(`[CinemaPage] Safety fallback elapsed for Step ${stepNum}. Advancing to VOTING.`);
+              handleStageComplete('PLAYING');
+            }, 3500);
+          }
+        }
+      }, 1000);
     };
 
-    const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const remaining = Math.max(0, durationSec - elapsed);
-
-      setCinemaState(prev => {
-        if (!prev || prev.phase !== 'PLAYING') return prev;
-        // 1-second resolution: bail out when unchanged so the page (and the
-        // video stage) does not re-render between whole seconds.
-        if (prev.timeRemaining === remaining) return prev;
-        return { ...prev, timeRemaining: remaining };
-      });
-
-      if (remaining <= 0) {
-        clearInterval(timer);
-        if (videoEndedRef.current) {
-          finishScene(false);
-        } else {
-          // The window is over but the clip is still playing: wait for it to
-          // actually end instead of cutting it mid-frame.
-          console.log(`[CinemaPage] Countdown finished for Step ${stepNum} but the video is still playing — waiting for it to end.`);
-          const graceStart = Date.now();
-          graceInterval = setInterval(() => {
-            if (videoEndedRef.current) {
-              finishScene(false);
-            } else if (Date.now() - graceStart >= 12000) {
-              finishScene(true);
-            }
-          }, 250);
-        }
-      }
-    }, 1000);
+    // If playback already marked as started, begin immediately; otherwise wait max 2.5s before beginning countdown
+    const maxStartDelay = setTimeout(() => {
+      startCountdown();
+    }, 2500);
 
     return () => {
-      clearInterval(timer);
-      if (graceInterval) clearInterval(graceInterval);
+      clearTimeout(maxStartDelay);
+      if (timer) clearInterval(timer);
+      if (fallbackTimeout) clearTimeout(fallbackTimeout);
     };
   }, [cinemaState?.phase, cinemaState?.movie?.currentStep, cinemaState?.isPaused]);
 
@@ -1029,9 +1036,14 @@ export default function CinemaStreamingPage() {
                 subtitleLanguage={subtitleLanguage}
                 onToggleSubtitles={handleToggleSubtitles}
                 onChangeSubtitleLanguage={handleChangeSubtitleLanguage}
+                onPlaybackStarted={() => {
+                  videoStartedRef.current = true;
+                }}
                 onAdCompleted={() => handleStageComplete('COMMERCIAL_BREAK')}
                 onPlaybackEnded={() => {
+                  console.log(`[CinemaPage] Video playback finished for Step ${cinemaState.movie?.currentStep}. Advancing to VOTING...`);
                   videoEndedRef.current = true;
+                  handleStageComplete('PLAYING');
                 }}
                 fullscreenContainerRef={stageContainerRef}
                 inSceneAd={

@@ -396,7 +396,9 @@ class CinemaOrchestrator {
       }
     }
 
-    const generated = await generateStoryBibleWithDeepSeek(customPrompt);
+    const dbMovies = await loadAllMoviesFromDb().catch(() => []);
+    const existingTitles = dbMovies.map(m => m.title).filter(Boolean);
+    const generated = await generateStoryBibleWithDeepSeek(customPrompt, existingTitles);
     const movieId = `movie_${Date.now()}`;
 
     // Ensure all props in the story bible have authentic reference assets stored in Supabase Storage
@@ -1137,7 +1139,9 @@ class CinemaOrchestrator {
   public async prepareBlockbusterVoting(): Promise<BlockbusterCandidate[]> {
     let candidates: BlockbusterCandidate[] = [];
     try {
-      candidates = await generateBlockbusterCandidatesWithDeepSeek();
+      const dbMovies = await loadAllMoviesFromDb().catch(() => []);
+      const existingTitles = dbMovies.map(m => m.title).filter(Boolean);
+      candidates = await generateBlockbusterCandidatesWithDeepSeek(existingTitles);
     } catch (err) {
       console.error('[Cinema] Error generating blockbuster candidates:', err);
     }

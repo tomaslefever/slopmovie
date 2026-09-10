@@ -22,6 +22,7 @@ interface CinemaPlayerProps {
   subtitleLanguage?: 'en' | 'es';
   onToggleSubtitles?: (enabled: boolean) => void;
   onChangeSubtitleLanguage?: (lang: 'en' | 'es') => void;
+  onPlaybackStarted?: () => void;
   onPlaybackEnded?: () => void;
   onAdCompleted?: () => void;
   onOpenBuyAds?: () => void;
@@ -55,6 +56,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   subtitleLanguage: initialSubtitleLanguage = 'en',
   onToggleSubtitles,
   onChangeSubtitleLanguage,
+  onPlaybackStarted,
   onPlaybackEnded,
   onAdCompleted,
   onOpenBuyAds,
@@ -304,6 +306,10 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         onTimeUpdate={handleTimeUpdate}
         onError={handleVideoError}
         onEnded={handleEnded}
+        onPlaying={() => {
+          errorStreakRef.current = 0;
+          onPlaybackStarted?.();
+        }}
         onCanPlay={() => {
           errorStreakRef.current = 0;
         }}
