@@ -173,9 +173,9 @@ export async function GET(request: Request) {
     activeAd: liveState?.activeAd || null,
     adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
     apiStatus: {
-      hasDeepseek: Boolean(process.env.DEEPSEEK_API_KEY),
+      hasDeepseek: Boolean(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY),
       hasFal: Boolean(process.env.FAL_KEY),
-      isMockMode: !process.env.DEEPSEEK_API_KEY || !process.env.FAL_KEY
+      isMockMode: !(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY) || !process.env.FAL_KEY
     },
     userId,
     hasUserVoted,

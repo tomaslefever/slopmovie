@@ -17,7 +17,92 @@ function trackDeepseekUsage(label: string, usage?: { prompt_tokens?: number; com
   if (!usage) return;
   cumulativePromptTokens += usage.prompt_tokens || 0;
   cumulativeCompletionTokens += usage.completion_tokens || 0;
-  console.log(`[DeepSeek tokens] ${label}: prompt=${usage.prompt_tokens ?? '?'} completion=${usage.completion_tokens ?? '?'} (cumulative: ${cumulativePromptTokens}/${cumulativeCompletionTokens})`);
+  console.log(`[DeepSeek/NVIDIA tokens] ${label}: prompt=${usage.prompt_tokens ?? '?'} completion=${usage.completion_tokens ?? '?'} (cumulative: ${cumulativePromptTokens}/${cumulativeCompletionTokens})`);
+}
+
+// ── NVIDIA NIM / LLM Configuration ──────────────────────────────────────────
+const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
+const DEFAULT_MODEL = "deepseek-ai/deepseek-v4-pro-0813";
+
+export function getLlmApiKey(): string | undefined {
+  const key = process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY;
+  return key?.trim() || undefined;
+}
+
+export function getLlmEndpoint(): string {
+  const custom = process.env.DEEPSEEK_BASE_URL || process.env.NVIDIA_BASE_URL;
+  if (!custom) {
+    return `${NVIDIA_BASE_URL}/chat/completions`;
+  }
+  const clean = custom.trim().replace(/\/+$/, '');
+  return clean.endsWith('/chat/completions') ? clean : `${clean}/chat/completions`;
+}
+
+export function getLlmModel(): string {
+  return process.env.DEEPSEEK_MODEL || DEFAULT_MODEL;
+}
+
+export function cleanAndParseJson<T = any>(raw: string): T {
+  let cleaned = (raw || '').trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  }
+  return JSON.parse(cleaned);
+}
+
+export interface CallLlmParams {
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+  seed?: number;
+  response_format?: { type: string };
+  label: string;
+}
+
+export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | null> {
+  const apiKey = getLlmApiKey();
+  if (!apiKey) return null;
+
+  const endpoint = getLlmEndpoint();
+  const model = getLlmModel();
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: params.messages,
+        temperature: params.temperature ?? 1,
+        top_p: params.top_p ?? 0.95,
+        max_tokens: params.max_tokens ?? 16384,
+        seed: params.seed ?? 42,
+        chat_template_kwargs: { thinking: false },
+        response_format: params.response_format ?? { type: "json_object" },
+        stream: false
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.warn(`[NVIDIA LLM ${params.label}] HTTP ${response.status}: ${errorText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    trackDeepseekUsage(params.label, data.usage);
+    const content = data.choices?.[0]?.message?.content;
+    if (!content || typeof content !== 'string') return null;
+
+    return cleanAndParseJson<T>(content);
+  } catch (err) {
+    console.warn(`[NVIDIA LLM ${params.label}] Request or parsing error:`, err);
+    return null;
+  }
 }
 
 export interface GeneratedStoryBible {
@@ -302,7 +387,7 @@ const PRESET_STORIES = [
 
 
 export async function generateStoryBibleWithDeepSeek(customPrompt?: string): Promise<GeneratedStoryBible> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = getLlmApiKey();
 
   if (apiKey) {
     try {
@@ -458,29 +543,17 @@ Respond ONLY with a valid JSON object matching this schema:
         ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${customPrompt}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH.`
         : `Create a high-tension interactive sci-fi cyberpunk noir thriller master bible and the 4 opening scenes (1-minute continuous first-shot). Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH.`;
 
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage }
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.85,
-          max_tokens: 6000
-        })
+      const parsed = await callLlmJson<any>({
+        label: 'story-bible',
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage }
+        ],
+        temperature: 1,
+        max_tokens: 16384
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        trackDeepseekUsage('story-bible', data.usage);
-        const content = data.choices[0]?.message?.content;
-        const parsed = JSON.parse(content);
+      if (parsed) {
         
         const rawSteps = Array.isArray(parsed.initialSteps) && parsed.initialSteps.length > 0
           ? parsed.initialSteps
@@ -716,7 +789,7 @@ export async function generateNextStepWithDeepSeek(
   previousStep: MovieStep,
   commentInfluence?: CommentInfluence
 ): Promise<MovieStep> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = getLlmApiKey();
   const nextStepNum = previousStep.stepNumber + 1;
   const chosenOption = previousStep.options.find(o => o.id === chosenOptionId) || previousStep.options[0];
 
@@ -781,28 +854,17 @@ Props: ${movie.bible.props.map(p => `${p.id}:${p.name}`).join('; ') || 'none'}
 ${antiRepeatDirective}
 ${influenceDirective}`;
 
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userContext }
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.8,
-          max_tokens: 2500
-        })
+      const parsed = await callLlmJson<any>({
+        label: 'next-step',
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContext }
+        ],
+        temperature: 1,
+        max_tokens: 16384
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        trackDeepseekUsage('next-step', data.usage);
-        const parsed = JSON.parse(data.choices[0]?.message?.content);
+      if (parsed) {
 
         // Formulate new character and associated prop if introduced
         let newCharacter: Character | undefined = undefined;
@@ -1175,7 +1237,7 @@ ${influenceDirective}`;
 }
 
 export async function generateMovieFinalSummaryWithDeepSeek(movie: Movie): Promise<{ finalSummary: string; finalSynopsis: string }> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = getLlmApiKey();
 
   if (apiKey) {
     try {
@@ -1197,28 +1259,17 @@ Characters in story: ${movie.bible.characters.map(c => `${c.name} (${c.role})`).
 Key props used: ${movie.bible.props.map(p => `${p.name} (${p.narrativeSignificance})`).join(', ')}
 Major milestones: ${movie.steps.slice(0, 15).map(s => `Step ${s.stepNumber}: Option ${s.selectedOption} won (${s.title})`).join(' | ')}...`;
 
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userContent }
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.7,
-          max_tokens: 1200
-        })
+      const parsed = await callLlmJson<any>({
+        label: 'final-summary',
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent }
+        ],
+        temperature: 1,
+        max_tokens: 16384
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        trackDeepseekUsage('final-summary', data.usage);
-        const parsed = JSON.parse(data.choices[0]?.message?.content);
+      if (parsed) {
         return {
           finalSynopsis: parsed.finalSynopsis || movie.initialPlot,
           finalSummary: parsed.finalSummary || "The film successfully concluded its community-driven 50-step cinematic odyssey."
@@ -1332,7 +1383,7 @@ export async function generateImmersiveAdPromptWithDeepSeek(params: {
   characters: string;
   environment: string;
 }): Promise<string | null> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = getLlmApiKey();
   if (!apiKey) return null;
 
   try {
@@ -1357,28 +1408,17 @@ CURRENT ENVIRONMENT/SCENE: ${params.environment}
 SPONSOR: "${params.brandName}" — "${params.title}"${params.tagline ? ` (tagline: "${params.tagline}")` : ''}
 PRODUCT DESCRIPTION: ${params.description || 'No description — infer a plausible in-world form from the brand name.'}`;
 
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.8,
-        max_tokens: 600
-      })
+    const parsed = await callLlmJson<any>({
+      label: 'immersive-ad-prompt',
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent }
+      ],
+      temperature: 1,
+      max_tokens: 16384
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      trackDeepseekUsage('immersive-ad-prompt', data.usage);
-      const parsed = JSON.parse(data.choices[0]?.message?.content);
+    if (parsed) {
       const adPrompt = parsed.adPrompt;
       if (typeof adPrompt === 'string' && adPrompt.trim().length > 40) {
         return adPrompt.trim();
@@ -1401,7 +1441,7 @@ PRODUCT DESCRIPTION: ${params.description || 'No description — infer a plausib
  * and elevated temperature to guarantee unique results on every execution.
  */
 export async function generateBlockbusterCandidatesWithDeepSeek(): Promise<BlockbusterCandidate[]> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = getLlmApiKey();
 
   if (apiKey) {
     try {
@@ -1435,28 +1475,17 @@ MANDATORY RULES:
   ]
 }`;
 
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: `Generate 4 wildly different, fresh and compelling blockbuster candidate pitches now. Timestamp entropy: ${Date.now()}` }
-          ],
-          response_format: { type: "json_object" },
-          temperature: 1.0,
-          max_tokens: 1200
-        })
+      const parsed = await callLlmJson<any>({
+        label: 'blockbuster-candidates',
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Generate 4 wildly different, fresh and compelling blockbuster candidate pitches now. Timestamp entropy: ${Date.now()}` }
+        ],
+        temperature: 1.0,
+        max_tokens: 16384
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        trackDeepseekUsage('blockbuster-candidates', data.usage);
-        const parsed = JSON.parse(data.choices[0]?.message?.content);
+      if (parsed) {
         const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [];
 
         const candidates: BlockbusterCandidate[] = rawCandidates.slice(0, 4).map((c: any, idx: number) => ({

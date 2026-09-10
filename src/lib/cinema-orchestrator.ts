@@ -1885,9 +1885,9 @@ class CinemaOrchestrator {
       activeAd: this.activeAd,
       adsConfig: this.adsConfig,
       apiStatus: {
-        hasDeepseek: Boolean(process.env.DEEPSEEK_API_KEY),
+        hasDeepseek: Boolean(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY),
         hasFal: Boolean(process.env.FAL_KEY),
-        isMockMode: !process.env.DEEPSEEK_API_KEY || !process.env.FAL_KEY
+        isMockMode: !(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY) || !process.env.FAL_KEY
       }
     };
   }
