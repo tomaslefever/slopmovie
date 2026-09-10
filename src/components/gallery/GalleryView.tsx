@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Movie, MovieStep, SubtitleCue } from '@/types/cinema';
-import { Film, Play, ArrowLeft, Users, CheckCircle2, Volume2, VolumeX, Sparkles, Radio, BookOpen, ChevronRight, Box, Subtitles, Check } from 'lucide-react';
+import { Film, Play, ArrowLeft, Users, CheckCircle2, Volume2, VolumeX, Sparkles, Radio, BookOpen, ChevronRight, Box, Subtitles, Check, CalendarDays } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { audioCues } from '@/lib/audio-cues';
 
@@ -49,6 +49,14 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onBackToLive, activeMo
     audioCues.playClick();
     setPlaybackStepIndex(index);
     setCurrentTime(0);
+  };
+
+  const formatPlaybackDate = (movie: Movie): string => {
+    const raw = movie.completedAt || movie.createdAt;
+    if (!raw) return 'Unknown date';
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return 'Unknown date';
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   // If a movie is selected for continuous playback
@@ -311,7 +319,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onBackToLive, activeMo
             <div>
               <div className="flex items-center space-x-2.5 mb-1.5">
                 <span className="px-2.5 py-0.5 rounded-full bg-red-500 text-black text-[10px] font-mono font-black uppercase tracking-widest animate-pulse">
-                  LIVE STREAMING NOW
+                  LIVE NOW
                 </span>
                 <span className="text-xs font-mono text-cyan-400">
                   Supabase Realtime Synchronized
@@ -394,6 +402,10 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ onBackToLive, activeMo
                 <h3 className="text-lg font-bold text-white group-hover:text-cyan-300 transition-colors mb-2">
                   {movie.title}
                 </h3>
+                <div className="flex items-center space-x-1.5 text-[11px] font-mono text-neutral-400 mb-3">
+                  <CalendarDays className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Played on {formatPlaybackDate(movie)}</span>
+                </div>
                 <p className="text-xs text-neutral-300 leading-relaxed line-clamp-3 mb-3">
                   {movie.finalSynopsis || movie.tagline || movie.initialPlot}
                 </p>

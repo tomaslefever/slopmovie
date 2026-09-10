@@ -747,8 +747,26 @@ Rules:
 5. "activeCharacters": only characters on screen.
 6. CINEMATIQUE "visualPrompt": Craft a rich 6-layer visual prompt: [Shot Framing: MCU / Cowboy / ECU / Choker / Low-Angle / OTS] + [Subject & Wardrobe] + [Setting Architecture with Foreground/Mid/Background Depth] + [Lighting: Chiaroscuro / Rembrandt / Motivated practicals / Kelvin Temp] + [Lenses & Stock: Panavision anamorphic oval bokeh / Cooke S4 warmth / Zeiss sharpness / Kodak Vision3 500T grain] + [Atmosphere & 24fps film still].
 7. CINEMATIQUE "cameraMotionPrompt": Craft a rich 4-layer camera prompt: [Rig: Steadicam glide / Slow dolly push-in / Lateral track with 3-layer parallax / Technocrane arc / Dolly zoom vertigo] + [Pacing & Trajectory] + [Focal length & Focus pull/Rack focus] + [Optical flare physics & 24fps motion blur].
+8. The two voting "options" MUST be a genuinely NEW dilemma every scene: never repeat, re-title or re-skin an option already offered earlier in this film (the previous-options ledger is in the user message). Invent fresh stakes, fresh risks and fresh consequences each time — a voter should never recognize an earlier choice in a new costume.
 Respond ONLY with JSON:
 {"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""}],"voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":""},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":""}]}`;
+
+      // Compact ledger of every voting option already offered in this film.
+      // Without it the model has no memory of past dilemmas and recycles the
+      // same generic binaries (attack vs stealth, trust vs betray) all movie long.
+      const usedOptionsLedger = (() => {
+        const past = movie.steps
+          .filter(s => s.stepNumber < nextStepNum && Array.isArray(s.options) && s.options.length >= 2 && s.options[0]?.title && s.options[1]?.title)
+          .slice(-12);
+        if (past.length === 0) return 'none yet — this is the first audience vote.';
+        return past.map(s =>
+          `Step ${s.stepNumber}: A) "${s.options[0].title}"${s.selectedOption === 'A' ? ' [CHOSEN BY AUDIENCE]' : ''} — B) "${s.options[1].title}"${s.selectedOption === 'B' ? ' [CHOSEN BY AUDIENCE]' : ''}`
+        ).join('\n');
+      })();
+
+      const antiRepeatDirective = `PREVIOUS VOTING OPTIONS ALREADY OFFERED IN THIS FILM (forbidden to repeat — do NOT reuse, re-title or re-skin ANY of these):
+${usedOptionsLedger}
+For Step ${nextStepNum} invent TWO options that have never appeared in this film: a brand-new dilemma with new stakes, a new risk trade-off and a new consequence. Check the ledger: if one of your two options resembles an earlier one, discard it and invent something genuinely different.`;
 
       // Compact user message: only the context this scene needs (no bible dump,
       // no video URLs, compact id:name rosters).
@@ -760,6 +778,7 @@ Previous scene ${previousStep.stepNumber} "${previousStep.title}": ${previousSte
 Audience chose OPTION ${chosenOptionId}: "${chosenOption.title}" — ${chosenOption.text}${chosenOption.expectedConsequence ? ` (${chosenOption.expectedConsequence})` : ''}
 Characters: ${movie.bible.characters.map(c => `${c.id}:${c.name}(${c.role})`).join('; ') || 'none'}
 Props: ${movie.bible.props.map(p => `${p.id}:${p.name}`).join('; ') || 'none'}
+${antiRepeatDirective}
 ${influenceDirective}`;
 
       const response = await fetch("https://api.deepseek.com/chat/completions", {
