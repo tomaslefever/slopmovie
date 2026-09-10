@@ -1394,7 +1394,7 @@ export async function acquireOrRenewWorkerLock(workerId: string): Promise<boolea
 
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
-  const staleThreshold = 6000; // 6 seconds threshold
+  const staleThreshold = 15000; // 15 seconds threshold (accommodates 5s heartbeat interval)
 
   // 1. Try public.cinema_state if available in Supabase
   try {

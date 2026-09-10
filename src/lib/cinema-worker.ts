@@ -28,7 +28,7 @@ class CinemaWorker {
 
     console.log(`[CinemaWorker] Starting background worker (${this.workerId})...`);
 
-    // Run tick every 1000ms
+    // Run tick every 5000ms (reduced from 1000ms to conserve database/realtime egress)
     this.interval = setInterval(async () => {
       if (this.isBusy) return;
       this.isBusy = true;
@@ -58,7 +58,7 @@ class CinemaWorker {
       } finally {
         this.isBusy = false;
       }
-    }, 1000);
+    }, 5000);
   }
 
   public stop() {
