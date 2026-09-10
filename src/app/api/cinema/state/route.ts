@@ -411,6 +411,33 @@ export async function POST(request: Request) {
       });
     }
 
+    if (action === 'bulk_delete_movies') {
+      const { movieIds } = body;
+      if (!Array.isArray(movieIds) || movieIds.length === 0) {
+        return NextResponse.json({ error: 'movieIds debe ser un array no vacío' }, { status: 400 });
+      }
+      const result = await cinemaEngine.bulkDeleteMovies(movieIds);
+      return NextResponse.json({
+        success: result.success,
+        deletedCount: result.deletedCount,
+        movie: result.newMovie,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'bulk_update_movies') {
+      const { movieIds, fields } = body;
+      if (!Array.isArray(movieIds) || movieIds.length === 0 || !fields || typeof fields !== 'object') {
+        return NextResponse.json({ error: 'movieIds (array) y fields (objeto) son requeridos' }, { status: 400 });
+      }
+      const result = await cinemaEngine.bulkUpdateMovies(movieIds, fields);
+      return NextResponse.json({
+        success: result.success,
+        updatedCount: result.updatedCount,
+        state: cinemaEngine.getState()
+      });
+    }
+
     return NextResponse.json({ error: 'Acción desconocida' }, { status: 400 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Error en el servidor' }, { status: 500 });

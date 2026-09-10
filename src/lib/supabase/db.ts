@@ -861,6 +861,56 @@ export async function deleteMovieFromDb(movieId: string): Promise<boolean> {
 }
 
 /**
+ * Bulk delete multiple movies from DB.
+ */
+export async function deleteMoviesFromDb(movieIds: string[]): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase || !movieIds || movieIds.length === 0) return false;
+
+  try {
+    const { error } = await supabase.from('movies').delete().in('id', movieIds);
+    if (error) {
+      logSupabaseError('deleteMoviesFromDb', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Exception in deleteMoviesFromDb:', err);
+    return false;
+  }
+}
+
+/**
+ * Bulk update multiple movies in DB (e.g. genre or status).
+ */
+export async function updateMoviesInDb(
+  movieIds: string[],
+  fields: { genre?: string; status?: string; tagline?: string }
+): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase || !movieIds || movieIds.length === 0) return false;
+
+  try {
+    const update: Record<string, string> = {};
+    if (fields.genre !== undefined && fields.genre.trim()) update.genre = fields.genre.trim();
+    if (fields.status !== undefined && fields.status.trim()) update.status = fields.status.trim();
+    if (fields.tagline !== undefined) update.tagline = fields.tagline.trim();
+
+    if (Object.keys(update).length === 0) return false;
+
+    const { error } = await supabase.from('movies').update(update).in('id', movieIds);
+    if (error) {
+      logSupabaseError('updateMoviesInDb', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Exception in updateMoviesInDb:', err);
+    return false;
+  }
+}
+
+/**
  * Persist (upsert) a viewer's next-blockbuster vote. One vote per user per movie.
  */export async function persistBlockbusterVote(
   movieId: string,

@@ -152,7 +152,7 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   const progressPercent = Math.max(0, Math.min(100, (timeRemaining / (ad.duration || 10)) * 100));
 
   return (
-    <div className="absolute inset-0 z-40 bg-[#030407] flex items-center justify-center overflow-hidden select-none">
+    <div className="absolute inset-0 z-40 bg-[#030407] overflow-hidden select-none">
       {/* Background Media / Video */}
       {activeVideoSrc ? (
         <video
@@ -241,12 +241,12 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
         </div>
       </div>
 
-      {/* Main Content Floating Minicard */}
+      {/* Main Content Floating Minicard: Absolute Bottom-Left */}
       <motion.div
-        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-50 w-[min(92%,22rem)] p-3 sm:p-4 rounded-2xl bg-neutral-950/85 border border-white/15 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex flex-col space-y-2 sm:space-y-2.5"
+        className="absolute bottom-5 left-4 sm:bottom-6 sm:left-6 z-50 w-[min(90vw,20rem)] sm:w-80 md:w-84 p-3 sm:p-3.5 rounded-2xl bg-neutral-950/90 border border-white/15 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.85)] flex flex-col space-y-2 pointer-events-auto"
       >
         {/* Brand Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
@@ -257,48 +257,31 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
             </h4>
           </div>
 
-          <div className="hidden sm:flex items-center space-x-1 text-[9px] font-mono text-neutral-400 uppercase tracking-wider shrink-0">
+          <div className="flex items-center space-x-1 text-[9px] font-mono text-neutral-400 uppercase tracking-wider shrink-0">
             <ShieldCheck className="w-3 h-3 text-cyan-400" />
-            <span>Official Partner</span>
+            <span>Sponsor</span>
           </div>
         </div>
 
-        {/* Title and Tagline */}
-        <div className="space-y-0.5 min-w-0">
-          <h2 className="text-sm sm:text-base font-black text-white tracking-tight leading-tight line-clamp-2">
+        {/* Title */}
+        <div className="min-w-0">
+          <h2 className="text-sm sm:text-base font-black text-white tracking-tight leading-snug line-clamp-2">
             {ad.title}
           </h2>
-          {ad.tagline && (
-            <p className="text-[10px] sm:text-[11px] font-medium text-neutral-300 italic truncate">
-              "{ad.tagline}"
-            </p>
-          )}
         </div>
 
-        {/* Description (desktop only, clamped) */}
-        {ad.description && (
-          <p className="hidden sm:block text-[10px] text-neutral-400 leading-relaxed font-sans line-clamp-2">
-            {ad.description}
+        {/* Description */}
+        {(ad.description || ad.tagline) && (
+          <p className="text-[11px] text-neutral-300 font-sans leading-relaxed line-clamp-2">
+            {ad.description || ad.tagline}
           </p>
         )}
 
-        {/* Sponsor Audience Perk (if available) */}
-        {ad.perkReward && (
-          <div className="p-2 rounded-xl bg-gradient-to-r from-amber-500/10 via-cyan-500/10 to-transparent border border-amber-400/20 flex items-center space-x-2">
-            <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 shrink-0">
-              <Gift className="w-3 h-3" />
-            </div>
-            <span className="text-[10px] text-neutral-200 font-medium truncate">
-              {ad.perkReward}
-            </span>
-          </div>
-        )}
-
-        {/* Interactive Call to Action */}
-        <div className="pt-1 flex items-center gap-2">
+        {/* Interactive Call to Action (CTA) */}
+        <div className="pt-0.5 flex items-center gap-2">
           <button
             onClick={handleCtaClick}
-            className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black font-mono font-bold text-[10px] uppercase tracking-widest flex items-center justify-center space-x-1.5 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_25px_rgba(245,158,11,0.4)]"
+            className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black font-mono font-bold text-[10px] uppercase tracking-widest flex items-center justify-center space-x-1.5 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_20px_rgba(245,158,11,0.4)]"
           >
             <Sparkles className="w-3 h-3 text-black shrink-0" />
             <span className="truncate">{ad.ctaText || 'Access Sponsor Terminal'}</span>
@@ -319,7 +302,7 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
               audioCues.playClick();
               onOpenBuyAds();
             }}
-            className="text-[9px] font-mono text-neutral-400 hover:text-amber-300 underline underline-offset-4 transition-colors text-center w-full"
+            className="text-[9px] font-mono text-neutral-400 hover:text-amber-300 underline underline-offset-4 transition-colors text-center w-full pt-0.5"
           >
             Want your brand here? Buy Ad Showcase
           </button>

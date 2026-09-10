@@ -64,13 +64,13 @@ export const InSceneProductHotspot: React.FC<InSceneProductHotspotProps> = ({ ad
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 15, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="w-60 p-3 rounded-xl bg-neutral-950/90 border border-amber-400/30 backdrop-blur-2xl shadow-[0_15px_40px_rgba(0,0,0,0.8)] space-y-2"
+            className="w-64 sm:w-72 p-3 sm:p-3.5 rounded-2xl bg-neutral-950/90 border border-amber-400/30 backdrop-blur-2xl shadow-[0_15px_40px_rgba(0,0,0,0.85)] space-y-2 select-none"
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
               <div className="flex items-center space-x-1.5 min-w-0">
                 <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
-                <span className="text-[9px] font-mono font-bold text-amber-300 uppercase tracking-widest truncate">
+                <span className="text-[10px] font-mono font-bold text-amber-300 uppercase tracking-widest truncate">
                   {ad.brandName} • Product Scan
                 </span>
               </div>
@@ -82,37 +82,24 @@ export const InSceneProductHotspot: React.FC<InSceneProductHotspotProps> = ({ ad
               </button>
             </div>
 
-            {/* Product Image Thumbnail */}
-            {ad.imageUrl && (
-              <div className="w-full h-20 rounded-lg overflow-hidden relative border border-white/10">
-                <img
-                  src={ad.imageUrl}
-                  alt={ad.title}
-                  className="w-full h-full object-cover object-center filter brightness-90 hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                <span className="absolute bottom-1.5 left-1.5 text-[9px] font-mono text-amber-300 font-semibold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md">
-                  Diegetic Placement
-                </span>
-              </div>
-            )}
-
-            {/* Title & Tagline */}
+            {/* Title */}
             <div className="min-w-0">
-              <h4 className="text-[11px] font-bold text-white leading-tight truncate">
+              <h4 className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2">
                 {ad.title}
               </h4>
-              {ad.tagline && (
-                <p className="text-[10px] text-neutral-400 italic truncate">
-                  "{ad.tagline}"
-                </p>
-              )}
             </div>
+
+            {/* Description */}
+            {(ad.description || ad.tagline) && (
+              <p className="text-[11px] text-neutral-300 leading-relaxed font-sans line-clamp-2">
+                {ad.description || ad.tagline}
+              </p>
+            )}
 
             {/* Interactive CTA */}
             <button
               onClick={handleCtaClick}
-              className="w-full py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-[9px] uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black font-mono font-bold text-[10px] uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-transform hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_15px_rgba(245,158,11,0.3)]"
             >
               <span className="truncate">{ad.ctaText || 'Inspect Product'}</span>
               <ExternalLink className="w-3 h-3 text-black shrink-0" />

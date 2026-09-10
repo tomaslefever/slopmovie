@@ -27,7 +27,13 @@ import {
   Pencil,
   X,
   BarChart3,
-  ExternalLink
+  ExternalLink,
+  CheckSquare,
+  Square,
+  Search,
+  Filter,
+  Layers,
+  Clapperboard
 } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
@@ -65,7 +71,7 @@ export default function AdminDashboardPage() {
     adIntervalSteps: 5,
     lastAdStep: 0
   });
-  const [activeTab, setActiveTab] = useState<'ads' | 'movie' | 'stats'>('ads');
+  const [activeTab, setActiveTab] = useState<'ads' | 'movie' | 'movies' | 'stats'>('ads');
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
   const [customPremise, setCustomPremise] = useState('');
   const [isTogglingPause, setIsTogglingPause] = useState(false);
@@ -79,8 +85,9 @@ export default function AdminDashboardPage() {
   const [isSavingModelConfig, setIsSavingModelConfig] = useState(false);
   const modelDirtyRef = useRef(false);
 
-  // Movie edit state
+  // Movie edit & creation state
   const [isEditingMovie, setIsEditingMovie] = useState(false);
+  const [editingTargetMovie, setEditingTargetMovie] = useState<any | null>(null);
   const [editMovieTitle, setEditMovieTitle] = useState('');
   const [editMovieGenre, setEditMovieGenre] = useState('');
   const [editMovieTagline, setEditMovieTagline] = useState('');
@@ -89,6 +96,19 @@ export default function AdminDashboardPage() {
   const [isCreatingMovie, setIsCreatingMovie] = useState(false);
   const [isDeletingMovie, setIsDeletingMovie] = useState(false);
   const [isPreparingBlockbusterVote, setIsPreparingBlockbusterVote] = useState(false);
+
+  // Bulk movie management state
+  const [selectedMovieIds, setSelectedMovieIds] = useState<string[]>([]);
+  const [movieSearchQuery, setMovieSearchQuery] = useState('');
+  const [movieGenreFilter, setMovieGenreFilter] = useState('all');
+  const [movieStatusFilter, setMovieStatusFilter] = useState('all');
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [isBulkEditing, setIsBulkEditing] = useState(false);
+  const [bulkEditGenre, setBulkEditGenre] = useState('');
+  const [bulkEditStatus, setBulkEditStatus] = useState('');
+  const [bulkEditTagline, setBulkEditTagline] = useState('');
 
   // Stats state
   const [stats, setStats] = useState<{ visitsByDay: { date: string; count: number }[]; totalVisits: number; todayVisits: number; activeViewers: number } | null>(null);
@@ -664,21 +684,24 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Open the edit form pre-filled with the movie currently in emission
-  const openEditMovie = () => {
+  // Open the edit form pre-filled with a specific movie or the one currently in emission
+  const openEditMovie = (target?: any) => {
     audioCues.playClick();
-    if (!cinemaState?.movie) return;
-    setEditMovieTitle(cinemaState.movie.title || '');
-    setEditMovieGenre(cinemaState.movie.genre || '');
-    setEditMovieTagline(cinemaState.movie.tagline || '');
-    setEditMoviePlot(cinemaState.movie.initialPlot || '');
+    const movie = target || cinemaState?.movie;
+    if (!movie) return;
+    setEditingTargetMovie(movie);
+    setEditMovieTitle(movie.title || '');
+    setEditMovieGenre(movie.genre || '');
+    setEditMovieTagline(movie.tagline || '');
+    setEditMoviePlot(movie.initialPlot || '');
     setIsEditingMovie(true);
   };
 
-  // Save edited movie details
+  // Save edited movie details (supports any target movie)
   const handleSaveMovieEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cinemaState?.movie) return;
+    const target = editingTargetMovie || cinemaState?.movie;
+    if (!target) return;
     if (!editMovieTitle.trim()) return;
 
     setIsSavingMovie(true);
@@ -689,7 +712,7 @@ export default function AdminDashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'update_movie',
-          movieId: cinemaState.movie.id,
+          movieId: target.id,
           fields: {
             title: editMovieTitle.trim(),
             genre: editMovieGenre.trim(),
@@ -702,7 +725,8 @@ export default function AdminDashboardPage() {
         const data = await res.json();
         if (data.success) {
           setIsEditingMovie(false);
-          showFeedback('✏️ Película actualizada.');
+          setEditingTargetMovie(null);
+          showFeedback('✏️ Película actualizada correctamente.');
           fetchData();
         } else {
           showFeedback('No se pudo actualizar la película');
@@ -748,6 +772,145 @@ export default function AdminDashboardPage() {
       showFeedback('Error de red al eliminar la película');
     } finally {
       setIsDeletingMovie(false);
+    }
+  };
+
+  // Delete a specific movie by ID
+  const handleDeleteSpecificMovie = async (movieId: string, title?: string) => {
+    audioCues.playClick();
+    if (!confirm(`🗑️ ¿Eliminar definitivamente "${title || movieId}"? Sus escenas, votos y chat se borrarán.`)) return;
+
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_movie', movieId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setSelectedMovieIds(prev => prev.filter(id => id !== movieId));
+          showFeedback('🗑️ Película eliminada correctamente.');
+          fetchData();
+        } else {
+          showFeedback('No se pudo eliminar la película');
+        }
+      } else {
+        showFeedback('Error al eliminar la película');
+      }
+    } catch {
+      showFeedback('Error de red al eliminar la película');
+    }
+  };
+
+  // Bulk movie selection handlers
+  const toggleSelectMovie = (id: string) => {
+    audioCues.playClick();
+    setSelectedMovieIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllVisible = (visibleIds: string[]) => {
+    audioCues.playClick();
+    const allSelected = visibleIds.every(id => selectedMovieIds.includes(id));
+    if (allSelected) {
+      setSelectedMovieIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedMovieIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const clearMovieSelection = () => {
+    audioCues.playClick();
+    setSelectedMovieIds([]);
+  };
+
+  // Execute bulk delete
+  const handleExecuteBulkDelete = async () => {
+    if (selectedMovieIds.length === 0) return;
+    audioCues.playClick();
+    setIsBulkDeleting(true);
+
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bulk_delete_movies',
+          movieIds: selectedMovieIds
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          showFeedback(`🗑️ ${data.deletedCount || selectedMovieIds.length} película(s) eliminada(s) en masa.`);
+          setSelectedMovieIds([]);
+          setShowBulkDeleteModal(false);
+          fetchData();
+        } else {
+          showFeedback('No se pudieron eliminar las películas en masa.');
+        }
+      } else {
+        showFeedback('Error en el servidor al eliminar en masa.');
+      }
+    } catch {
+      showFeedback('Error de red al ejecutar eliminación en masa.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  // Execute bulk edit
+  const handleExecuteBulkEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedMovieIds.length === 0) return;
+
+    const fields: any = {};
+    if (bulkEditGenre.trim()) fields.genre = bulkEditGenre.trim();
+    if (bulkEditStatus.trim()) fields.status = bulkEditStatus.trim();
+    if (bulkEditTagline.trim()) fields.tagline = bulkEditTagline.trim();
+
+    if (Object.keys(fields).length === 0) {
+      showFeedback('Debes especificar al menos un campo para editar en masa.');
+      return;
+    }
+
+    audioCues.playClick();
+    setIsBulkEditing(true);
+
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bulk_update_movies',
+          movieIds: selectedMovieIds,
+          fields
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          showFeedback(`✏️ ${data.updatedCount || selectedMovieIds.length} película(s) actualizadas en masa.`);
+          setSelectedMovieIds([]);
+          setShowBulkEditModal(false);
+          setBulkEditGenre('');
+          setBulkEditStatus('');
+          setBulkEditTagline('');
+          fetchData();
+        } else {
+          showFeedback('No se pudieron actualizar las películas en masa.');
+        }
+      } else {
+        showFeedback('Error en el servidor al actualizar en masa.');
+      }
+    } catch {
+      showFeedback('Error de red al ejecutar edición en masa.');
+    } finally {
+      setIsBulkEditing(false);
     }
   };
 
@@ -1055,6 +1218,18 @@ export default function AdminDashboardPage() {
           >
             <Film className="w-4 h-4" />
             <span>Movie & Blockbuster Rotation</span>
+          </button>
+
+          <button
+            onClick={() => { audioCues.playClick(); setActiveTab('movies'); }}
+            className={`px-4 py-2 rounded-xl font-mono text-xs font-bold tracking-wider uppercase flex items-center space-x-2 transition-all ${
+              activeTab === 'movies'
+                ? 'bg-rose-500 text-black shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+                : 'bg-neutral-900 text-neutral-400 hover:text-white border border-white/5'
+            }`}
+          >
+            <Clapperboard className="w-4 h-4" />
+            <span>Listado de Películas ({allMovies.length})</span>
           </button>
 
           <button
@@ -1750,6 +1925,14 @@ export default function AdminDashboardPage() {
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>{isDeletingMovie ? '...' : 'Eliminar'}</span>
                         </button>
+                        <button
+                          onClick={() => { audioCues.playClick(); setActiveTab('movies'); }}
+                          className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all flex-shrink-0 active:scale-95 h-[38px]"
+                          title="Abrir el catálogo completo de películas y acciones en masa"
+                        >
+                          <Clapperboard className="w-3.5 h-3.5" />
+                          <span>Catálogo ({allMovies.length})</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1973,7 +2156,608 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: VISIT STATISTICS */}
+        {/* TAB 3: MOVIE CATALOG & BULK ACTIONS */}
+        {activeTab === 'movies' && (() => {
+          const availableGenres = Array.from(new Set(allMovies.map((m: any) => m.genre).filter(Boolean)));
+          const filteredMovies = allMovies.filter((m: any) => {
+            if (movieSearchQuery.trim()) {
+              const q = movieSearchQuery.toLowerCase();
+              const matchTitle = (m.title || '').toLowerCase().includes(q);
+              const matchGenre = (m.genre || '').toLowerCase().includes(q);
+              const matchPlot = (m.initialPlot || m.tagline || '').toLowerCase().includes(q);
+              if (!matchTitle && !matchGenre && !matchPlot) return false;
+            }
+            if (movieGenreFilter !== 'all') {
+              if ((m.genre || '').toLowerCase() !== movieGenreFilter.toLowerCase()) return false;
+            }
+            if (movieStatusFilter !== 'all') {
+              const isLive = cinemaState?.movie?.id === m.id;
+              if (movieStatusFilter === 'live' && !isLive) return false;
+              if (movieStatusFilter === 'completed' && m.status !== 'completed') return false;
+              if (movieStatusFilter === 'streaming' && m.status !== 'streaming' && !isLive) return false;
+              if (movieStatusFilter === 'paused' && m.status !== 'paused') return false;
+            }
+            return true;
+          });
+          const visibleMovieIds = filteredMovies.map((m: any) => m.id);
+          const isAllVisibleSelected = visibleMovieIds.length > 0 && visibleMovieIds.every((id: string) => selectedMovieIds.includes(id));
+          const selectedMoviesList = allMovies.filter((m: any) => selectedMovieIds.includes(m.id));
+          const hasActiveMovieSelected = Boolean(cinemaState?.movie && selectedMovieIds.includes(cinemaState.movie.id));
+
+          return (
+            <div className="space-y-6 pb-24">
+              {/* Header & Stats Banner */}
+              <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.8)]" />
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
+                      <Clapperboard className="w-4 h-4 text-rose-400" />
+                      Listado de Películas & Acciones en Masa
+                    </h3>
+                  </div>
+                  <p className="text-xs text-neutral-400 max-w-2xl">
+                    Explora todo el catálogo de películas interactivas generadas y archivadas. Selecciona múltiples obras para ejecutar acciones en lote como eliminación definitiva o actualización de género y estado.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0 w-full md:w-auto">
+                  <button
+                    onClick={() => handleCreateMovie()}
+                    disabled={isCreatingMovie}
+                    className="w-full md:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-400 hover:to-pink-400 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-[0_0_15px_rgba(244,63,94,0.3)] active:scale-95"
+                  >
+                    <Plus className="w-4 h-4 text-black" />
+                    <span>{isCreatingMovie ? 'Creando...' : 'Nueva Película'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick KPIs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
+                <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Total Películas</span>
+                  <div className="text-2xl font-black text-white">{allMovies.length}</div>
+                </div>
+                <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-rose-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                    En Emisión
+                  </span>
+                  <div className="text-sm font-black text-white truncate" title={cinemaState?.movie?.title || 'Ninguna'}>
+                    {cinemaState?.movie?.title || 'Ninguna'}
+                  </div>
+                </div>
+                <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-purple-400">Concluidas</span>
+                  <div className="text-2xl font-black text-purple-300">
+                    {allMovies.filter((m: any) => m.status === 'completed').length}
+                  </div>
+                </div>
+                <div className={`p-4 rounded-xl border space-y-1 transition-all ${
+                  selectedMovieIds.length > 0 
+                    ? 'bg-rose-950/30 border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.15)]' 
+                    : 'bg-black/50 border-white/5'
+                }`}>
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Seleccionadas</span>
+                  <div className={`text-2xl font-black ${selectedMovieIds.length > 0 ? 'text-rose-400' : 'text-neutral-500'}`}>
+                    {selectedMovieIds.length}
+                  </div>
+                </div>
+              </div>
+
+              {/* Search & Filter Bar */}
+              <div className="p-4 rounded-2xl bg-neutral-950/90 border border-white/10 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={movieSearchQuery}
+                    onChange={e => setMovieSearchQuery(e.target.value)}
+                    placeholder="Buscar por título, género o sinopsis..."
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-rose-400 focus:outline-none placeholder:text-neutral-600"
+                  />
+                  {movieSearchQuery && (
+                    <button
+                      onClick={() => setMovieSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 bg-black/60 border border-white/10 px-3 py-1.5 rounded-xl">
+                    <Filter className="w-3.5 h-3.5 text-neutral-400" />
+                    <select
+                      value={movieGenreFilter}
+                      onChange={e => setMovieGenreFilter(e.target.value)}
+                      className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="all" className="bg-neutral-900">Todos los géneros</option>
+                      {availableGenres.map((g: any) => (
+                        <option key={g} value={g} className="bg-neutral-900">{g}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-black/60 border border-white/10 px-3 py-1.5 rounded-xl">
+                    <select
+                      value={movieStatusFilter}
+                      onChange={e => setMovieStatusFilter(e.target.value)}
+                      className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="all" className="bg-neutral-900">Todos los estados</option>
+                      <option value="live" className="bg-neutral-900">🔴 En emisión</option>
+                      <option value="streaming" className="bg-neutral-900">🟢 En streaming</option>
+                      <option value="completed" className="bg-neutral-900">🟣 Concluidas</option>
+                      <option value="paused" className="bg-neutral-900">🟡 Pausadas</option>
+                    </select>
+                  </div>
+
+                  {(movieSearchQuery || movieGenreFilter !== 'all' || movieStatusFilter !== 'all') && (
+                    <button
+                      onClick={() => {
+                        setMovieSearchQuery('');
+                        setMovieGenreFilter('all');
+                        setMovieStatusFilter('all');
+                      }}
+                      className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-mono transition-colors"
+                      title="Restablecer filtros"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Floating Bulk Action Bar (when >= 1 movie is selected) */}
+              {selectedMovieIds.length > 0 && (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/70 via-purple-950/70 to-neutral-950/90 border border-rose-500/50 shadow-[0_10px_35px_rgba(244,63,94,0.25)] flex flex-wrap items-center justify-between gap-3 sticky top-4 z-30 backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={() => toggleSelectAllVisible(visibleMovieIds)}
+                      className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                      title={isAllVisibleSelected ? "Deseleccionar visibles" : "Seleccionar todas las visibles"}
+                    >
+                      {isAllVisibleSelected ? <CheckSquare className="w-4 h-4 text-rose-400" /> : <Square className="w-4 h-4 text-neutral-400" />}
+                    </button>
+                    <div>
+                      <span className="text-xs font-mono font-bold text-white flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full bg-rose-500 text-black text-[11px] font-black">
+                          {selectedMovieIds.length}
+                        </span>
+                        película(s) seleccionada(s)
+                      </span>
+                      {hasActiveMovieSelected && (
+                        <span className="text-[10px] font-mono text-amber-300 block">
+                          ⚠️ Incluye la película actualmente en emisión en vivo
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => { audioCues.playClick(); setShowBulkEditModal(true); }}
+                      className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] active:scale-95"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-black" />
+                      <span>Editar en Masa</span>
+                    </button>
+
+                    <button
+                      onClick={() => { audioCues.playClick(); setShowBulkDeleteModal(true); }}
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-white" />
+                      <span>Eliminar en Masa ({selectedMovieIds.length})</span>
+                    </button>
+
+                    <button
+                      onClick={clearMovieSelection}
+                      className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-mono text-xs transition-colors"
+                      title="Deseleccionar todas"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Movie List Table */}
+              <div className="p-2 rounded-2xl bg-neutral-950/80 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] overflow-hidden">
+                <div className="flex items-center justify-between p-3 border-b border-white/10 text-xs font-mono text-neutral-400">
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={() => toggleSelectAllVisible(visibleMovieIds)}
+                      className="p-1 rounded-md bg-white/5 hover:bg-white/15 text-white transition-colors flex items-center gap-2"
+                      title={isAllVisibleSelected ? "Deseleccionar todas" : "Seleccionar todas"}
+                    >
+                      {isAllVisibleSelected ? <CheckSquare className="w-4 h-4 text-rose-400" /> : <Square className="w-4 h-4 text-neutral-400" />}
+                      <span className="text-[11px] uppercase tracking-wider">
+                        {isAllVisibleSelected ? "Deseleccionar todas" : `Seleccionar todas (${filteredMovies.length})`}
+                      </span>
+                    </button>
+                  </div>
+                  <span className="text-[11px] text-neutral-500 hidden sm:inline-block">
+                    Mostrando {filteredMovies.length} de {allMovies.length} películas
+                  </span>
+                </div>
+
+                {filteredMovies.length === 0 ? (
+                  <div className="text-center py-16 space-y-3 font-mono">
+                    <Film className="w-10 h-10 text-neutral-600 mx-auto" />
+                    <p className="text-neutral-400 text-sm">No se encontraron películas con los filtros actuales.</p>
+                    <button
+                      onClick={() => {
+                        setMovieSearchQuery('');
+                        setMovieGenreFilter('all');
+                        setMovieStatusFilter('all');
+                      }}
+                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-mono"
+                    >
+                      Restablecer filtros
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-white/5">
+                    {filteredMovies.map((movie: any) => {
+                      const isSelected = selectedMovieIds.includes(movie.id);
+                      const isLive = cinemaState?.movie?.id === movie.id;
+                      const stepsCount = movie.steps?.length || movie.totalSteps || movie.stepsCount || 0;
+                      const isCompleted = movie.status === 'completed';
+                      const isPaused = movie.status === 'paused';
+
+                      return (
+                        <div
+                          key={movie.id}
+                          className={`p-4 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                            isSelected
+                              ? 'bg-rose-950/20 border-l-4 border-l-rose-500'
+                              : isLive
+                              ? 'bg-neutral-900/40 border-l-4 border-l-amber-500'
+                              : 'hover:bg-white/[0.02]'
+                          }`}
+                        >
+                          <div className="flex items-start space-x-3.5 min-w-0 flex-1">
+                            {/* Checkbox */}
+                            <button
+                              onClick={() => toggleSelectMovie(movie.id)}
+                              className="mt-1 p-1 rounded-md hover:bg-white/10 text-neutral-400 hover:text-white transition-colors flex-shrink-0"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-rose-400" />
+                              ) : (
+                                <Square className="w-4 h-4 text-neutral-500" />
+                              )}
+                            </button>
+
+                            {/* Info */}
+                            <div className="space-y-1.5 min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="text-sm font-bold text-white font-mono truncate" title={movie.title}>
+                                  {movie.title}
+                                </h4>
+
+                                {isLive && (
+                                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[10px] font-mono font-bold text-amber-400 animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                    EN EMISIÓN
+                                  </span>
+                                )}
+
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${
+                                  isCompleted
+                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                    : isPaused
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                }`}>
+                                  {isCompleted ? 'Concluida' : isPaused ? 'Pausada' : 'Streaming'}
+                                </span>
+
+                                <span className="px-2 py-0.5 rounded bg-white/10 text-cyan-300 text-[10px] font-mono">
+                                  {movie.genre || 'Sci-Fi'}
+                                </span>
+
+                                <span className="text-[10px] font-mono text-neutral-500">
+                                  {stepsCount} escenas
+                                </span>
+                              </div>
+
+                              <p className="text-xs text-neutral-400 line-clamp-1">
+                                {movie.tagline || movie.initialPlot || 'Película interactiva generada con IA.'}
+                              </p>
+
+                              {movie.createdAt && (
+                                <span className="text-[10px] font-mono text-neutral-500 block">
+                                  Creada: {new Date(movie.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Individual Actions */}
+                          <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center">
+                            {!isLive && (
+                              <button
+                                onClick={() => handleSwitchMovie(movie.id, 1)}
+                                disabled={isSwitchingMovie}
+                                className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-amber-500/30 active:scale-95"
+                                title="Poner esta película al aire en vivo ahora"
+                              >
+                                <Play className="w-3 h-3" />
+                                <span>Poner al aire</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => openEditMovie(movie)}
+                              className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-cyan-500/30 active:scale-95"
+                              title="Editar detalles de esta película"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Editar</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteSpecificMovie(movie.id, movie.title)}
+                              className="px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-red-500/20 active:scale-95"
+                              title="Eliminar esta película"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Eliminar</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Bulk Delete Modal */}
+              {showBulkDeleteModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
+                  <div className="max-w-md w-full bg-neutral-950 border border-rose-500/40 rounded-2xl p-6 space-y-4 shadow-[0_0_50px_rgba(244,63,94,0.3)]">
+                    <div className="flex items-center space-x-3 text-rose-400">
+                      <div className="p-2 rounded-xl bg-rose-500/20 border border-rose-500/30">
+                        <Trash2 className="w-5 h-5 text-rose-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
+                          Eliminar {selectedMovieIds.length} películas en masa
+                        </h4>
+                        <span className="text-[10px] text-rose-400/80 font-mono">Acción irreversible</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-neutral-300 leading-relaxed">
+                      Estás a punto de eliminar definitivamente <strong>{selectedMovieIds.length}</strong> películas del catálogo y de la base de datos, incluyendo todas sus escenas, votos y chat.
+                    </p>
+
+                    {hasActiveMovieSelected && (
+                      <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs text-amber-200 font-mono space-y-1">
+                        <span className="font-bold flex items-center gap-1.5 text-amber-300">
+                          <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                          Película en emisión actual seleccionada
+                        </span>
+                        <p className="text-[11px] text-neutral-300">
+                          &quot;{cinemaState?.movie?.title}&quot; está al aire ahora. Al eliminarla, el sistema generará automáticamente una nueva película de taquilla de inmediato.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Preview of titles */}
+                    <div className="max-h-36 overflow-y-auto custom-scrollbar p-2.5 rounded-xl bg-black/60 border border-white/10 space-y-1 font-mono text-[11px]">
+                      {selectedMoviesList.map(m => (
+                        <div key={m.id} className="flex items-center justify-between text-neutral-300 truncate">
+                          <span className="truncate">• {m.title}</span>
+                          <span className="text-[10px] text-neutral-500 ml-2">{m.genre}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-end space-x-2 pt-2 border-t border-white/10">
+                      <button
+                        type="button"
+                        onClick={() => setShowBulkDeleteModal(false)}
+                        disabled={isBulkDeleting}
+                        className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-mono text-xs uppercase tracking-wider transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExecuteBulkDelete}
+                        disabled={isBulkDeleting}
+                        className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(244,63,94,0.4)] active:scale-95"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{isBulkDeleting ? 'Eliminando...' : `Eliminar ${selectedMovieIds.length} películas`}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Bulk Edit Modal */}
+              {showBulkEditModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
+                  <div className="max-w-md w-full bg-neutral-950 border border-cyan-500/40 rounded-2xl p-6 space-y-4 shadow-[0_0_50px_rgba(6,182,212,0.25)]">
+                    <div className="flex items-center space-x-3 text-cyan-400">
+                      <div className="p-2 rounded-xl bg-cyan-500/20 border border-cyan-500/30">
+                        <Pencil className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
+                          Edición en Masa ({selectedMovieIds.length} películas)
+                        </h4>
+                        <span className="text-[10px] text-cyan-400/80 font-mono">Aplica cambios en lote</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-neutral-300 leading-relaxed">
+                      Completa los campos que deseas actualizar en las <strong>{selectedMovieIds.length}</strong> películas seleccionadas. Los campos vacíos mantendrán su valor actual.
+                    </p>
+
+                    <form onSubmit={handleExecuteBulkEdit} className="space-y-3 font-mono">
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Nuevo Género</label>
+                        <input
+                          type="text"
+                          value={bulkEditGenre}
+                          onChange={e => setBulkEditGenre(e.target.value)}
+                          placeholder="Ej: Cyberpunk / Neo-Noir Thriller"
+                          className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none placeholder:text-neutral-600"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Nuevo Estado</label>
+                        <select
+                          value={bulkEditStatus}
+                          onChange={e => setBulkEditStatus(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none cursor-pointer"
+                        >
+                          <option value="">(No cambiar estado)</option>
+                          <option value="streaming">streaming (Activa)</option>
+                          <option value="completed">completed (Concluida)</option>
+                          <option value="paused">paused (Pausada)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Nuevo Tagline (opcional)</label>
+                        <input
+                          type="text"
+                          value={bulkEditTagline}
+                          onChange={e => setBulkEditTagline(e.target.value)}
+                          placeholder="Tagline para todas las seleccionadas..."
+                          className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none placeholder:text-neutral-600"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-end space-x-2 pt-3 border-t border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => setShowBulkEditModal(false)}
+                          disabled={isBulkEditing}
+                          className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs uppercase tracking-wider transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isBulkEditing || (!bulkEditGenre && !bulkEditStatus && !bulkEditTagline)}
+                          className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-black font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{isBulkEditing ? 'Actualizando...' : `Actualizar ${selectedMovieIds.length} películas`}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* Single Movie Edit Modal */}
+              {isEditingMovie && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
+                  <div className="max-w-lg w-full bg-neutral-950 border border-cyan-500/40 rounded-2xl p-6 space-y-4 shadow-[0_0_50px_rgba(6,182,212,0.25)]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3 text-cyan-400">
+                        <div className="p-2 rounded-xl bg-cyan-500/20 border border-cyan-500/30">
+                          <Pencil className="w-5 h-5 text-cyan-400" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
+                            Editar Película
+                          </h4>
+                          <span className="text-[10px] text-cyan-400/80 font-mono">
+                            {editingTargetMovie ? editingTargetMovie.title : cinemaState?.movie?.title}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => { setIsEditingMovie(false); setEditingTargetMovie(null); }}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveMovieEdit} className="space-y-3 font-mono">
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Título *</label>
+                        <input
+                          type="text"
+                          required
+                          value={editMovieTitle}
+                          onChange={e => setEditMovieTitle(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Género</label>
+                        <input
+                          type="text"
+                          value={editMovieGenre}
+                          onChange={e => setEditMovieGenre(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Tagline</label>
+                        <input
+                          type="text"
+                          value={editMovieTagline}
+                          onChange={e => setEditMovieTagline(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Sinopsis / Trama Inicial</label>
+                        <textarea
+                          rows={3}
+                          value={editMoviePlot}
+                          onChange={e => setEditMoviePlot(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none resize-none"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-end space-x-2 pt-3 border-t border-white/10">
+                        <button
+                          type="button"
+                          onClick={() => { setIsEditingMovie(false); setEditingTargetMovie(null); }}
+                          disabled={isSavingMovie}
+                          className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs uppercase tracking-wider transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSavingMovie || !editMovieTitle.trim()}
+                          className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-black font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{isSavingMovie ? 'Guardando...' : 'Guardar Cambios'}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* TAB 4: VISIT STATISTICS */}
         {activeTab === 'stats' && (
           <div className="space-y-6">
             {/* Summary Cards */}

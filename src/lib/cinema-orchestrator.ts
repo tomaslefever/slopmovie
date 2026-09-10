@@ -32,7 +32,9 @@ import {
   voteChatMessageInDb,
   markChatMessageUsedForInfluence,
   updateMovieInDb,
+  updateMoviesInDb,
   deleteMovieFromDb,
+  deleteMoviesFromDb,
   persistBlockbusterVote,
   loadBlockbusterVoteCountsFromDb,
   countActiveViewersFromDb
@@ -2263,6 +2265,60 @@ class CinemaOrchestrator {
     this.addSystemMessage(`🗑️ Director deleted movie "${movieId}" from the library.`);
     await this.broadcastStateSnapshot();
     return { success: true };
+  }
+
+  /**
+   * Bulk delete multiple movies from library and database.
+   */
+  public async bulkDeleteMovies(movieIds: string[]): Promise<{ success: boolean; deletedCount: number; newMovie?: Movie }> {
+    if (!movieIds || movieIds.length === 0) return { success: false, deletedCount: 0 };
+
+    const activeIncluded = Boolean(this.movie && movieIds.includes(this.movie.id));
+
+    await deleteMoviesFromDb(movieIds);
+    this.completedMovies = this.completedMovies.filter(m => !movieIds.includes(m.id));
+
+    if (activeIncluded) {
+      this.movie = null;
+      this.activeAd = null;
+      this.addSystemMessage(`🗑️ Director deleted ${movieIds.length} movie(s) including active broadcast. Generating a fresh blockbuster film...`);
+      const newMovie = await this.startNextBlockbusterMovie();
+      return { success: true, deletedCount: movieIds.length, newMovie };
+    }
+
+    this.addSystemMessage(`🗑️ Director deleted ${movieIds.length} movie(s) from the library.`);
+    await this.broadcastStateSnapshot();
+    return { success: true, deletedCount: movieIds.length };
+  }
+
+  /**
+   * Bulk update details for multiple movies (e.g. genre or status).
+   */
+  public async bulkUpdateMovies(
+    movieIds: string[],
+    fields: { genre?: string; status?: string; tagline?: string }
+  ): Promise<{ success: boolean; updatedCount: number }> {
+    if (!movieIds || movieIds.length === 0) return { success: false, updatedCount: 0 };
+
+    await updateMoviesInDb(movieIds, fields);
+
+    if (this.movie && movieIds.includes(this.movie.id)) {
+      if (fields.genre) this.movie.genre = fields.genre;
+      if (fields.status) this.movie.status = fields.status as any;
+      if (fields.tagline) this.movie.tagline = fields.tagline;
+    }
+
+    for (const m of this.completedMovies) {
+      if (movieIds.includes(m.id)) {
+        if (fields.genre) m.genre = fields.genre;
+        if (fields.status) m.status = fields.status as any;
+        if (fields.tagline) m.tagline = fields.tagline;
+      }
+    }
+
+    this.addSystemMessage(`✏️ Director updated ${movieIds.length} movie(s) in the library.`);
+    await this.broadcastStateSnapshot();
+    return { success: true, updatedCount: movieIds.length };
   }
 
   /**
