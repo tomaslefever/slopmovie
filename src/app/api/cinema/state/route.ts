@@ -4,6 +4,7 @@ import { cinemaEngine } from '@/lib/cinema-orchestrator';
 export const maxDuration = 60;
 import { 
   loadActiveMovieFromDb, 
+  loadAllMoviesFromDb,
   loadLiveCinemaStateFromDb, 
   loadUserVoteForStep, 
   loadUserBlockbusterVote,
@@ -60,17 +61,32 @@ export async function GET(request: Request) {
     cinemaEngine.phase = liveState.phase;
   }
 
+  const isTransitionPhase = liveState?.phase === 'BLOCKBUSTER_VOTING' || liveState?.phase === 'GENERATING';
+
   // If the live-state movie id points at an archived/completed movie (stale pointer),
   // fall back to the newest streaming/paused movie so the same old film is never resurrected.
-  // CRITICAL: During BLOCKBUSTER_VOTING, the completed film is the legitimate active film whose successors are being voted on!
-  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0 || (activeMovie.status === 'completed' && liveState?.phase !== 'BLOCKBUSTER_VOTING')) {
-    activeMovie = await loadActiveMovieFromDb();
+  // CRITICAL: During transition phases (BLOCKBUSTER_VOTING and GENERATING), the completed film is the legitimate film whose successors are being voted on or generated!
+  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0 || (activeMovie.status === 'completed' && !isTransitionPhase)) {
+    const dbActive = await loadActiveMovieFromDb();
+    if (dbActive) {
+      activeMovie = dbActive;
+    }
   }
 
-  // If no movie exists in DB yet, initialize one (skip during BLOCKBUSTER_VOTING)
-  if ((!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) && liveState?.phase !== 'BLOCKBUSTER_VOTING') {
-    activeMovie = await cinemaEngine.initializeMovie();
-    liveState = await loadLiveCinemaStateFromDb();
+  // Fallback to in-memory engine movie if available
+  if (!activeMovie && cinemaEngine.movie) {
+    activeMovie = cinemaEngine.movie;
+  }
+
+  // If no movie exists in DB yet, initialize one ONLY on true cold start (empty database) and NEVER during a transition phase
+  if ((!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) && !isTransitionPhase) {
+    const allDbMovies = await loadAllMoviesFromDb().catch(() => []);
+    if (allDbMovies.length === 0) {
+      activeMovie = await cinemaEngine.initializeMovie();
+      liveState = await loadLiveCinemaStateFromDb();
+    } else {
+      activeMovie = allDbMovies[0];
+    }
   }
 
   // Ensure active movie steps have valid playback URLs. When generation is

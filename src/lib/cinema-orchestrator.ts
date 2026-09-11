@@ -619,8 +619,11 @@ class CinemaOrchestrator {
     if (!this.movie) {
       // A forceReset (new blockbuster rotation) is mid-flight: the worker must NOT
       // auto-generate a competing movie while the director's/rotation's movie is being created.
-      if (this.isResetting) {
-        console.log('[CinemaEngine] Movie reset in progress — worker skips auto-initialization this tick.');
+      if (this.isResetting || this.phase === 'GENERATING' || this.phase === 'BLOCKBUSTER_VOTING') {
+        return;
+      }
+      const liveState = await loadLiveCinemaStateFromDb().catch(() => null);
+      if (liveState?.phase === 'GENERATING' || liveState?.phase === 'BLOCKBUSTER_VOTING') {
         return;
       }
       await this.initializeMovie();
@@ -628,23 +631,18 @@ class CinemaOrchestrator {
     }
 
     // Blockbuster rotation watchdog: if a film completed but its rotation flow was
-    // lost (serverless restart / swallowed error), rotate automatically.
+    // lost (serverless restart / swallowed error), rotate automatically after 3 minutes.
     if (this.movie.status === 'completed') {
-      // During the async generation of the winning blockbuster, never auto-rotate on top of it.
-      if (this.phase === 'GENERATING') {
+      // During the async generation of the winning blockbuster, voting, or reset, never auto-rotate on top of it.
+      if (this.phase === 'GENERATING' || this.phase === 'BLOCKBUSTER_VOTING' || this.isResetting) {
         return;
       }
-      // During the blockbuster audience vote, fall through to the normal timer/grace
-      // handling so the vote resolves (random winner with zero voters) when no client
-      // completes the stage.
-      if (this.phase !== 'BLOCKBUSTER_VOTING') {
-        const completedAtMs = this.movie.completedAt ? new Date(this.movie.completedAt).getTime() : 0;
-        if (completedAtMs && Date.now() - completedAtMs > 8000 && !this.isResetting) {
-          console.log('[CinemaEngine] Completed movie detected without rotation — auto-starting next blockbuster.');
-          await this.startNextBlockbusterMovie();
-        }
-        return;
+      const completedAtMs = this.movie.completedAt ? new Date(this.movie.completedAt).getTime() : 0;
+      if (completedAtMs && Date.now() - completedAtMs > 180000 && !this.isResetting) {
+        console.log('[CinemaEngine] Completed movie detected without rotation for >180s — opening blockbuster voting.');
+        await this.prepareBlockbusterVoting();
       }
+      return;
     }
 
     // If stream is paused by director, refresh heartbeat in Supabase without advancing timers
@@ -704,6 +702,9 @@ class CinemaOrchestrator {
     workerId?: string
   ): Promise<{ success: boolean; state: ReturnType<CinemaOrchestrator['getState']> }> {
     if (!this.movie) {
+      if (this.isResetting || this.phase === 'GENERATING' || this.phase === 'BLOCKBUSTER_VOTING') {
+        return { success: false, state: this.getState() };
+      }
       await this.initializeMovie();
       if (!this.movie) return { success: false, state: this.getState() };
     }
@@ -758,7 +759,7 @@ class CinemaOrchestrator {
       const savedCounts = { ...this.blockbusterVoteCounts };
 
       // Keep candidates in memory during GENERATING so the reveal and zoom-out/zoom-in animation play smoothly
-      this.setPhase('GENERATING', 15);
+      this.setPhase('GENERATING', 90);
 
       const winnerPayload = winner ? {
         id: winner.id,
@@ -775,14 +776,17 @@ class CinemaOrchestrator {
       });
       broadcastCinemaEvent('phase_change', {
         phase: 'GENERATING',
-        timeRemaining: 15,
-        phaseDuration: 15,
+        timeRemaining: 90,
+        phaseDuration: 90,
         phaseStartedAt: this.phaseStartedAt,
         phaseEndsAt: this.phaseEndsAt,
         winner: winnerPayload,
         blockbusterCandidates: savedCandidates,
         blockbusterVoteCounts: savedCounts
       });
+
+      // Persist GENERATING state to Supabase so all workers/endpoints know we are generating the new film
+      await this.persistCurrentStateToSupabase(workerId);
 
       if (winner) {
         this.addSystemMessage(`🏆 NEXT BLOCKBUSTER: "${winner.title}" (${winner.genre}) won the audience vote! Generating now — the premiere begins automatically when it's ready.`);
@@ -1190,10 +1194,12 @@ class CinemaOrchestrator {
     else if (this.phase === 'GENERATING') {
       // Watchdog: If the engine is in GENERATING and the timer elapsed,
       // verify that an async movie reset or generation is not actively mid-flight.
-      if (this.isResetting || this.initializeMoviePromise) {
-        console.log('[CinemaEngine] Movie generation still mid-flight — extending GENERATING timer.');
-        this.phaseEndsAt = Date.now() + 5000;
-        this.timeRemaining = 5;
+      if (this.isResetting || this.initializeMoviePromise || !this.movie || this.movie.status === 'completed') {
+        console.log('[CinemaEngine] Movie generation still mid-flight (or awaiting premiere) — extending GENERATING timer.');
+        this.phaseEndsAt = Date.now() + 15000;
+        this.timeRemaining = 15;
+        this.phaseDuration = 15;
+        await this.persistCurrentStateToSupabase(workerId);
         return;
       }
 
@@ -1893,10 +1899,12 @@ class CinemaOrchestrator {
       }
       this.isRunning = false;
 
-      // Clear in-memory state. NOTE: phase is NOT forced to PLAYING here — during the
-      // async generation clients stay in GENERATING until the new movie is ready.
-      this.movie = null;
-      this.timeRemaining = 15;
+      // Clear in-memory voting and ad state. Keep previous movie metadata in memory (marked completed)
+      // until the new movie finishes generating, so getState() and polling return coherent state.
+      if (this.movie) {
+        this.movie.status = 'completed';
+      }
+      this.timeRemaining = 90;
       this.votesA = 0;
       this.votesB = 0;
       this.userVotes.clear();
@@ -1906,8 +1914,9 @@ class CinemaOrchestrator {
       this.blockbusterUserVotes.clear();
       this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
 
-      // Archive old movie(s) in Supabase so they won't be restored
-      await archiveAllStreamingMovies();
+      // Do NOT call archiveAllStreamingMovies() here: persistMovie(newMovie) at the
+      // end of initializeMovie automatically archives other streaming movies atomically.
+      // This eliminates the 40-second void where no streaming movie exists in DB.
 
       this.addSystemMessage('🔄 Cinema engine reset. Generating new film with real AI...');
 
