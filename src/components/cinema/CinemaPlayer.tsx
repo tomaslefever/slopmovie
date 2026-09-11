@@ -45,24 +45,15 @@ const CINEMA_FALLBACK_VIDEOS = [
 interface PlaybackSegment {
   type: 'shot1' | 'ad' | 'shot2';
   url: string;
-  label: string;
-  durationEst: number;
 }
 
 const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
-  movieTitle,
-  genre,
   activeStep,
   phase,
-  totalSteps,
   activeAd,
   inSceneAd,
   isPaused = false,
   isGenerationPaused = false,
-  subtitlesEnabled: initialSubtitlesEnabled = true,
-  subtitleLanguage: initialSubtitleLanguage = 'en',
-  onToggleSubtitles,
-  onChangeSubtitleLanguage,
   onPlaybackStarted,
   onPlaybackEnded,
   onAdCompleted,
@@ -94,18 +85,14 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     // 1. Shot 1: Opening / Action
     list.push({
       type: 'shot1',
-      url: getSanitizedVideoUrl(activeStep.videoUrl, 0),
-      label: 'Shot 1 • Apertura',
-      durationEst: 15
+      url: getSanitizedVideoUrl(activeStep.videoUrl, 0)
     });
 
     // 2. Optional Mid-roll Sponsor Ad in Block 2 (15s)
     if (activeStep.hasMidRollAd && activeStep.adVideoUrl) {
       list.push({
         type: 'ad',
-        url: getSanitizedVideoUrl(activeStep.adVideoUrl, 2),
-        label: 'Patrocinador • Interludio',
-        durationEst: 15
+        url: getSanitizedVideoUrl(activeStep.adVideoUrl, 2)
       });
     }
 
@@ -113,9 +100,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     if (activeStep.videoUrl2) {
       list.push({
         type: 'shot2',
-        url: getSanitizedVideoUrl(activeStep.videoUrl2, 1),
-        label: 'Shot 2 • Desenlace',
-        durationEst: 15
+        url: getSanitizedVideoUrl(activeStep.videoUrl2, 1)
       });
     }
 
@@ -154,24 +139,10 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       videoRef.current.play().catch(() => {});
     }
   };
-  
-  // Subtitle System States synced from Supabase
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(initialSubtitlesEnabled);
-  const [subtitleLanguage, setSubtitleLanguage] = useState<'en' | 'es'>(initialSubtitleLanguage);
-
-  useEffect(() => {
-    setSubtitlesEnabled(initialSubtitlesEnabled);
-  }, [initialSubtitlesEnabled]);
-
-  useEffect(() => {
-    setSubtitleLanguage(initialSubtitleLanguage);
-  }, [initialSubtitleLanguage]);
 
   const lastPlayedStepRef = useRef<number>(activeStep.stepNumber);
   const lastPlayedSegmentRef = useRef<number>(currentSegmentIndex);
   const lastVideoSrcRef = useRef<string>(currentVideoSrc);
-  const lastEmittedSecondRef = useRef<number>(-1);
-  const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number>(0);
   const playbackEndedNotifiedRef = useRef<boolean>(false);
 
   // Seamless auto-play and transition between segments without looping
@@ -242,13 +213,11 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     if (phase === 'PLAYING') {
       // If there is another segment in this scene (e.g. Shot 1 -> Ad, or Shot 1 -> Shot 2, or Ad -> Shot 2):
       if (currentSegmentIndex < segments.length - 1) {
-        console.log(`[CinemaPlayer] Segment ${currentSegmentIndex} (${currentSegment.type}) ended. Seamlessly playing next segment ${currentSegmentIndex + 1} (${segments[currentSegmentIndex + 1].type}).`);
         setCurrentSegmentIndex(prev => prev + 1);
         return;
       }
 
-      // All segments for this scene have completed:
-      // Hold on the final frame (no loop, no rewinding) and notify orchestrator
+      // All segments for this scene have completed: hold final frame and advance
       if (!playbackEndedNotifiedRef.current) {
         playbackEndedNotifiedRef.current = true;
         onPlaybackEnded?.();
@@ -262,35 +231,6 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     }
   };
 
-  const handleTimeUpdate = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    const currentVideoTime = video.currentTime;
-
-    // Compute global timeline position in this scene
-    let globalTime = currentVideoTime;
-    if (currentSegment.type === 'ad') {
-      globalTime = 15 + currentVideoTime;
-    } else if (currentSegment.type === 'shot2') {
-      globalTime = (activeStep.hasMidRollAd ? 30 : 15) + currentVideoTime;
-    }
-
-    const sec = Math.floor(globalTime);
-    if (sec !== lastEmittedSecondRef.current) {
-      lastEmittedSecondRef.current = sec;
-      setCurrentPlaybackTime(globalTime);
-    }
-  };
-
-  // Subtitle cue matching for the current global timeline position
-  const currentSubtitle = React.useMemo(() => {
-    if (!subtitlesEnabled || phase !== 'PLAYING' || currentSegment.type === 'ad') return null;
-    if (!activeStep.subtitles || activeStep.subtitles.length === 0) return null;
-    return activeStep.subtitles.find(
-      sub => currentPlaybackTime >= sub.start && currentPlaybackTime <= sub.end
-    );
-  }, [subtitlesEnabled, phase, currentSegment.type, activeStep.subtitles, currentPlaybackTime]);
-
   const toggleMute = () => {
     const nextMuted = audioCues.toggleMute();
     setIsMuted(nextMuted);
@@ -298,7 +238,6 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       if (phase !== 'VOTING') {
         videoRef.current.muted = nextMuted;
       } else {
-        // Video must remain strictly silent during voting
         videoRef.current.muted = true;
       }
     }
@@ -339,8 +278,6 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [fullscreenContainerRef]);
 
-
-
   return (
     <div 
       ref={containerRef}
@@ -349,9 +286,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       {/* Ambient background glow */}
       <div className="absolute inset-0 bg-radial from-cyan-950/20 via-transparent to-black pointer-events-none" />
 
-
-
-      {/* Main Video Element (Always rendered with verified or fallback video) */}
+      {/* Main Video Element */}
       <video
         ref={videoRef}
         key={currentVideoSrc}
@@ -362,7 +297,6 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         playsInline
         loop={phase === 'VOTING'}
         muted={phase === 'VOTING' || phase === 'COMMERCIAL_BREAK' ? true : isMuted}
-        onTimeUpdate={handleTimeUpdate}
         onError={handleVideoError}
         onEnded={handleEnded}
         onPlaying={() => {
@@ -377,7 +311,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         }`}
       />
 
-      {/* Subtle Grain Overlay (desktop only — blend compositing over video is costly on mobile GPUs) */}
+      {/* Subtle Grain Overlay */}
       <div 
         className="absolute inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay hidden md:block"
         style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '4px 4px' }}
@@ -409,7 +343,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         />
       )}
 
-      {/* Top Cinema HUD */}
+      {/* Top Cinema Controls (LIVE on the left, Volume & Fullscreen on the right) */}
       <div className="absolute top-0 left-0 right-0 p-6 pt-3 flex items-center justify-between z-20 bg-gradient-to-b from-black/80 via-black/30 to-transparent">
         <div className="flex items-center space-x-3">
           {/* Live / Paused Indicator */}
@@ -428,51 +362,10 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
               </span>
             </div>
           )}
-
-          {/* Genre Tag */}
-          <span className="hidden sm:inline-block text-[11px] text-neutral-400 bg-black/40 border border-white/5 px-2.5 py-1 rounded-full">
-            {genre}
-          </span>
         </div>
 
-        {/* Video Controls (Subtitles, Mute & Fullscreen) */}
+        {/* Video Controls (Mute & Fullscreen ONLY) */}
         <div className="flex items-center space-x-2 relative">
-          {/* Subtitles Toggle Button */}
-          <button
-            onClick={() => {
-              const nextVal = !subtitlesEnabled;
-              setSubtitlesEnabled(nextVal);
-              onToggleSubtitles?.(nextVal);
-            }}
-            className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-bold border md:backdrop-blur-md transition-all hover:scale-105 active:scale-95 flex items-center gap-1 ${
-              subtitlesEnabled
-                ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)]'
-                : 'bg-black/70 text-neutral-400 border-white/10 hover:text-neutral-200'
-            }`}
-            title={subtitlesEnabled ? "Subtítulos activados (clic para desactivar)" : "Activar subtítulos"}
-          >
-            <span>CC</span>
-            {subtitlesEnabled && (
-              <span className="text-[10px] text-cyan-400 font-sans">
-                {subtitleLanguage.toUpperCase()}
-              </span>
-            )}
-          </button>
-
-          {subtitlesEnabled && (
-            <button
-              onClick={() => {
-                const nextLang = subtitleLanguage === 'en' ? 'es' : 'en';
-                setSubtitleLanguage(nextLang);
-                onChangeSubtitleLanguage?.(nextLang);
-              }}
-              className="px-2 py-1 rounded-full text-[10px] font-mono font-semibold bg-black/70 text-neutral-300 border border-white/10 hover:text-cyan-300 hover:border-cyan-500/40 transition-all"
-              title="Alternar idioma (EN / ES)"
-            >
-              {subtitleLanguage === 'en' ? 'ES' : 'EN'}
-            </button>
-          )}
-
           {/* Mute Button */}
           <button
             onClick={toggleMute}
@@ -490,67 +383,6 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
-        </div>
-      </div>
-
-      {/* Mid-Roll Sponsor Badge Overlay (Block 2) */}
-      {currentSegment.type === 'ad' && phase === 'PLAYING' && (
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-16 right-6 z-20 pointer-events-none"
-        >
-          <div className="flex items-center space-x-2 bg-amber-950/90 border border-amber-500/50 px-3 py-1.5 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.35)] md:backdrop-blur-md">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-            <span className="text-[10px] font-mono font-bold text-amber-300 uppercase tracking-widest">
-              PATROCINADOR EXCLUSIVO // BLOQUE 2
-            </span>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Subtitles Overlay */}
-      <AnimatePresence>
-        {currentSubtitle && (
-          <motion.div
-            key={currentSubtitle.text}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none text-center max-w-2xl px-4 w-full"
-          >
-            <div className="inline-block bg-black/85 md:backdrop-blur-md border border-white/15 px-4 py-2 rounded-xl shadow-[0_4px_25px_rgba(0,0,0,0.85)]">
-              {currentSubtitle.speaker && (
-                <span className="text-[11px] font-mono font-bold text-cyan-400 mr-2 uppercase tracking-wider">
-                  {currentSubtitle.speaker}:
-                </span>
-              )}
-              <span className="text-sm md:text-base font-medium text-white tracking-wide">
-                {subtitleLanguage === 'es' ? (currentSubtitle.textEs || currentSubtitle.text) : currentSubtitle.text}
-              </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Bottom Clip HUD Meta Info */}
-      <div className="absolute bottom-6 left-6 right-6 z-20 pointer-events-none flex flex-col items-center">
-
-        {/* Clip HUD Meta Info */}
-        <div className="w-full flex items-center justify-between text-xs text-neutral-400 font-mono px-2 mb-1.5">
-          <div className="flex items-center space-x-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-            <Clock className="w-3.5 h-3.5 text-cyan-400" />
-            <span>
-              {phase === 'PLAYING' 
-                ? `${activeStep.duration || 30}s • [${currentSegment.label}] • LIVE` 
-                : 'PAUSED / TRANSITION'}
-            </span>
-          </div>
-          <span className="text-neutral-300 font-semibold truncate max-w-md">
-            {movieTitle} — {activeStep.title}
-          </span>
         </div>
       </div>
 
@@ -574,24 +406,12 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   );
 };
 
-/**
- * Memoized so the parent's per-second countdown re-renders skip the video
- * stage entirely. Only scene/phase-relevant props are compared — callbacks are
- * ignored (the parent re-creates them each render; the component uses the ones
- * from the render where the scene/phase changed, which is safe because their
- * closures read latest state via the parent's handlers).
- */
 export const CinemaPlayer = React.memo(CinemaPlayerBase, (prev, next) =>
   prev.activeStep === next.activeStep &&
   prev.phase === next.phase &&
   prev.isPaused === next.isPaused &&
   prev.isGenerationPaused === next.isGenerationPaused &&
-  prev.movieTitle === next.movieTitle &&
-  prev.genre === next.genre &&
   prev.activeAd === next.activeAd &&
   prev.inSceneAd === next.inSceneAd &&
-  prev.subtitlesEnabled === next.subtitlesEnabled &&
-  prev.subtitleLanguage === next.subtitleLanguage &&
-  prev.totalSteps === next.totalSteps &&
   prev.fullscreenContainerRef === next.fullscreenContainerRef
 );
