@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
-import { ImmersiveAd, AdsConfig, Movie, ContactMessage } from '@/types/cinema';
+import { ImmersiveAd, AdsConfig, Movie, ContactMessage, isOptionVotingPhase, isMovieVotingPhase } from '@/types/cinema';
 import { 
   Film, 
   Tv, 
@@ -1707,34 +1707,48 @@ export default function AdminDashboardPage() {
           <div className="space-y-6 pb-24">
             {/* Card: Select Movie State / Blockbuster Voting Controller */}
             <div className={`p-6 rounded-2xl border transition-all ${
-              cinemaState?.phase === 'BLOCKBUSTER_VOTING' 
+              isMovieVotingPhase(cinemaState?.phase)
                 ? 'bg-purple-950/40 border-purple-400/60 shadow-[0_0_30px_rgba(168,85,247,0.25)] ring-1 ring-purple-400/40' 
-                : 'bg-neutral-950/80 border-white/10'
+                : isOptionVotingPhase(cinemaState?.phase)
+                  ? 'bg-cyan-950/40 border-cyan-400/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] ring-1 ring-cyan-400/40'
+                  : 'bg-neutral-950/80 border-white/10'
             } flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
                   <span className={`w-2.5 h-2.5 rounded-full ${
-                    cinemaState?.phase === 'BLOCKBUSTER_VOTING' 
+                    isMovieVotingPhase(cinemaState?.phase)
                       ? 'bg-purple-400 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.9)]' 
-                      : 'bg-purple-500/60'
+                      : isOptionVotingPhase(cinemaState?.phase)
+                        ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(0,240,255,0.9)]'
+                        : 'bg-emerald-500/60'
                   }`} />
                   <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
                     <Radio className="w-4 h-4 text-purple-400" />
-                    Estado de Emisión: {cinemaState?.phase === 'BLOCKBUSTER_VOTING' ? 'SELECCIONANDO PELÍCULA (VOTACIÓN ACTIVA)' : 'TRANSMISIÓN NARRATIVA NORMAL'}
+                    Estado de Emisión: {
+                      isMovieVotingPhase(cinemaState?.phase)
+                        ? `VOTACIÓN DE PRÓXIMA PELÍCULA (${cinemaState?.timeRemaining || 0}s)`
+                        : isOptionVotingPhase(cinemaState?.phase)
+                          ? `VOTACIÓN DE OPCIÓN DE ESCENA (${cinemaState?.timeRemaining || 0}s)`
+                          : cinemaState?.phase === 'GENERATING'
+                            ? 'SINTETIZANDO CON IA (GENERATING)'
+                            : 'TRANSMISIÓN NARRATIVA NORMAL'
+                    }
                   </h3>
                 </div>
                 <p className="text-xs text-neutral-400 max-w-xl">
-                  {cinemaState?.phase === 'BLOCKBUSTER_VOTING' 
-                    ? `La audiencia está votando la próxima película (${cinemaState?.timeRemaining || 0}s restantes de 1 minuto). Al finalizar, la ganadora comenzará su producción con un first-shot de 1 minuto ininterrumpido.`
-                    : 'Presiona el botón para comenzar a generar las 4 posibles películas con IA. Al completarse el proceso, el frontend pasará al estado de seleccionar película con 1 minuto para votar.'}
+                  {isMovieVotingPhase(cinemaState?.phase)
+                    ? `La audiencia está votando la próxima película (${cinemaState?.timeRemaining || 0}s restantes de 1 minuto). Al finalizar, la ganadora comenzará su producción inmediatamente.`
+                    : isOptionVotingPhase(cinemaState?.phase)
+                      ? `La audiencia está votando la siguiente rama narrativa de la escena actual (Opciones A/B, ${cinemaState?.timeRemaining || 0}s restantes).`
+                      : 'Presiona el botón para comenzar a generar las 4 posibles películas con IA. Al completarse el proceso, el frontend pasará a la votación de película con 1 minuto.'}
                 </p>
               </div>
 
               <button
                 onClick={handleStartBlockbusterVoting}
-                disabled={isPreparingBlockbusterVote || cinemaState?.phase === 'BLOCKBUSTER_VOTING'}
+                disabled={isPreparingBlockbusterVote || isMovieVotingPhase(cinemaState?.phase)}
                 className={`w-full sm:w-auto px-6 py-3 rounded-xl font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center space-x-2 transition-all shadow-xl hover:scale-[1.02] active:scale-[0.98] ${
-                  cinemaState?.phase === 'BLOCKBUSTER_VOTING'
+                  isMovieVotingPhase(cinemaState?.phase)
                     ? 'bg-purple-500 text-black shadow-[0_0_25px_rgba(168,85,247,0.5)] cursor-default'
                     : 'bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.35)]'
                 } disabled:opacity-60`}
@@ -1744,19 +1758,58 @@ export default function AdminDashboardPage() {
                     <Sparkles className="w-4 h-4 animate-spin text-white" />
                     <span>Generando películas con IA...</span>
                   </>
-                ) : cinemaState?.phase === 'BLOCKBUSTER_VOTING' ? (
+                ) : isMovieVotingPhase(cinemaState?.phase) ? (
                   <>
                     <Radio className="w-4 h-4 animate-pulse text-black" />
-                    <span>Votación en Curso ({cinemaState?.timeRemaining || 0}s)</span>
+                    <span>Votando Película ({cinemaState?.timeRemaining || 0}s)</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 text-white" />
-                    <span>Cambiar a Seleccionar Película</span>
+                    <span>Iniciar Votación de Película</span>
                   </>
                 )}
               </button>
             </div>
+
+            {/* Scene Option Voting Live Monitor (Admin) */}
+            {isOptionVotingPhase(cinemaState?.phase) && cinemaState?.activeStep?.options && (
+              <div className="p-6 rounded-2xl border border-cyan-400/40 bg-cyan-950/20 backdrop-blur-md space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2">
+                    <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-200">
+                      Conteo en Vivo · Votación de Opción de Escena (Paso {cinemaState.activeStep.stepNumber}, {cinemaState.timeRemaining || 0}s restantes)
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-neutral-300 bg-cyan-500/20 px-2.5 py-1 rounded-full border border-cyan-400/30">
+                    Total: {(cinemaState.votesA || 0) + (cinemaState.votesB || 0)} votos
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Option A */}
+                  <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-950/40 space-y-2">
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <span className="font-bold text-cyan-300">OPCIÓN A: {cinemaState.activeStep.options[0]?.title}</span>
+                      <span className="font-bold text-white">{cinemaState.votesA || 0} votos</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-black/60 overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-300" style={{ width: `${((cinemaState.votesA || 0) + (cinemaState.votesB || 0)) > 0 ? Math.round(((cinemaState.votesA || 0) / ((cinemaState.votesA || 0) + (cinemaState.votesB || 0))) * 100) : 50}%` }} />
+                    </div>
+                  </div>
+                  {/* Option B */}
+                  <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/40 space-y-2">
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <span className="font-bold text-amber-300">OPCIÓN B: {cinemaState.activeStep.options[1]?.title}</span>
+                      <span className="font-bold text-white">{cinemaState.votesB || 0} votos</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-black/60 overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-300" style={{ width: `${((cinemaState.votesA || 0) + (cinemaState.votesB || 0)) > 0 ? Math.round(((cinemaState.votesB || 0) / ((cinemaState.votesA || 0) + (cinemaState.votesB || 0))) * 100) : 50}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Blockbuster Candidates Live Vote Monitor (Admin) */}
             {cinemaState?.phase === 'BLOCKBUSTER_VOTING' && Array.isArray(cinemaState?.blockbusterCandidates) && cinemaState.blockbusterCandidates.length > 0 && (

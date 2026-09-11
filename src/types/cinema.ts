@@ -133,7 +133,13 @@ export interface ChatMessage {
   hasUserVoted?: boolean;
 }
 
-export type PlaybackPhase = 'PLAYING' | 'VOTING' | 'GENERATING' | 'COMMERCIAL_BREAK' | 'BLOCKBUSTER_VOTING';
+export type PlaybackPhase = 'PLAYING' | 'VOTING' | 'OPTION_VOTING' | 'GENERATING' | 'COMMERCIAL_BREAK' | 'BLOCKBUSTER_VOTING' | 'MOVIE_VOTING';
+
+export const isOptionVotingPhase = (phase?: PlaybackPhase | string | null): boolean =>
+  phase === 'VOTING' || phase === 'OPTION_VOTING';
+
+export const isMovieVotingPhase = (phase?: PlaybackPhase | string | null): boolean =>
+  phase === 'BLOCKBUSTER_VOTING' || phase === 'MOVIE_VOTING';
 
 // Total scenes per film: 50 x 15s. Narrative arc:
 //   1-10 establishment + central problem, 11-39 development, 40-49 denouement, 50 = THE END

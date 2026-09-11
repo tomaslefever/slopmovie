@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { DecisionOption, PlaybackPhase } from '@/types/cinema';
+import { DecisionOption, PlaybackPhase, isOptionVotingPhase } from '@/types/cinema';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Dices, Sparkles, Timer, Trophy, Flame, Zap } from 'lucide-react';
+import { Check, Dices, Sparkles, Timer, Trophy, Flame, Zap, GitBranch } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { audioCues } from '@/lib/audio-cues';
 
@@ -35,6 +35,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   stepNumber,
   onVote
 }) => {
+  const isOptionVoting = isOptionVotingPhase(phase);
   // Exact 10s countdown from client timeRemaining prop (guaranteed 0 during GENERATING)
   const currentSeconds = phase === 'GENERATING' ? 0 : Math.max(0, Math.min(10, timeRemaining));
   const isTimeExpired = currentSeconds <= 0;
@@ -101,7 +102,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   // Play alert chime ONCE when voting opens
   const hasAlertPlayedRef = useRef(false);
   useEffect(() => {
-    if (isVisible && phase === 'VOTING' && !isTimeExpired && !isVotingEnded) {
+    if (isVisible && isOptionVoting && !isTimeExpired && !isVotingEnded) {
       if (!hasAlertPlayedRef.current) {
         hasAlertPlayedRef.current = true;
         audioCues.playVotingAlert();
@@ -109,12 +110,12 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
     } else {
       hasAlertPlayedRef.current = false;
     }
-  }, [isVisible, phase, isTimeExpired, isVotingEnded]);
+  }, [isVisible, isOptionVoting, isTimeExpired, isVotingEnded]);
 
   // Cinematic tension music lifecycle during voting: exactly one instance per round
   const hasMusicStartedRef = useRef(false);
   useEffect(() => {
-    if (isVisible && phase === 'VOTING' && !isTimeExpired && !isVotingEnded) {
+    if (isVisible && isOptionVoting && !isTimeExpired && !isVotingEnded) {
       if (!hasMusicStartedRef.current) {
         hasMusicStartedRef.current = true;
         audioCues.startTensionMusic();
@@ -128,7 +129,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
       hasMusicStartedRef.current = false;
       audioCues.stopTensionMusic();
     };
-  }, [isVisible, phase, isTimeExpired, isVotingEnded]);
+  }, [isVisible, isOptionVoting, isTimeExpired, isVotingEnded]);
 
   // Celebrate winner when authoritative decision arrives
   const hasCelebratedRef = useRef(false);
@@ -171,6 +172,12 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
             >
               {/* Glowing Top Countdown Header */}
               <div className="flex flex-col items-center mb-3 md:mb-8 text-center">
+                {/* Category Badge: Scene Option Vote */}
+                <div className="mb-2.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-400/50 text-[10px] md:text-xs font-mono font-bold text-cyan-300 uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+                  <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Votación de Opción de Escena • Opciones A / B</span>
+                </div>
+
                 <div className="relative flex items-center justify-center mb-2 md:mb-3">
                   {/* Pulsing Timer Circle */}
                   <svg className="w-20 h-20 md:w-24 md:h-24 transform -rotate-90" viewBox="0 0 96 96">
@@ -217,10 +224,10 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   <Timer className="w-3.5 h-3.5 md:w-4 md:h-4 text-cyan-400" />
                   <h2 className="text-lg md:text-2xl font-black uppercase tracking-widest text-white">
                     {isAuthoritativeWinnerReady
-                      ? "Voting Concluded • Results Revealed"
+                      ? "Decisión de Escena Revelada"
                       : (isTimeExpired
-                          ? "Time Elapsed • Tallying Votes..."
-                          : (stepNumber === 4 ? "First Major Conflict: You Decide!" : "Audience Vote")
+                          ? "Tiempo Agotado • Calculando Rama..."
+                          : (stepNumber === 4 ? "Primer Conflicto: ¡Tú Decides la Escena!" : "Vota la Siguiente Rama de la Escena")
                         )
                     }
                   </h2>
@@ -228,12 +235,12 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                 </div>
                 <p className="hidden md:block text-xs text-neutral-400 mt-1 max-w-md">
                   {isAuthoritativeWinnerReady
-                    ? "Audience decision verified · Transitioning to selected narrative branch..."
+                    ? "Opción ganadora verificada · Sintetizando continuación narrativa..."
                     : (isTimeExpired
-                        ? "Closing ballots. Calculating narrative choice with Realtime consensus..."
+                        ? "Cerrando urnas de escena. Calculando decisión con consenso Realtime..."
                         : (stepNumber === 4
-                            ? <>The first major crisis has erupted! Choose how our protagonist resolves this conflict. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to decide.</>
-                            : <>Choose the next story continuation. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote instantly.</>
+                            ? <>¡Ha estallado el conflicto! Elige cómo nuestro protagonista resuelve esta escena. Presiona <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> o <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd>.</>
+                            : <>Elige el rumbo de la siguiente escena. Presiona <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> o <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> para votar.</>
                           )
                       )
                   }
@@ -449,24 +456,24 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   <>
                     <Dices className="w-4 h-4 text-amber-400" />
                     <span className="text-xs font-mono font-bold tracking-widest uppercase text-amber-300">
-                      Random Tie-Breaker • Fate Decision
+                      Empate / Selección al Azar • Opción de Escena
                     </span>
                   </>
                 ) : (
                   <>
                     <Trophy className="w-4 h-4 text-amber-400" />
                     <span className="text-xs font-mono font-bold tracking-widest uppercase text-cyan-300">
-                      Audience Final Decision
+                      Decisión de Escena de la Audiencia
                     </span>
                   </>
                 )}
               </div>
 
               <h2 className="text-2xl md:text-3xl font-black uppercase tracking-widest text-white mb-2 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">
-                Selected Option
+                Opción de Escena Seleccionada
               </h2>
               <p className="text-xs text-neutral-300 max-w-md font-mono mb-6">
-                The story will proceed down this narrative branch. The next scene is being synthesized.
+                La historia continuará por esta rama narrativa. La siguiente escena está siendo sintetizada.
               </p>
 
               {/* The Hero Centered Card */}

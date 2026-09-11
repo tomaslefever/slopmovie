@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { BlockbusterCandidate, PlaybackPhase } from '@/types/cinema';
+import { BlockbusterCandidate, PlaybackPhase, isMovieVotingPhase } from '@/types/cinema';
 import { motion } from 'framer-motion';
-import { Clapperboard, Timer, Trophy, Radio, Check, Sparkles } from 'lucide-react';
+import { Clapperboard, Timer, Trophy, Radio, Check, Sparkles, Film } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { audioCues } from '@/lib/audio-cues';
 
@@ -33,6 +33,7 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
   winner,
   onVote
 }) => {
+  const isMovieVoting = isMovieVotingPhase(phase);
   const currentSeconds = phase === 'GENERATING' ? 0 : Math.max(0, Math.min(60, timeRemaining));
   const isTimeExpired = currentSeconds <= 0;
   const isAuthoritativeWinnerReady = Boolean(winner?.id || winner?.title);
@@ -67,7 +68,7 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
 
   // Watchdog: If local timer expires during BLOCKBUSTER_VOTING, notify server to complete stage
   useEffect(() => {
-    if (phase === 'BLOCKBUSTER_VOTING' && currentSeconds <= 0 && !isAuthoritativeWinnerReady) {
+    if (isMovieVoting && currentSeconds <= 0 && !isAuthoritativeWinnerReady) {
       const timeout = setTimeout(() => {
         fetch('/api/cinema/state', {
           method: 'POST',
@@ -80,7 +81,7 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
       }, 2000);
       return () => clearTimeout(timeout);
     }
-  }, [phase, currentSeconds, isAuthoritativeWinnerReady]);
+  }, [isMovieVoting, currentSeconds, isAuthoritativeWinnerReady]);
 
   const handleCastVote = (candidateId: 'A' | 'B' | 'C' | 'D') => {
     if (isVotingEnded || userVoted === candidateId) return;
@@ -160,12 +161,12 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
                 {isVotingEnded ? (
                   <>
                     <Trophy className="w-3 h-3 text-amber-400" />
-                    Audience Decision Locked
+                    Película Ganadora Confirmada
                   </>
                 ) : (
                   <>
-                    <Radio className="w-3 h-3 animate-pulse" />
-                    Next Blockbuster Vote
+                    <Film className="w-3 h-3 text-purple-300" />
+                    Votación de Próxima Película • Candidatas A-D
                   </>
                 )}
               </span>
@@ -173,16 +174,16 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
 
             <h2 className="text-base md:text-xl lg:text-3xl font-black text-white tracking-tight uppercase">
               {isVotingEnded ? (
-                <>The Winning Film: <span className="text-purple-400">{winningCandidate?.title}</span></>
+                <>Próximo Estreno: <span className="text-purple-400">{winningCandidate?.title}</span></>
               ) : (
-                <>The Next Film Is In <span className="text-purple-400">Your Hands</span></>
+                <>Elige la <span className="text-purple-400">Próxima Película Completa</span></>
               )}
             </h2>
 
             <p className="text-[9px] md:text-[11px] text-neutral-400 font-mono uppercase tracking-widest">
               {isVotingEnded
-                ? 'Audience vote concluded · Synthesizing screenplay and visuals'
-                : '4 candidates · 60 seconds · secret ballot · majority rules'}
+                ? 'Votación de película finalizada · Sintetizando guion y escena 1 con IA'
+                : '4 candidatas · 60 segundos · voto secreto · la más votada será producida a continuación'}
             </p>
           </motion.div>
 
@@ -196,13 +197,13 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
               <>
                 <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-400 animate-spin" />
                 <span className="font-mono text-[11px] md:text-sm text-purple-300 font-bold tracking-wider">
-                  PRE-PRODUCTION & SYNTHESIS
+                  PRE-PRODUCCIÓN & SÍNTESIS DE PELÍCULA
                 </span>
               </>
             ) : (
               <>
                 <Timer className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-400" />
-                <span className="font-mono text-[11px] md:text-sm text-neutral-200">VOTE CLOSES IN</span>
+                <span className="font-mono text-[11px] md:text-sm text-neutral-200">VOTACIÓN DE PELÍCULA CIERRA EN</span>
                 <span className={`font-mono font-black text-sm md:text-lg ${currentSeconds <= 10 ? 'text-red-400 animate-pulse' : 'text-purple-300'}`}>
                   {currentSeconds}s
                 </span>

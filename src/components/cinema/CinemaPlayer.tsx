@@ -60,21 +60,23 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   onOpenBuyAds,
   fullscreenContainerRef
 }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoRefA = useRef<HTMLVideoElement>(null);
+  const videoRefB = useRef<HTMLVideoElement>(null);
+
   const [isMuted, setIsMuted] = useState(() => audioCues.getMuted());
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Reliable Video Source Resolution (Fallbacks guarantee a video ALWAYS plays)
   const fallbackUrl = CINEMA_FALLBACK_VIDEOS[Math.abs((activeStep.stepNumber || 1) - 1) % CINEMA_FALLBACK_VIDEOS.length];
 
-  const getSanitizedVideoUrl = (url?: string, fallbackIndexOffset: number = 0) => {
+  const getSanitizedVideoUrl = React.useCallback((url?: string, fallbackIndexOffset: number = 0) => {
     if (!url || typeof url !== 'string' || url.trim() === '' || url.startsWith('/videos/')) {
       const idx = Math.abs((activeStep.stepNumber || 1) - 1 + fallbackIndexOffset) % CINEMA_FALLBACK_VIDEOS.length;
       return CINEMA_FALLBACK_VIDEOS[idx];
     }
     return url;
-  };
+  }, [activeStep.stepNumber]);
 
   // Construct sequential segments for this scene:
   // Normal scene (30s): [Shot 1 (Opening), Shot 2 (Climax)]
@@ -82,7 +84,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   const segments = React.useMemo<PlaybackSegment[]>(() => {
     const list: PlaybackSegment[] = [];
 
-    // 1. Shot 1: Opening / Action
+    // 1. Shot 1: Opening / Action (15s)
     list.push({
       type: 'shot1',
       url: getSanitizedVideoUrl(activeStep.videoUrl, 0)
@@ -96,126 +98,124 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       });
     }
 
-    // 3. Shot 2: Climax / Consequence (15s) - ALWAYS included so 2 videos are concatenated
+    // 3. Shot 2: Climax / Consequence (15s) - ALWAYS concatenated
     list.push({
       type: 'shot2',
       url: getSanitizedVideoUrl(activeStep.videoUrl2, 1)
     });
 
     return list;
-  }, [activeStep.videoUrl, activeStep.videoUrl2, activeStep.hasMidRollAd, activeStep.adVideoUrl, activeStep.stepNumber]);
+  }, [activeStep.videoUrl, activeStep.videoUrl2, activeStep.hasMidRollAd, activeStep.adVideoUrl, getSanitizedVideoUrl]);
 
+  // Dual-Buffer Seamless A/B Player state
+  const [activeSlot, setActiveSlot] = useState<'A' | 'B'>('A');
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number>(0);
+  const [slotSrcA, setSlotSrcA] = useState<string>(() => segments[0]?.url || fallbackUrl);
+  const [slotSrcB, setSlotSrcB] = useState<string>(() => segments[1]?.url || segments[0]?.url || fallbackUrl);
 
-  // Reset to segment 0 whenever activeStep transitions
-  useEffect(() => {
-    setCurrentSegmentIndex(0);
-    playbackEndedNotifiedRef.current = false;
-  }, [activeStep.stepNumber, activeStep.videoUrl]);
-
-  const currentSegment = segments[currentSegmentIndex] || segments[0];
-  const currentVideoSrc = currentSegment.url;
-
-  // Consecutive load errors without a successful play. Bounds the fallback
-  // rotation so a fully offline client cannot remount the video forever.
-  const errorStreakRef = useRef<number>(0);
-  const MAX_CONSECUTIVE_ERRORS = CINEMA_FALLBACK_VIDEOS.length + 3;
-
-  const handleVideoError = () => {
-    console.warn(`[CinemaPlayer] Video failed to load from "${currentVideoSrc}". Switching to fallback video.`);
-    if (errorStreakRef.current >= MAX_CONSECUTIVE_ERRORS) {
-      console.warn('[CinemaPlayer] Every fallback video failed repeatedly. Stopping rotation.');
-      return;
-    }
-    errorStreakRef.current += 1;
-    const fallbackIndex = CINEMA_FALLBACK_VIDEOS.indexOf(currentVideoSrc);
-    const nextSrc = fallbackIndex >= 0
-      ? CINEMA_FALLBACK_VIDEOS[(fallbackIndex + 1) % CINEMA_FALLBACK_VIDEOS.length]
-      : fallbackUrl;
-    if (nextSrc !== currentVideoSrc && videoRef.current) {
-      videoRef.current.src = nextSrc;
-      videoRef.current.play().catch(() => {});
-    }
-  };
-
-  const lastPlayedStepRef = useRef<number>(activeStep.stepNumber);
-  const lastPlayedSegmentRef = useRef<number>(currentSegmentIndex);
-  const lastVideoSrcRef = useRef<string>(currentVideoSrc);
   const playbackEndedNotifiedRef = useRef<boolean>(false);
+  const activeSlotRef = useRef<'A' | 'B'>('A');
+  activeSlotRef.current = activeSlot;
+  const currentSegmentIndexRef = useRef<number>(0);
+  currentSegmentIndexRef.current = currentSegmentIndex;
+  const segmentsRef = useRef<PlaybackSegment[]>(segments);
+  segmentsRef.current = segments;
 
-  // Seamless auto-play and transition between segments without looping
+  const isOptionVoting = phase === 'VOTING' || phase === 'OPTION_VOTING';
+
+  // Initialize slots when scene / activeStep changes
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !currentVideoSrc) return;
+    playbackEndedNotifiedRef.current = false;
+    setCurrentSegmentIndex(0);
+    setActiveSlot('A');
 
-    const isDifferentStep = lastPlayedStepRef.current !== activeStep.stepNumber;
-    const isDifferentSegment = lastPlayedSegmentRef.current !== currentSegmentIndex;
-    const isDifferentSrc = lastVideoSrcRef.current !== currentVideoSrc;
+    const src0 = segments[0]?.url || fallbackUrl;
+    const src1 = segments[1]?.url || src0;
 
-    if (isDifferentStep || isDifferentSegment || isDifferentSrc) {
-      lastPlayedStepRef.current = activeStep.stepNumber;
-      lastPlayedSegmentRef.current = currentSegmentIndex;
-      lastVideoSrcRef.current = currentVideoSrc;
-      video.currentTime = 0;
-      video.loop = false; // Never loop during sequential movie playback
-      video.muted = phase === 'VOTING' ? true : isMuted;
-      video.play().catch((err) => {
-        // Autoplay policy fallback: mute and retry
-        video.muted = true;
-        video.play().catch(() => {});
+    setSlotSrcA(src0);
+    setSlotSrcB(src1);
+
+    const videoA = videoRefA.current;
+    const videoB = videoRefB.current;
+
+    if (videoA) {
+      videoA.src = src0;
+      videoA.currentTime = 0;
+      videoA.loop = false;
+      videoA.muted = isOptionVoting ? true : isMuted;
+      videoA.play().catch(() => {
+        videoA.muted = true;
+        videoA.play().catch(() => {});
       });
-    } else if (video.paused && phase === 'PLAYING' && !isPaused) {
-      video.play().catch(() => {});
     }
-  }, [currentVideoSrc, currentSegmentIndex, activeStep.stepNumber, phase, isMuted, isPaused]);
 
-  // Enforce scene repeating without sound during VOTING phase, and completely pause/mute during COMMERCIAL_BREAK
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (phase === 'COMMERCIAL_BREAK') {
-      video.pause();
-      video.muted = true;
-    } else if (phase === 'VOTING') {
-      video.muted = true;
-      video.loop = true;
-      if (video.paused && !isPaused) {
-        video.play().catch(() => {});
-      }
-    } else if (phase === 'PLAYING') {
-      video.loop = false;
-      video.muted = isMuted;
-      if (video.paused && !isPaused) {
-        video.play().catch(() => {});
-      }
+    if (videoB) {
+      videoB.src = src1;
+      videoB.currentTime = 0;
+      videoB.loop = false;
+      videoB.muted = true;
+      videoB.preload = "auto";
+      videoB.load();
     }
-  }, [phase, isMuted, isPaused]);
+  }, [activeStep.stepNumber, activeStep.videoUrl, activeStep.videoUrl2, isMuted, isOptionVoting, fallbackUrl, segments]);
 
-  // Pause or resume HTML video playback when stream is paused/resumed
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+  // Handle seamless transition when a slot finishes playing
+  const handleSlotEnded = React.useCallback((finishedSlot: 'A' | 'B') => {
+    // Only process end event from the active slot
+    if (finishedSlot !== activeSlotRef.current) return;
 
-    if (isPaused) {
-      video.pause();
-    } else {
-      if (video.paused && phase === 'PLAYING') {
-        video.play().catch(() => {});
-      }
-    }
-  }, [isPaused, phase]);
+    const currentIdx = currentSegmentIndexRef.current;
+    const allSegments = segmentsRef.current;
 
-  // Handle video end: advance to next segment or notify step completion
-  const handleEnded = () => {
     if (phase === 'PLAYING') {
-      // If there is another segment in this scene (e.g. Shot 1 -> Ad, or Shot 1 -> Shot 2, or Ad -> Shot 2):
-      if (currentSegmentIndex < segments.length - 1) {
-        setCurrentSegmentIndex(prev => prev + 1);
+      if (currentIdx < allSegments.length - 1) {
+        // Next segment exists: Switch slots instantly
+        const nextIdx = currentIdx + 1;
+        const nextSlot = finishedSlot === 'A' ? 'B' : 'A';
+        const targetVideo = nextSlot === 'A' ? videoRefA.current : videoRefB.current;
+        const oldVideo = finishedSlot === 'A' ? videoRefA.current : videoRefB.current;
+
+        if (oldVideo) {
+          oldVideo.pause();
+          oldVideo.muted = true;
+        }
+
+        if (targetVideo) {
+          targetVideo.currentTime = 0;
+          targetVideo.muted = isMuted;
+          targetVideo.play().catch(() => {
+            targetVideo.muted = true;
+            targetVideo.play().catch(() => {});
+          });
+        }
+
+        setActiveSlot(nextSlot);
+        setCurrentSegmentIndex(nextIdx);
+
+        // Preload subsequent segment (if any) into the now standby slot
+        const subsequentIdx = nextIdx + 1;
+        if (subsequentIdx < allSegments.length) {
+          const subsequentUrl = allSegments[subsequentIdx].url;
+          if (finishedSlot === 'A') {
+            setSlotSrcA(subsequentUrl);
+            if (videoRefA.current) {
+              videoRefA.current.src = subsequentUrl;
+              videoRefA.current.preload = "auto";
+              videoRefA.current.load();
+            }
+          } else {
+            setSlotSrcB(subsequentUrl);
+            if (videoRefB.current) {
+              videoRefB.current.src = subsequentUrl;
+              videoRefB.current.preload = "auto";
+              videoRefB.current.load();
+            }
+          }
+        }
         return;
       }
 
-      // All segments for this scene have completed: hold final frame and advance
+      // All segments for this scene have completed
       if (!playbackEndedNotifiedRef.current) {
         playbackEndedNotifiedRef.current = true;
         onPlaybackEnded?.();
@@ -223,21 +223,85 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       return;
     }
 
-    if (phase === 'VOTING' && videoRef.current) {
-      videoRef.current.currentTime = 0;
-      videoRef.current.play().catch(() => {});
+    // In VOTING phase, loop current video seamlessly without sound
+    if (phase === 'VOTING' || phase === 'OPTION_VOTING') {
+      const activeVideo = finishedSlot === 'A' ? videoRefA.current : videoRefB.current;
+      if (activeVideo) {
+        activeVideo.currentTime = 0;
+        activeVideo.muted = true;
+        activeVideo.play().catch(() => {});
+      }
     }
-  };
+  }, [phase, isMuted, onPlaybackEnded]);
+
+  // Video error fallback rotation
+  const handleVideoError = React.useCallback((slot: 'A' | 'B') => {
+    const video = slot === 'A' ? videoRefA.current : videoRefB.current;
+    if (!video) return;
+    const currentSrc = video.src;
+    console.warn(`[CinemaPlayer] Video failed in slot ${slot} ("${currentSrc}"). Loading fallback.`);
+    const fallbackIndex = CINEMA_FALLBACK_VIDEOS.indexOf(currentSrc);
+    const nextSrc = fallbackIndex >= 0
+      ? CINEMA_FALLBACK_VIDEOS[(fallbackIndex + 1) % CINEMA_FALLBACK_VIDEOS.length]
+      : fallbackUrl;
+    if (nextSrc !== currentSrc) {
+      if (slot === 'A') setSlotSrcA(nextSrc);
+      else setSlotSrcB(nextSrc);
+      video.src = nextSrc;
+      video.load();
+      if (slot === activeSlotRef.current) {
+        video.play().catch(() => {});
+      }
+    }
+  }, [fallbackUrl]);
+
+  // Phase changes (Muting & Pausing)
+  useEffect(() => {
+    const activeVideo = activeSlot === 'A' ? videoRefA.current : videoRefB.current;
+    const standbyVideo = activeSlot === 'A' ? videoRefB.current : videoRefA.current;
+
+    if (standbyVideo) {
+      standbyVideo.muted = true;
+    }
+
+    if (!activeVideo) return;
+
+    if (phase === 'COMMERCIAL_BREAK') {
+      activeVideo.pause();
+      activeVideo.muted = true;
+    } else if (isOptionVoting) {
+      activeVideo.muted = true;
+      activeVideo.loop = true;
+      if (activeVideo.paused && !isPaused) {
+        activeVideo.play().catch(() => {});
+      }
+    } else if (phase === 'PLAYING') {
+      activeVideo.loop = false;
+      activeVideo.muted = isMuted;
+      if (activeVideo.paused && !isPaused) {
+        activeVideo.play().catch(() => {});
+      }
+    }
+  }, [phase, activeSlot, isMuted, isPaused, isOptionVoting]);
+
+  // Pause / resume stream
+  useEffect(() => {
+    const activeVideo = activeSlot === 'A' ? videoRefA.current : videoRefB.current;
+    if (!activeVideo) return;
+
+    if (isPaused) {
+      activeVideo.pause();
+    } else if (activeVideo.paused && phase === 'PLAYING') {
+      activeVideo.play().catch(() => {});
+    }
+  }, [isPaused, phase, activeSlot]);
 
   const toggleMute = () => {
     const nextMuted = audioCues.toggleMute();
     setIsMuted(nextMuted);
-    if (videoRef.current) {
-      if (phase !== 'VOTING') {
-        videoRef.current.muted = nextMuted;
-      } else {
-        videoRef.current.muted = true;
-      }
+    const activeVideo = activeSlot === 'A' ? videoRefA.current : videoRefB.current;
+    if (activeVideo) {
+      activeVideo.muted = isOptionVoting ? true : nextMuted;
     }
     audioCues.playClick();
   };
@@ -251,8 +315,8 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         enterFullscreen
           .then(() => setIsFullscreen(true))
           .catch(() => {
-            // iOS Safari only allows fullscreen on the video element itself
-            const video = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+            const activeVideo = activeSlot === 'A' ? videoRefA.current : videoRefB.current;
+            const video = activeVideo as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
             if (video?.requestFullscreen) {
               video.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
             } else if (video?.webkitEnterFullscreen) {
@@ -266,7 +330,6 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     }
   };
 
-  // Keep the icon in sync when fullscreen exits via Esc or platform UI
   useEffect(() => {
     const handleFullscreenChange = () => {
       const target = fullscreenContainerRef?.current ?? containerRef.current;
@@ -284,61 +347,81 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       {/* Ambient background glow */}
       <div className="absolute inset-0 bg-radial from-cyan-950/20 via-transparent to-black pointer-events-none" />
 
-      {/* Main Video Element */}
+      {/* Dual Video Buffer: Slot A */}
       <video
-        ref={videoRef}
-        key={currentVideoSrc}
-        src={currentVideoSrc}
+        ref={videoRefA}
+        src={slotSrcA}
         poster={activeStep.thumbnailUrl}
         preload="auto"
         autoPlay
         playsInline
-        loop={phase === 'VOTING'}
-        muted={phase === 'VOTING' || phase === 'COMMERCIAL_BREAK' ? true : isMuted}
-        onError={handleVideoError}
-        onEnded={handleEnded}
+        muted={activeSlot === 'A' ? (isOptionVoting || phase === 'COMMERCIAL_BREAK' ? true : isMuted) : true}
+        onError={() => handleVideoError('A')}
+        onEnded={() => handleSlotEnded('A')}
         onPlaying={() => {
-          errorStreakRef.current = 0;
-          onPlaybackStarted?.();
+          if (activeSlot === 'A') onPlaybackStarted?.();
         }}
-        onCanPlay={() => {
-          errorStreakRef.current = 0;
+        className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-200 ${
+          phase === 'COMMERCIAL_BREAK'
+            ? 'opacity-0 invisible pointer-events-none'
+            : (activeSlot === 'A' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')
+        }`}
+      />
+
+      {/* Dual Video Buffer: Slot B (Standby / Preloading / Seamless Switch) */}
+      <video
+        ref={videoRefB}
+        src={slotSrcB}
+        preload="auto"
+        autoPlay={false}
+        playsInline
+        muted={activeSlot === 'B' ? (isOptionVoting || phase === 'COMMERCIAL_BREAK' ? true : isMuted) : true}
+        onError={() => handleVideoError('B')}
+        onEnded={() => handleSlotEnded('B')}
+        onPlaying={() => {
+          if (activeSlot === 'B') onPlaybackStarted?.();
         }}
-        className={`w-full h-full object-cover object-center transition-opacity duration-300 ${
-          phase === 'COMMERCIAL_BREAK' ? 'opacity-0 invisible pointer-events-none' : 'opacity-100 visible'
+        className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-200 ${
+          phase === 'COMMERCIAL_BREAK'
+            ? 'opacity-0 invisible pointer-events-none'
+            : (activeSlot === 'B' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none')
         }`}
       />
 
       {/* Subtle Grain Overlay */}
       <div 
-        className="absolute inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay hidden md:block"
+        className="absolute inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay hidden md:block z-10"
         style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '4px 4px' }}
       />
 
       {/* In-Scene Product Hotspot (Diegetic AR Placement during PLAYING) */}
       {phase === 'PLAYING' && inSceneAd && (
-        <InSceneProductHotspot ad={inSceneAd} />
+        <div className="z-20">
+          <InSceneProductHotspot ad={inSceneAd} />
+        </div>
       )}
 
       {/* Commercial Break Holographic Interstitial */}
       {phase === 'COMMERCIAL_BREAK' && (
-        <ImmersiveAdPlayer 
-          ad={activeAd || {
-            id: 'ad_interstitial_default',
-            brandName: 'Kinetic Cinema',
-            title: 'Intermission Sponsor Showcase',
-            tagline: 'High-Fidelity Neural Cinema',
-            type: 'commercial_break',
-            imageUrl: 'https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=800&auto=format&fit=crop&q=80',
-            ctaText: 'Explore Collection',
-            duration: 15,
-            isActive: true,
-            impressions: 0,
-            clicks: 0
-          }} 
-          onAdCompleted={onAdCompleted} 
-          onOpenBuyAds={onOpenBuyAds}
-        />
+        <div className="z-30">
+          <ImmersiveAdPlayer 
+            ad={activeAd || {
+              id: 'ad_interstitial_default',
+              brandName: 'Kinetic Cinema',
+              title: 'Intermission Sponsor Showcase',
+              tagline: 'High-Fidelity Neural Cinema',
+              type: 'commercial_break',
+              imageUrl: 'https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=800&auto=format&fit=crop&q=80',
+              ctaText: 'Explore Collection',
+              duration: 15,
+              isActive: true,
+              impressions: 0,
+              clicks: 0
+            }} 
+            onAdCompleted={onAdCompleted} 
+            onOpenBuyAds={onOpenBuyAds}
+          />
+        </div>
       )}
 
       {/* Top Cinema Controls (LIVE on the left, Volume & Fullscreen on the right) */}

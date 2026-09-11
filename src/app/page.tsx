@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { CinemaState, ChatMessage, PlaybackPhase, MovieStep, ImmersiveAd } from '@/types/cinema';
+import { CinemaState, ChatMessage, PlaybackPhase, MovieStep, ImmersiveAd, isOptionVotingPhase, isMovieVotingPhase } from '@/types/cinema';
 import { CinemaPlayer } from '@/components/cinema/CinemaPlayer';
 import { VotingOverlay } from '@/components/cinema/VotingOverlay';
 import { BlockbusterVoting } from '@/components/cinema/BlockbusterVoting';
@@ -294,7 +294,7 @@ export default function CinemaStreamingPage() {
         });
       })
       .on('broadcast', { event: 'phase_change' }, (payload: { payload: { phase: PlaybackPhase; timeRemaining?: number; votesA?: number; votesB?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean; phaseEndsAt?: string | number; phaseDuration?: number; options?: any; winner?: any } }) => {
-        if (payload.payload.phase === 'VOTING') {
+        if (isOptionVotingPhase(payload.payload.phase)) {
           setUserVoted(null);
           setBlockbusterWinner(null);
         }
@@ -306,11 +306,12 @@ export default function CinemaStreamingPage() {
         }
         setCinemaState((prev) => {
           if (!prev) return prev;
+          const isOptionVote = isOptionVotingPhase(payload.payload.phase);
           const updatedStep = payload.payload.selectedOption ? {
             ...prev.activeStep,
             selectedOption: payload.payload.selectedOption,
             wasRandomPick: payload.payload.wasRandomPick ?? prev.activeStep.wasRandomPick
-          } : (payload.payload.phase === 'VOTING' ? {
+          } : (isOptionVote ? {
             ...prev.activeStep,
             selectedOption: undefined,
             wasRandomPick: undefined,
@@ -320,11 +321,11 @@ export default function CinemaStreamingPage() {
           return {
             ...prev,
             phase: payload.payload.phase,
-            timeRemaining: payload.payload.phase === 'VOTING' ? (payload.payload.timeRemaining ?? 10) : 0,
+            timeRemaining: isOptionVote ? (payload.payload.timeRemaining ?? 10) : 0,
             phaseDuration: payload.payload.phaseDuration ?? (payload.payload as any).phaseDuration ?? prev.phaseDuration,
             phaseEndsAt: payload.payload.phaseEndsAt ?? prev.phaseEndsAt,
-            votesA: payload.payload.votesA ?? (payload.payload.phase === 'VOTING' ? 0 : prev.votesA),
-            votesB: payload.payload.votesB ?? (payload.payload.phase === 'VOTING' ? 0 : prev.votesB),
+            votesA: payload.payload.votesA ?? (isOptionVote ? 0 : prev.votesA),
+            votesB: payload.payload.votesB ?? (isOptionVote ? 0 : prev.votesB),
             blockbusterCandidates: (payload.payload as any).blockbusterCandidates ?? prev.blockbusterCandidates,
             blockbusterVoteCounts: (payload.payload as any).blockbusterVoteCounts ?? prev.blockbusterVoteCounts,
             blockbusterWinner: payload.payload.winner ?? prev.blockbusterWinner,
@@ -626,7 +627,7 @@ export default function CinemaStreamingPage() {
 
   // Vote for the next blockbuster movie during the 60s BLOCKBUSTER_VOTING stage
   const handleBlockbusterVote = async (candidateId: 'A' | 'B' | 'C' | 'D') => {
-    if (!cinemaState || cinemaState.phase !== 'BLOCKBUSTER_VOTING') return;
+    if (!cinemaState || !isMovieVotingPhase(cinemaState.phase)) return;
     if (blockbusterUserVoted === candidateId) return;
 
     const previousPick = blockbusterUserVoted;
@@ -668,7 +669,8 @@ export default function CinemaStreamingPage() {
   };
 
   // Send chat message handler (requires nickname)
-  const handleSendMessage = async (text: string) => {    if (!nickname) return;
+  const handleSendMessage = async (text: string) => {
+    if (!nickname) return;
 
     try {
       await fetch('/api/cinema/chat', {
@@ -747,7 +749,7 @@ export default function CinemaStreamingPage() {
 
   const isBlockbusterActive = Boolean(
     cinemaState && (
-      cinemaState.phase === 'BLOCKBUSTER_VOTING' ||
+      isMovieVotingPhase(cinemaState.phase) ||
       (cinemaState.phase === 'GENERATING' && (Boolean(blockbusterWinner) || Boolean(cinemaState.blockbusterWinner) || (cinemaState.blockbusterCandidates && cinemaState.blockbusterCandidates.length > 0)))
     )
   );
@@ -816,7 +818,7 @@ export default function CinemaStreamingPage() {
               {/* Scene Decision Overlay (hidden if blockbuster voting is active) */}
               {!isBlockbusterActive && (
                 <VotingOverlay
-                  isVisible={cinemaState.phase === 'VOTING' || cinemaState.phase === 'GENERATING'}
+                  isVisible={isOptionVotingPhase(cinemaState.phase) || cinemaState.phase === 'GENERATING'}
                   phase={cinemaState.phase}
                   timeRemaining={cinemaState.timeRemaining}
                   options={cinemaState.activeStep.options}
