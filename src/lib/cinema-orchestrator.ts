@@ -308,7 +308,7 @@ class CinemaOrchestrator {
    * Deduplicated entry point: concurrent callers (worker tick, API routes) join
    * the SAME in-flight initialization instead of generating competing movies.
    */
-  public initializeMovie(customPrompt?: string): Promise<Movie> {
+  public initializeMovie(customPrompt?: BlockbusterCandidate | string): Promise<Movie> {
     if (this.initializeMoviePromise) {
       console.log('[Cinema] initializeMovie already in progress — joining existing initialization.');
       return this.initializeMoviePromise;
@@ -319,7 +319,7 @@ class CinemaOrchestrator {
     return this.initializeMoviePromise;
   }
 
-  private async doInitializeMovie(customPrompt?: string): Promise<Movie> {
+  private async doInitializeMovie(customPrompt?: BlockbusterCandidate | string): Promise<Movie> {
     // Try to restore existing streaming or paused movie from Supabase if available
     if (isSupabaseConfigured() && !customPrompt) {
       try {
@@ -580,6 +580,12 @@ class CinemaOrchestrator {
         if (liveState.currentStep && this.movie) {
           this.movie.currentStep = liveState.currentStep;
         }
+        if (Array.isArray(liveState.blockbusterCandidates) && liveState.blockbusterCandidates.length > 0) {
+          this.blockbusterCandidates = liveState.blockbusterCandidates;
+        }
+        if (liveState.blockbusterVoteCounts) {
+          this.blockbusterVoteCounts = liveState.blockbusterVoteCounts;
+        }
       }
     } catch (err) {
       console.warn('[CinemaEngine] Error syncing from database:', err);
@@ -715,6 +721,16 @@ class CinemaOrchestrator {
 
     // ── NEXT BLOCKBUSTER AUDIENCE VOTE CONCLUDED (60s) ───────────────────────
     if (this.phase === 'BLOCKBUSTER_VOTING') {
+      if (isSupabaseConfigured() && this.movie) {
+        try {
+          const freshCounts = await loadBlockbusterVoteCountsFromDb(this.movie.id);
+          if (freshCounts) {
+            this.blockbusterVoteCounts = freshCounts;
+          }
+        } catch (err) {
+          console.warn('[Cinema] Error refreshing blockbuster votes from DB before resolution:', err);
+        }
+      }
       const winner = this.resolveBlockbusterVote();
       const savedCandidates = [...this.blockbusterCandidates];
       const savedCounts = { ...this.blockbusterVoteCounts };
@@ -750,7 +766,7 @@ class CinemaOrchestrator {
         this.addSystemMessage(`🏆 NEXT BLOCKBUSTER: "${winner.title}" (${winner.genre}) won the audience vote! Generating now — the premiere begins automatically when it's ready.`);
         // ASYNC BY DESIGN: does not await. The new movie broadcasts new_movie_started
         // and starts playing when its generation finishes.
-        this.startNextBlockbusterMovie(winner.premise).catch((err) => {
+        this.startNextBlockbusterMovie(winner).catch((err) => {
           console.error('[Cinema] Async blockbuster generation failed:', err);
         });
       } else {
@@ -1302,11 +1318,13 @@ class CinemaOrchestrator {
   private resolveBlockbusterVote(): BlockbusterCandidate | null {
     if (this.blockbusterCandidates.length === 0) return null;
 
-    const maxVotes = Math.max(...(['A', 'B', 'C', 'D'] as const).map(id => this.blockbusterVoteCounts[id]));
-    const leaders = this.blockbusterCandidates.filter(c => this.blockbusterVoteCounts[c.id] === maxVotes);
+    const maxVotes = Math.max(...(['A', 'B', 'C', 'D'] as const).map(id => this.blockbusterVoteCounts[id] || 0));
+    const leaders = maxVotes > 0
+      ? this.blockbusterCandidates.filter(c => (this.blockbusterVoteCounts[c.id] || 0) === maxVotes)
+      : this.blockbusterCandidates;
     const winner = leaders.length > 0
       ? leaders[Math.floor(Math.random() * leaders.length)]
-      : this.blockbusterCandidates[Math.floor(Math.random() * this.blockbusterCandidates.length)];
+      : this.blockbusterCandidates[0];
 
     return winner;
   }
@@ -1781,7 +1799,7 @@ class CinemaOrchestrator {
   /**
    * Rotate and start next blockbuster movie automatically using real AI (DeepSeek + fal.ai)
    */
-  public async startNextBlockbusterMovie(customGenreOrPrompt?: string): Promise<Movie> {
+  public async startNextBlockbusterMovie(customGenreOrPrompt?: BlockbusterCandidate | string): Promise<Movie> {
     this.addSystemMessage(`🍿 Initializing new blockbuster film premiere with real AI...`);
     const newMovie = await this.forceReset(customGenreOrPrompt);
     broadcastCinemaEvent('new_movie_started', { movie: newMovie });
@@ -1801,7 +1819,7 @@ class CinemaOrchestrator {
    * then generates a brand-new film using real AI APIs (DeepSeek + fal.ai).
    * Deduplicated: concurrent callers join the same in-flight reset.
    */
-  public forceReset(customPrompt?: string): Promise<Movie> {
+  public forceReset(customPrompt?: BlockbusterCandidate | string): Promise<Movie> {
     if (this.resetPromise) {
       console.log('[Cinema] forceReset already in progress — joining in-flight reset.');
       return this.resetPromise;
@@ -1812,7 +1830,7 @@ class CinemaOrchestrator {
     return this.resetPromise;
   }
 
-  private async doForceReset(customPrompt?: string): Promise<Movie> {
+  private async doForceReset(customPrompt?: BlockbusterCandidate | string): Promise<Movie> {
     this.isResetting = true;
     try {
       // Stop the current engine loop

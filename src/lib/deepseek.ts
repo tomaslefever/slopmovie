@@ -4,6 +4,7 @@ import {
   CINEMATIQUE_AESTHETIC_PRESETS,
   getUniqueCinematiqueAesthetics
 } from './cinematique';
+import { CINEMATIC_MOCK_VIDEOS } from './fal-video';
 
 // ── Token usage tracking (process-cumulative) ───────────────────────────────
 let cumulativePromptTokens = 0;
@@ -1661,7 +1662,210 @@ export function getUniqueStoryPreset(existingTitles: string[] = []): (typeof PRE
   };
 }
 
-export async function generateStoryBibleWithDeepSeek(customPrompt?: string, existingTitles: string[] = []): Promise<GeneratedStoryBible> {
+export function buildProceduralStoryBible(candidate: {
+  title: string;
+  genre: string;
+  logline?: string;
+  premise?: string;
+}): GeneratedStoryBible {
+  const title = candidate.title || "The Wandering Ronin: Path of Sakura";
+  const genre = candidate.genre || "Samuráis & Chambara / Bushido Honor & Duels";
+  const tagline = candidate.logline || `In the world of ${title}, every audience decision shapes honor and destiny.`;
+  const initialPlot = candidate.premise || `An epic samurai journey begins across driving autumn rainstorms.`;
+
+  const isSamurai = genre.toLowerCase().includes('samur') || genre.toLowerCase().includes('chambara') || title.toLowerCase().includes('blade') || title.toLowerCase().includes('ronin');
+  const isWestern = genre.toLowerCase().includes('western') || genre.toLowerCase().includes('gunslinger');
+  const isHorror = genre.toLowerCase().includes('horror') || genre.toLowerCase().includes('creature');
+  const isComedy = genre.toLowerCase().includes('comedy') || genre.toLowerCase().includes('comedia');
+  const isFantasy = genre.toLowerCase().includes('fantas') || genre.toLowerCase().includes('sword');
+
+  let defaultVideo = CINEMATIC_MOCK_VIDEOS[0].url;
+  if (isSamurai) defaultVideo = CINEMATIC_MOCK_VIDEOS[1 % CINEMATIC_MOCK_VIDEOS.length].url;
+  else if (isWestern) defaultVideo = CINEMATIC_MOCK_VIDEOS[2 % CINEMATIC_MOCK_VIDEOS.length].url;
+  else if (isHorror) defaultVideo = CINEMATIC_MOCK_VIDEOS[3 % CINEMATIC_MOCK_VIDEOS.length].url;
+  else if (isFantasy) defaultVideo = CINEMATIC_MOCK_VIDEOS[0].url;
+
+  const charName = isSamurai ? "Kuroshiba (The Wandering Ronin)" : isWestern ? "Cole Travis" : isFantasy ? "Donald of Eldoria" : "Protagonist";
+  const propName = isSamurai ? "Ancestral Katana of the Autumn Wind" : isWestern ? "Engraved Peacemaker Revolver" : isFantasy ? "Sun-Forged Blade" : "Sacred Artifact";
+  const envName = isSamurai ? "Rain-Drenched Mountain Pass & Torii Shrine" : isWestern ? "Dusty Frontier Saloon & Main Street" : isFantasy ? "Mist-Shrouded Citadel of Valdoria" : "Opening Arena";
+
+  const firstChar: Character = {
+    id: "char_lead",
+    name: charName,
+    role: "Lead Protagonist",
+    visualTraits: isSamurai ? "Weathered 38yo ronin with a disciplined gaze, scarred jawline, tied topknot, raindrops beading on forehead" : "Determined hero with intense focus, practical battle attire, scarred face",
+    clothing: isSamurai ? "Dark indigo hemp kimono with worn shoulder stitching, leather arm guards, straw rain cloak" : "Weathered leather traveling coat and tactical boots",
+    personality: "Stoic, honorable, observant, unflinching in the face of insurmountable odds",
+    voiceStyle: "Deep, gravelly baritone with disciplined cadence",
+    voicePrompt: "Deep, gravelly 38-year-old baritone, calm and measured tempo, subtle breath control, authentic cinematic weight",
+    avatarUrl: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=300"
+  };
+
+  const firstProp: Prop = {
+    id: "prop_main",
+    name: propName,
+    description: `Signature item central to the narrative conflict of ${title}.`,
+    visualAppearance: isSamurai ? "Hand-folded tamahagane steel blade with wave hamon pattern, blackened iron tsuba, ray-skin handle wrap" : "Polished steel artifact etched with ancient runes and subtle glow",
+    narrativeSignificance: "The physical catalyst that anchors the protagonist's vow and purpose.",
+    ownerCharacterId: "char_lead",
+    ownerCharacterName: charName,
+    imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600"
+  };
+
+  const firstEnv: SceneEnvironment = {
+    id: "env_primary",
+    name: envName,
+    lighting: "Cinematic moody lighting, high contrast chiaroscuro with atmospheric mist and god rays, 3200K key light",
+    atmosphere: "Tense, atmospheric, epic, cinematic scale",
+    colorPalette: isSamurai ? "Deep indigo, slate greys, vibrant autumn crimson, dampened earth tones" : "Muted earth tones, amber key lights, atmospheric haze",
+    architecturalStyle: isSamurai ? "Feudal Japanese wooden architecture, stone lanterns, weathered cedar torii gates" : "Classical cinematic architecture with rich environmental depth"
+  };
+
+  const provisionalOptions: [DecisionOption, DecisionOption] = [
+    {
+      id: "A",
+      title: `${charName}'s Advance`,
+      text: `${charName} presses forward along the primary path.`,
+      dramaticHook: "Direct continuation of current momentum.",
+      expectedConsequence: "Maintains initiative while advancing the narrative.",
+      votes: 0
+    },
+    {
+      id: "B",
+      title: "Tactical Reconnaissance",
+      text: `${charName} scouts the perimeter for environmental advantages.`,
+      dramaticHook: "Cautious survey of opposing forces.",
+      expectedConsequence: "Provides tactical clarity at the cost of immediate ground.",
+      votes: 0
+    }
+  ];
+
+  const initialSteps: MovieStep[] = [
+    {
+      stepNumber: 1,
+      title: "Act I: The Inciting Threshold",
+      synopsis: `Minute 1 First-Shot (Part 1/4): ${initialPlot.slice(0, 160)}`,
+      dialogueSnippet: `${charName}: 'The oath is sworn. The path ahead admits no hesitation.'`,
+      subtitles: [
+        { start: 1.0, end: 7.0, speaker: charName, text: "The oath is sworn. The path ahead admits no hesitation.", textEs: "El juramento está hecho. El camino no admite vacilación." },
+        { start: 8.0, end: 14.0, speaker: charName, text: "They are approaching from the ridge. Ten seconds to prepare.", textEs: "Se aproximan desde la cresta. Diez segundos para prepararse." }
+      ],
+      voiceDirection: firstChar.voicePrompt,
+      visualPrompt: `Establishing Low-Angle Hero Shot of ${charName} (${firstChar.visualTraits}, ${firstChar.clothing}) holding ${propName} (${firstProp.visualAppearance}) in ${envName}. Deep spatial perspective, ${firstEnv.lighting}. Shot on Panavision C-series 35mm anamorphic glass, oval bokeh, horizontal streak flare, atmospheric mist, Kodak Vision3 500T grain, 480p 16:9 film still`,
+      cameraMotionPrompt: "Technocrane crane sweep beginning low on subject then ascending smoothly into a high-angle panoramic reveal of the environment, 24fps motion blur",
+      videoUrl: defaultVideo,
+      duration: 15,
+      votingWindowSeconds: 0,
+      activeCharacters: [firstChar.id],
+      activeProps: [firstProp.id],
+      propReferenceImages: [],
+      environment: firstEnv.id,
+      createdAt: new Date().toISOString(),
+      options: provisionalOptions
+    },
+    {
+      stepNumber: 2,
+      title: "Act I: Rising Vanguard",
+      synopsis: `Minute 1 First-Shot (Part 2/4): Hostile scouts emerge across the mist. ${charName} advances with calculated precision.`,
+      dialogueSnippet: `${charName}: 'Stand your ground.'`,
+      subtitles: [
+        { start: 1.0, end: 7.0, speaker: charName, text: "Stand your ground. Steel tests steel today.", textEs: "Mantengan su posición. El acero probará al acero hoy." },
+        { start: 8.0, end: 14.0, speaker: charName, text: "The vanguard has arrived.", textEs: "La vanguardia ha llegado." }
+      ],
+      voiceDirection: firstChar.voicePrompt,
+      visualPrompt: `Cowboy Shot of ${charName} (${firstChar.visualTraits}) in coiled tactical posture navigating ${envName}. Mid-thigh framing with ${propName} secured, cross-lighting with 3000K amber key and 6500K cool rim. Cooke S4 prime lens warmth, wet rain reflections, 480p 16:9 film still`,
+      cameraMotionPrompt: "Smooth lateral dolly tracking shot on rails parallel to subject, three-layer parallax with blurred foreground bamboo and distant receding mountains, 24fps motion blur",
+      videoUrl: defaultVideo,
+      duration: 15,
+      votingWindowSeconds: 0,
+      activeCharacters: [firstChar.id],
+      activeProps: [firstProp.id],
+      propReferenceImages: [],
+      environment: firstEnv.id,
+      createdAt: new Date().toISOString(),
+      options: provisionalOptions
+    },
+    {
+      stepNumber: 3,
+      title: "Act I: The Crucible Closes",
+      synopsis: `Minute 1 First-Shot (Part 3/4): Shadows surround the perimeter. A decisive duel is imminent.`,
+      dialogueSnippet: `${charName}: 'Every step brings us closer to the breaking point.'`,
+      subtitles: [
+        { start: 1.0, end: 7.0, speaker: charName, text: "Every step brings us closer to the breaking point.", textEs: "Cada paso nos acerca al punto de quiebre." },
+        { start: 8.0, end: 14.0, speaker: charName, text: "Steel yourself. The first choice decides all.", textEs: "Prepárense. La primera decisión lo define todo." }
+      ],
+      voiceDirection: firstChar.voicePrompt,
+      visualPrompt: `Over-the-Shoulder and Macro Insert Shot on ${propName} (${firstProp.visualAppearance}) as ${charName} readies it in ${envName}. Foreground shoulder silhouette softly out of focus, hard light slicing across the blade, 85mm prime at T2.0, creamy background separation, 480p 16:9 film still`,
+      cameraMotionPrompt: "Deliberate 2-second rack focus from foreground prop in razor sharpness to background character eyes, creamy circular bokeh, subtle focus breathing",
+      videoUrl: defaultVideo,
+      duration: 15,
+      votingWindowSeconds: 0,
+      activeCharacters: [firstChar.id],
+      activeProps: [firstProp.id],
+      propReferenceImages: [],
+      environment: firstEnv.id,
+      createdAt: new Date().toISOString(),
+      options: provisionalOptions
+    },
+    {
+      stepNumber: 4,
+      title: "Act I: The First Standoff",
+      synopsis: `Minute 1 First-Shot (Part 4/4): Confronting the vanguard. The audience must choose the tactic.`,
+      dialogueSnippet: `${charName}: 'Which way do we strike?'`,
+      subtitles: [
+        { start: 1.0, end: 7.0, speaker: charName, text: "Which way do we strike? You decide.", textEs: "¿Por dónde atacamos? Ustedes deciden." },
+        { start: 8.0, end: 14.0, speaker: charName, text: "Ten seconds to cast your vote.", textEs: "Diez segundos para emitir su voto." }
+      ],
+      voiceDirection: firstChar.voicePrompt,
+      visualPrompt: `Choker Shot and Dutch Angle Close-Up of ${charName} (${firstChar.visualTraits}) at peak dramatic threshold in ${envName}. Forehead to chin tight framing, chiaroscuro lighting, eye catchlights, Panavision anamorphic optical character, immense stakes, 480p 16:9 film still`,
+      cameraMotionPrompt: "Imperceptibly slow dolly push-in closing from medium to intense choker shot over 15 seconds, narrowing depth of field, 180-degree shutter 24fps motion blur",
+      videoUrl: defaultVideo,
+      duration: 15,
+      votingWindowSeconds: 10,
+      activeCharacters: [firstChar.id],
+      activeProps: [firstProp.id],
+      propReferenceImages: [],
+      environment: firstEnv.id,
+      createdAt: new Date().toISOString(),
+      options: isSamurai ? [
+        { id: "A", title: "Honor of the Iaijutsu Draw", text: "Execute an explosive lightning-fast single-stroke draw straight through the vanguard commander.", dramaticHook: "Maximum lethal precision risking immediate flanking.", expectedConsequence: "Instantly decapitates the enemy leadership but draws the surrounding archers into a furious volley.", votes: 0 },
+        { id: "B", title: "Lure into the Bamboo Mist", text: "Feign retreat into the deep bamboo thicket to divide their forces in the fog.", dramaticHook: "Stealth ambush maneuver that uses the storm's terrain.", expectedConsequence: "Splits the hostile unit into disoriented stragglers, giving tactical surprise.", votes: 0 }
+      ] : [
+        { id: "A", title: "Direct Frontal Assault", text: "Launch a direct offensive to overwhelm the opposing line with superior force.", dramaticHook: "High-risk direct confrontation.", expectedConsequence: "Maximum dramatic tension with immediate fallout.", votes: 0 },
+        { id: "B", title: "Flanking Tactical Maneuver", text: "Deploy surrounding elements to outflank and encircle the adversary.", dramaticHook: "Calculated strategic gambit.", expectedConsequence: "Secures tactical advantage while risking delay.", votes: 0 }
+      ]
+    }
+  ];
+
+  return {
+    title,
+    genre,
+    tagline,
+    initialPlot,
+    masterArcThread: `A 50-step cinematic odyssey across ${genre}, where audience choices determine the survival and legacy of "${title}".`,
+    bible: {
+      characters: [firstChar],
+      props: [firstProp],
+      environments: [firstEnv],
+      cinematicStyle: isSamurai ? "Akira Kurosawa 35mm Techniscope, High Contrast Black & Rain, Razor Katana Optics" : "Panavision Anamorphic 35mm, High Dynamic Range, 24fps film still",
+      targetTheme: "Honor, Sacrifice and Destiny Shaped by Audience Will"
+    },
+    firstStep: initialSteps[0],
+    initialSteps
+  };
+}
+
+export type StoryBiblePromptInput = string | {
+  title?: string;
+  genre?: string;
+  logline?: string;
+  premise?: string;
+};
+
+export async function generateStoryBibleWithDeepSeek(
+  customPrompt?: StoryBiblePromptInput,
+  existingTitles: string[] = []
+): Promise<GeneratedStoryBible> {
   const apiKey = getLlmApiKey();
 
   if (apiKey) {
@@ -1814,7 +2018,34 @@ Respond ONLY with a valid JSON object matching this schema:
   ]
 }`;
 
-      const isRealCustom = Boolean(customPrompt && !customPrompt.startsWith('force_reset_') && customPrompt.trim().length > 3);
+      let targetTitle: string | undefined;
+      let targetGenre: string | undefined;
+      let targetLogline: string | undefined;
+      let targetPremise: string | undefined;
+
+      if (typeof customPrompt === 'object' && customPrompt !== null) {
+        targetTitle = customPrompt.title;
+        targetGenre = customPrompt.genre;
+        targetLogline = customPrompt.logline;
+        targetPremise = customPrompt.premise;
+      } else if (typeof customPrompt === 'string' && customPrompt.startsWith('{')) {
+        try {
+          const parsedPrompt = JSON.parse(customPrompt);
+          targetTitle = parsedPrompt.title;
+          targetGenre = parsedPrompt.genre;
+          targetLogline = parsedPrompt.logline;
+          targetPremise = parsedPrompt.premise || customPrompt;
+        } catch {
+          targetPremise = customPrompt;
+        }
+      } else if (typeof customPrompt === 'string') {
+        targetPremise = customPrompt;
+      }
+
+      const isRealCustom = Boolean(
+        targetTitle ||
+        (targetPremise && !targetPremise.startsWith('force_reset_') && targetPremise.trim().length > 3)
+      );
       const titleBlacklistNotice = existingTitles.length > 0
         ? `\nTITLES ALREADY IN DATABASE (YOU MUST NOT DUPLICATE ANY OF THESE TITLES): ${existingTitles.slice(-25).map(t => `"${t}"`).join(', ')}\n`
         : '';
@@ -1823,8 +2054,15 @@ Respond ONLY with a valid JSON object matching this schema:
       const dynamicCatalyst = sampleRandom(CREATIVE_CATALYSTS);
       const dynamicAesthetic = sampleRandom(CREATIVE_AESTHETICS);
 
-      const userMessage = isRealCustom 
-        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${customPrompt}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      const userMessage = targetTitle
+        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot).
+MANDATORY TITLE: You MUST use the exact title "${targetTitle}".
+MANDATORY GENRE: You MUST use the exact genre "${targetGenre || 'Cinematic Drama'}".
+Logline: "${targetLogline || ''}".
+Story Premise: "${targetPremise || ''}".
+Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        : isRealCustom
+        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${targetPremise}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
         : `Create a high-tension interactive ${dynamicGenre} master bible featuring ${dynamicProtagonist} facing ${dynamicCatalyst} with visual aesthetic of ${dynamicAesthetic}, and the 4 opening scenes (1-minute continuous first-shot). Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
       const parsed = await callLlmJson<any>({
@@ -1835,7 +2073,8 @@ Respond ONLY with a valid JSON object matching this schema:
         ],
         temperature: 1,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 16384
+        max_tokens: 3500,
+        timeoutMs: 45000
       });
 
       if (parsed) {
@@ -1913,10 +2152,10 @@ Respond ONLY with a valid JSON object matching this schema:
         }
 
         return {
-          title: parsed.title,
-          genre: parsed.genre,
-          tagline: parsed.tagline,
-          initialPlot: parsed.initialPlot,
+          title: targetTitle || parsed.title,
+          genre: targetGenre || parsed.genre,
+          tagline: targetLogline || parsed.tagline,
+          initialPlot: targetPremise || parsed.initialPlot,
           masterArcThread: parsed.masterArcThread,
           bible: {
             characters: parsed.characters.map((c: any) => ({ ...c, stepIntroduced: 1 })),
@@ -1936,6 +2175,42 @@ Respond ONLY with a valid JSON object matching this schema:
     } catch (error) {
       console.warn("DeepSeek API error, falling back to cinematic mockup:", error);
     }
+  }
+
+  // Procedural Fallback when custom candidate/premise was supplied:
+  // NEVER fall back to random PRESET_STORIES! Honor the audience's exact vote!
+  let fallbackTargetTitle: string | undefined;
+  let fallbackTargetGenre: string | undefined;
+  let fallbackTargetLogline: string | undefined;
+  let fallbackTargetPremise: string | undefined;
+
+  if (typeof customPrompt === 'object' && customPrompt !== null) {
+    fallbackTargetTitle = customPrompt.title;
+    fallbackTargetGenre = customPrompt.genre;
+    fallbackTargetLogline = customPrompt.logline;
+    fallbackTargetPremise = customPrompt.premise;
+  } else if (typeof customPrompt === 'string' && customPrompt.startsWith('{')) {
+    try {
+      const parsedPrompt = JSON.parse(customPrompt);
+      fallbackTargetTitle = parsedPrompt.title;
+      fallbackTargetGenre = parsedPrompt.genre;
+      fallbackTargetLogline = parsedPrompt.logline;
+      fallbackTargetPremise = parsedPrompt.premise || customPrompt;
+    } catch {
+      fallbackTargetPremise = customPrompt;
+    }
+  } else if (typeof customPrompt === 'string') {
+    fallbackTargetPremise = customPrompt;
+  }
+
+  if (fallbackTargetTitle || (fallbackTargetPremise && !fallbackTargetPremise.startsWith('force_reset_') && fallbackTargetPremise.trim().length > 3)) {
+    console.log(`[Cinema] Using procedural story bible generator for selected film: "${fallbackTargetTitle || 'Custom'}" (${fallbackTargetGenre || 'Epic'}).`);
+    return buildProceduralStoryBible({
+      title: fallbackTargetTitle || (fallbackTargetPremise ? fallbackTargetPremise.slice(0, 50) : "Blade of the Autumn Wind: The Ronin's Oath"),
+      genre: fallbackTargetGenre || "Samuráis & Chambara / Bushido Honor & Duels",
+      logline: fallbackTargetLogline || "Under driving autumn rainstorms, a masterless samurai draws his blade to protect the innocent.",
+      premise: fallbackTargetPremise || "Authentic Chambara samurai drama inspired by Akira Kurosawa."
+    });
   }
 
   // Fallback Mockup Generator in English with Blockbuster Genre Rotation
