@@ -278,7 +278,7 @@ export default function AdminDashboardPage() {
     try {
       const [adsRes, stateRes] = await Promise.all([
         fetch('/api/cinema/ads'),
-        fetch('/api/cinema/state')
+        fetch('/api/cinema/state?includeAllMovies=true')
       ]);
 
       if (adsRes.ok) {
@@ -314,7 +314,7 @@ export default function AdminDashboardPage() {
     if (session) {
       fetchData();
       // Lightweight fallback poll — primary refresh comes from Supabase Realtime below
-      const interval = setInterval(fetchData, 15000);
+      const interval = setInterval(fetchData, 45000);
 
       const supabase = getSupabaseBrowserClient();
       if (supabase) {

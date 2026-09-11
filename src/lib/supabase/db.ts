@@ -5,6 +5,30 @@ export function isSupabaseConfigured(): boolean {
   return getSupabaseServerClient() !== null;
 }
 
+// ── In-Memory Cache Store to drastically reduce Supabase PostgREST egress ──────
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+const memoryCache = {
+  liveCinemaState: null as CacheEntry<LiveCinemaStateRecord | null> | null,
+  activeMovie: new Map<string, CacheEntry<Movie | null>>(),
+  allMovies: null as CacheEntry<Movie[]> | null,
+  completedMovies: null as CacheEntry<Movie[]> | null,
+  blockbusterVoteCounts: new Map<string, CacheEntry<Record<'A' | 'B' | 'C' | 'D', number>>>(),
+  activeViewersCount: null as CacheEntry<number | null> | null,
+  recentChat: new Map<string, CacheEntry<ChatMessage[]>>(),
+  recentVisits: new Map<string, number>() // viewerId -> timestamp ms
+};
+
+export function invalidateCinemaCache() {
+  memoryCache.liveCinemaState = null;
+  memoryCache.activeMovie.clear();
+  memoryCache.allMovies = null;
+  memoryCache.completedMovies = null;
+}
+
 let hasShownSchemaHelp = false;
 function logSupabaseError(action: string, error: any) {
   if (error?.message?.includes('schema cache') || error?.message?.includes('does not exist')) {
@@ -41,6 +65,7 @@ export async function broadcastCinemaEvent(event: string, payload: any): Promise
  * Persist or update an entire movie record
  */
 export async function persistMovie(movie: Movie): Promise<void> {
+  invalidateCinemaCache();
   const supabase = getSupabaseServerClient();
   if (!supabase) return;
 
@@ -170,6 +195,7 @@ export async function persistMovieStep(movieId: string, step: MovieStep): Promis
  * Persist an audience chat message
  */
 export async function persistChatMessage(movieId: string, msg: ChatMessage): Promise<void> {
+  memoryCache.recentChat.delete(movieId);
   const supabase = getSupabaseServerClient();
   if (!supabase) return;
 
@@ -336,16 +362,21 @@ export async function loadUserVotedCommentIdsFromDb(userId: string, movieId?: st
 }
 
 /**
- * Load completed movies from database
+ * Load completed movies from database with in-memory caching
  */
 export async function loadCompletedMoviesFromDb(): Promise<Movie[]> {
+  const now = Date.now();
+  if (memoryCache.completedMovies && memoryCache.completedMovies.expiresAt > now) {
+    return memoryCache.completedMovies.data;
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return [];
 
   try {
     const { data: movies, error } = await supabase
       .from('movies')
-      .select('*')
+      .select('id, title, genre, tagline, initial_plot, master_arc_thread, status, current_step, total_steps, total_votes_cast, created_at, completed_at, final_summary, final_synopsis, bible')
       .eq('status', 'completed')
       .order('completed_at', { ascending: false });
 
@@ -353,8 +384,14 @@ export async function loadCompletedMoviesFromDb(): Promise<Movie[]> {
 
     // Single batched query for ALL steps instead of one query per movie
     const stepsByMovie = await loadStepsForMovies(supabase, movies.map(m => m.id));
+    const result = movies.map(m => mapMovieRow(m, stepsByMovie.get(m.id) || []));
 
-    return movies.map(m => mapMovieRow(m, stepsByMovie.get(m.id) || []));
+    memoryCache.completedMovies = {
+      data: result,
+      expiresAt: now + 30000 // 30s TTL
+    };
+
+    return result;
   } catch (err) {
     console.error('[Supabase] Exception in loadCompletedMoviesFromDb:', err);
     return [];
@@ -362,14 +399,21 @@ export async function loadCompletedMoviesFromDb(): Promise<Movie[]> {
 }
 
 /**
- * Load latest active streaming movie from database
+ * Load latest active streaming movie from database with in-memory caching
  */
 export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | null> {
+  const cacheKey = movieId || 'active_streaming';
+  const now = Date.now();
+  const cached = memoryCache.activeMovie.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
   try {
-    let query = supabase.from('movies').select('*');
+    let query = supabase.from('movies').select('id, title, genre, tagline, initial_plot, master_arc_thread, status, current_step, total_steps, total_votes_cast, final_summary, final_synopsis, created_at, completed_at, bible');
     if (movieId) {
       query = query.eq('id', movieId);
     } else {
@@ -382,11 +426,11 @@ export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | n
     const m = movies[0];
     const { data: steps } = await supabase
       .from('movie_steps')
-      .select('*')
+      .select('step_number, title, synopsis, dialogue_snippet, voice_direction, visual_prompt, camera_motion_prompt, video_url, video_url2, thumbnail_url, duration, voting_window_seconds, options, selected_option, was_random_pick, active_characters, active_props, new_character, new_prop, reference_video_url, prop_reference_images, subtitles, environment, created_at')
       .eq('movie_id', m.id)
       .order('step_number', { ascending: true });
 
-    return {
+    const movieObj: Movie = {
       id: m.id,
       title: m.title,
       genre: m.genre,
@@ -406,6 +450,7 @@ export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | n
         visualPrompt: s.visual_prompt,
         cameraMotionPrompt: s.camera_motion_prompt,
         videoUrl: s.video_url,
+        videoUrl2: (s as any).video_url2,
         thumbnailUrl: s.thumbnail_url,
         duration: s.duration,
         votingWindowSeconds: s.voting_window_seconds,
@@ -428,6 +473,13 @@ export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | n
       finalSummary: m.final_summary,
       finalSynopsis: m.final_synopsis,
     };
+
+    memoryCache.activeMovie.set(cacheKey, {
+      data: movieObj,
+      expiresAt: now + 5000 // 5s TTL
+    });
+
+    return movieObj;
   } catch (err) {
     console.error('[Supabase] Exception in loadActiveMovieFromDb:', err);
     return null;
@@ -458,6 +510,7 @@ function mapMovieRow(m: any, steps: any[]): Movie {
       visualPrompt: s.visual_prompt,
       cameraMotionPrompt: s.camera_motion_prompt,
       videoUrl: s.video_url,
+      videoUrl2: s.video_url2,
       thumbnailUrl: s.thumbnail_url,
       duration: s.duration,
       votingWindowSeconds: s.voting_window_seconds,
@@ -483,7 +536,7 @@ function mapMovieRow(m: any, steps: any[]): Movie {
 }
 
 /**
- * Batch-load steps for many movies in ONE query (avoids N+1 on the movies list).
+ * Batch-load steps for many movies in ONE query with compact column projection.
  */
 async function loadStepsForMovies(
   supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
@@ -495,7 +548,7 @@ async function loadStepsForMovies(
   try {
     const { data, error } = await supabase
       .from('movie_steps')
-      .select('*')
+      .select('movie_id, step_number, title, synopsis, duration, video_url, video_url2, thumbnail_url, options, selected_option, was_random_pick, created_at')
       .in('movie_id', movieIds)
       .order('step_number', { ascending: true });
 
@@ -514,16 +567,21 @@ async function loadStepsForMovies(
 }
 
 /**
- * Load all movies from database (streaming, paused, completed)
+ * Load all movies from database (streaming, paused, completed) with caching and lightweight columns
  */
 export async function loadAllMoviesFromDb(limit = 100): Promise<Movie[]> {
+  const now = Date.now();
+  if (memoryCache.allMovies && memoryCache.allMovies.expiresAt > now) {
+    return memoryCache.allMovies.data;
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return [];
 
   try {
     const { data: movies, error } = await supabase
       .from('movies')
-      .select('*')
+      .select('id, title, genre, tagline, initial_plot, master_arc_thread, status, current_step, total_steps, total_votes_cast, created_at, completed_at, final_summary, final_synopsis')
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -531,8 +589,14 @@ export async function loadAllMoviesFromDb(limit = 100): Promise<Movie[]> {
 
     // Single batched query for ALL steps instead of one query per movie
     const stepsByMovie = await loadStepsForMovies(supabase, movies.map(m => m.id));
+    const result = movies.map(m => mapMovieRow(m, stepsByMovie.get(m.id) || []));
 
-    return movies.map(m => mapMovieRow(m, stepsByMovie.get(m.id) || []));
+    memoryCache.allMovies = {
+      data: result,
+      expiresAt: now + 30000 // 30s TTL
+    };
+
+    return result;
   } catch (err) {
     console.error('[Supabase] Exception in loadAllMoviesFromDb:', err);
     return [];
@@ -543,13 +607,18 @@ export async function loadAllMoviesFromDb(limit = 100): Promise<Movie[]> {
  * Load a single movie by its ID from database
  */
 export async function loadMovieByIdFromDb(movieId: string): Promise<Movie | null> {
+  const cached = memoryCache.activeMovie.get(movieId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
   try {
     const { data: m, error } = await supabase
       .from('movies')
-      .select('*')
+      .select('id, title, genre, tagline, initial_plot, master_arc_thread, status, current_step, total_steps, total_votes_cast, final_summary, final_synopsis, created_at, completed_at, bible')
       .eq('id', movieId)
       .maybeSingle();
 
@@ -557,11 +626,11 @@ export async function loadMovieByIdFromDb(movieId: string): Promise<Movie | null
 
     const { data: steps } = await supabase
       .from('movie_steps')
-      .select('*')
+      .select('step_number, title, synopsis, dialogue_snippet, voice_direction, visual_prompt, camera_motion_prompt, video_url, video_url2, thumbnail_url, duration, voting_window_seconds, options, selected_option, was_random_pick, active_characters, active_props, new_character, new_prop, reference_video_url, prop_reference_images, subtitles, environment, created_at')
       .eq('movie_id', m.id)
       .order('step_number', { ascending: true });
 
-    return {
+    const movieObj: Movie = {
       id: m.id,
       title: m.title,
       genre: m.genre,
@@ -581,6 +650,7 @@ export async function loadMovieByIdFromDb(movieId: string): Promise<Movie | null
         visualPrompt: s.visual_prompt,
         cameraMotionPrompt: s.camera_motion_prompt,
         videoUrl: s.video_url,
+        videoUrl2: (s as any).video_url2,
         thumbnailUrl: s.thumbnail_url,
         duration: s.duration,
         votingWindowSeconds: s.voting_window_seconds,
@@ -603,6 +673,13 @@ export async function loadMovieByIdFromDb(movieId: string): Promise<Movie | null
       finalSummary: m.final_summary,
       finalSynopsis: m.final_synopsis,
     };
+
+    memoryCache.activeMovie.set(movieId, {
+      data: movieObj,
+      expiresAt: Date.now() + 5000
+    });
+
+    return movieObj;
   } catch (err) {
     console.error('[Supabase] Exception in loadMovieByIdFromDb:', err);
     return null;
@@ -610,16 +687,22 @@ export async function loadMovieByIdFromDb(movieId: string): Promise<Movie | null
 }
 
 /**
- * Load recent chat messages for a movie
+ * Load recent chat messages for a movie with 2s TTL cache
  */
 export async function loadRecentChatMessagesFromDb(movieId: string, limit = 50): Promise<ChatMessage[]> {
+  const now = Date.now();
+  const cached = memoryCache.recentChat.get(movieId);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return [];
 
   try {
     const { data: messages, error } = await supabase
       .from('chat_messages')
-      .select('*')
+      .select('id, user_id, user_name, user_avatar, text, is_system, voted_option, used_for_influence, votes_count, created_at')
       .eq('movie_id', movieId)
       .eq('is_system', false)
       .order('created_at', { ascending: true })
@@ -627,7 +710,7 @@ export async function loadRecentChatMessagesFromDb(movieId: string, limit = 50):
 
     if (error || !messages) return [];
 
-    return messages.map(msg => ({
+    const result = messages.map(msg => ({
       id: msg.id,
       userId: msg.user_id,
       userName: msg.user_name,
@@ -640,6 +723,13 @@ export async function loadRecentChatMessagesFromDb(movieId: string, limit = 50):
       usedForInfluence: msg.used_for_influence || false,
       votesCount: msg.votes_count || 0
     }));
+
+    memoryCache.recentChat.set(movieId, {
+      data: result,
+      expiresAt: now + 2000 // 2s TTL
+    });
+
+    return result;
   } catch (err) {
     console.error('[Supabase] Exception in loadRecentChatMessagesFromDb:', err);
     return [];
@@ -951,11 +1041,13 @@ export async function updateMoviesInDb(
 
 /**
  * Persist (upsert) a viewer's next-blockbuster vote. One vote per user per movie.
- */export async function persistBlockbusterVote(
+ */
+export async function persistBlockbusterVote(
   movieId: string,
   userId: string,
   candidateId: 'A' | 'B' | 'C' | 'D'
 ): Promise<void> {
+  memoryCache.blockbusterVoteCounts.delete(movieId);
   const supabase = getSupabaseServerClient();
   if (!supabase) return;
 
@@ -976,11 +1068,17 @@ export async function updateMoviesInDb(
 }
 
 /**
- * Load the aggregate blockbuster vote counts for a movie.
+ * Load the aggregate blockbuster vote counts for a movie with 3s TTL cache.
  */
 export async function loadBlockbusterVoteCountsFromDb(
   movieId: string
 ): Promise<Record<'A' | 'B' | 'C' | 'D', number>> {
+  const now = Date.now();
+  const cached = memoryCache.blockbusterVoteCounts.get(movieId);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   const supabase = getSupabaseServerClient();
   const counts: Record<'A' | 'B' | 'C' | 'D', number> = { A: 0, B: 0, C: 0, D: 0 };
   if (!supabase) return counts;
@@ -1002,6 +1100,11 @@ export async function loadBlockbusterVoteCountsFromDb(
         counts[id]++;
       }
     }
+
+    memoryCache.blockbusterVoteCounts.set(movieId, {
+      data: counts,
+      expiresAt: now + 3000 // 3s TTL
+    });
   } catch (err) {
     console.error('[Supabase] Exception in loadBlockbusterVoteCountsFromDb:', err);
   }
@@ -1041,10 +1144,18 @@ export async function loadUserBlockbusterVote(
 }
 
 /**
- * Record a real viewer visit (unique per viewer per day). Called on every
- * viewer page load so `last_seen` stays fresh for the active-viewers count.
+ * Record a real viewer visit (unique per viewer per day). Throttled in-memory so
+ * rapid polling does not spam PostgREST with duplicate upserts.
  */
 export async function recordVisit(viewerId: string): Promise<void> {
+  const now = Date.now();
+  const lastRecorded = memoryCache.recentVisits.get(viewerId);
+  // Throttle to at most once every 5 minutes (300,000 ms) per viewer
+  if (lastRecorded && (now - lastRecorded) < 300000) {
+    return;
+  }
+  memoryCache.recentVisits.set(viewerId, now);
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return;
 
@@ -1065,9 +1176,14 @@ export async function recordVisit(viewerId: string): Promise<void> {
 }
 
 /**
- * Count real ACTIVE viewers: unique viewers seen in the last N minutes.
+ * Count real ACTIVE viewers: unique viewers seen in the last N minutes with 10s TTL cache.
  */
 export async function countActiveViewersFromDb(windowMinutes = 5): Promise<number | null> {
+  const now = Date.now();
+  if (memoryCache.activeViewersCount && memoryCache.activeViewersCount.expiresAt > now) {
+    return memoryCache.activeViewersCount.data;
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -1082,7 +1198,13 @@ export async function countActiveViewersFromDb(windowMinutes = 5): Promise<numbe
       return null;
     }
 
-    return count ?? 0;
+    const result = count ?? 0;
+    memoryCache.activeViewersCount = {
+      data: result,
+      expiresAt: now + 10000 // 10s TTL
+    };
+
+    return result;
   } catch (err) {
     console.error('[Supabase] Exception in countActiveViewersFromDb:', err);
     return null;
@@ -1160,9 +1282,6 @@ export interface LiveCinemaStatePayload extends LiveCinemaStateRecord {
  * ensuring complete real-time persistence even if migration tables are pending.
  */
 export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): Promise<void> {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) return;
-
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const phaseStartedAtIso = payload.phaseStartedAt 
@@ -1172,6 +1291,21 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
     ? (typeof payload.phaseEndsAt === 'number' ? new Date(payload.phaseEndsAt).toISOString() : payload.phaseEndsAt) 
     : new Date(now + (payload.timeRemaining || 15) * 1000).toISOString();
   const phaseDuration = payload.phaseDuration || payload.timeRemaining || 15;
+
+  // Immediately update in-memory cache
+  memoryCache.liveCinemaState = {
+    data: {
+      ...payload,
+      phaseStartedAt: phaseStartedAtIso,
+      phaseEndsAt: phaseEndsAtIso,
+      phaseDuration,
+      updatedAt: nowIso
+    },
+    expiresAt: now + 3000
+  };
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
 
   // 1. Try public.cinema_state table
   try {
@@ -1266,13 +1400,15 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
 }
 
 /**
- * Load live cinema state from Supabase.
+ * Load live cinema state from Supabase with in-memory caching (2.5s TTL)
  * Checks public.cinema_state first, falling back to public.movies.bible.liveState.
- * When cinema_state exists but lacks the video config (row predates the
- * video_model/video_resolution columns), those fields are backfilled from
- * movies.bible.liveState so the director's selection is never lost.
  */
 export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveCinemaStateRecord | null> {
+  const now = Date.now();
+  if (memoryCache.liveCinemaState && memoryCache.liveCinemaState.expiresAt > now) {
+    return memoryCache.liveCinemaState.data;
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
 
@@ -1311,52 +1447,10 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
         updatedAt: data.updated_at
       };
 
-      // Merge with the bible dual-write. The bible JSON always carries the newest
-      // state (it is written in the same transaction) and survives when cinema_state
-      // columns are pending migrations — this is what makes admin preferences
-      // (video model/resolution, blockbuster votes, ads config) persist across
-      // processes and restarts.
-      const bibleState = await loadBibleLiveState(supabase, record.movieId);
-      if (bibleState) {
-        const cinemaUpdated = record.updatedAt ? new Date(record.updatedAt).getTime() : 0;
-        const bibleUpdated = bibleState.updatedAt ? new Date(bibleState.updatedAt).getTime() : 0;
-        const bibleFresh = bibleUpdated >= cinemaUpdated;
-
-        return {
-          movieId: record.movieId ?? bibleState.movieId,
-          phase: bibleFresh ? bibleState.phase : record.phase,
-          timeRemaining: bibleFresh ? bibleState.timeRemaining : record.timeRemaining,
-          currentStep: bibleFresh ? bibleState.currentStep : record.currentStep,
-          totalAudience: bibleFresh ? bibleState.totalAudience : record.totalAudience,
-          votesA: bibleFresh ? bibleState.votesA : record.votesA,
-          votesB: bibleFresh ? bibleState.votesB : record.votesB,
-          isLive: bibleFresh ? bibleState.isLive : record.isLive,
-          isPaused: bibleFresh ? bibleState.isPaused : record.isPaused,
-          isGenerationPaused: bibleFresh ? bibleState.isGenerationPaused : record.isGenerationPaused,
-          videoModel: bibleState.videoModel ?? record.videoModel ?? null,
-          videoResolution: bibleState.videoResolution ?? record.videoResolution ?? null,
-          blockbusterCandidates: (bibleState.blockbusterCandidates && bibleState.blockbusterCandidates.length > 0)
-            ? bibleState.blockbusterCandidates
-            : (record.blockbusterCandidates ?? []),
-          blockbusterVoteCounts: (record.blockbusterVoteCounts || bibleState?.blockbusterVoteCounts) ? {
-            A: Math.max(record.blockbusterVoteCounts?.A || 0, bibleState?.blockbusterVoteCounts?.A || 0),
-            B: Math.max(record.blockbusterVoteCounts?.B || 0, bibleState?.blockbusterVoteCounts?.B || 0),
-            C: Math.max(record.blockbusterVoteCounts?.C || 0, bibleState?.blockbusterVoteCounts?.C || 0),
-            D: Math.max(record.blockbusterVoteCounts?.D || 0, bibleState?.blockbusterVoteCounts?.D || 0),
-          } : null,
-          blockbusterWinner: bibleState?.blockbusterWinner ?? record.blockbusterWinner ?? null,
-          activeAd: bibleFresh ? (bibleState.activeAd || null) : undefined,
-          adsConfig: bibleFresh ? bibleState.adsConfig : record.adsConfig,
-          selectedOption: bibleFresh ? bibleState.selectedOption : record.selectedOption,
-          wasRandomPick: bibleFresh ? bibleState.wasRandomPick : record.wasRandomPick,
-          phaseStartedAt: bibleFresh ? bibleState.phaseStartedAt : record.phaseStartedAt,
-          phaseEndsAt: bibleFresh ? bibleState.phaseEndsAt : record.phaseEndsAt,
-          phaseDuration: bibleFresh ? bibleState.phaseDuration : record.phaseDuration,
-          workerId: record.workerId ?? bibleState.workerId ?? null,
-          workerHeartbeat: record.workerHeartbeat ?? bibleState.workerHeartbeat ?? null,
-          updatedAt: bibleFresh ? bibleState.updatedAt : record.updatedAt
-        };
-      }
+      memoryCache.liveCinemaState = {
+        data: record,
+        expiresAt: now + 2500 // 2.5s TTL
+      };
 
       return record;
     }
@@ -1365,7 +1459,14 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
   }
 
   // 2. Fallback to movies.bible.liveState
-  return loadBibleLiveState(supabase, movieId);
+  const fallbackRecord = await loadBibleLiveState(supabase, movieId);
+  if (fallbackRecord) {
+    memoryCache.liveCinemaState = {
+      data: fallbackRecord,
+      expiresAt: now + 2500
+    };
+  }
+  return fallbackRecord;
 }
 
 /**

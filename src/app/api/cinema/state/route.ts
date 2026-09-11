@@ -159,29 +159,34 @@ export async function GET(request: Request) {
   // Load viewer preferences from Supabase
   const viewerPreferences = await loadViewerPreferences(userId, activeMovie?.id);
 
-  // Load all available movies for selector
-  const allAvailable = await cinemaEngine.loadAllAvailableMovies();
-  const allMovies = allAvailable.map(m => ({
-    id: m.id,
-    title: m.title,
-    genre: m.genre,
-    tagline: m.tagline || '',
-    initialPlot: m.initialPlot || '',
-    currentStep: m.currentStep,
-    totalSteps: m.totalSteps,
-    stepsCount: m.steps.length,
-    status: m.status,
-    createdAt: m.createdAt,
-    steps: m.steps.map(s => ({
-      stepNumber: s.stepNumber,
-      title: s.title,
-      duration: s.duration || 15,
-      videoUrl: s.videoUrl,
-      synopsis: s.synopsis
-    }))
-  }));
+  // Only load all available movies when explicitly requested (e.g. by admin dashboard)
+  // to avoid huge data egress for standard audience viewers
+  const includeAllMovies = searchParams.get('includeAllMovies') === 'true';
+  let allMovies: any[] = [];
+  if (includeAllMovies) {
+    const allAvailable = await cinemaEngine.loadAllAvailableMovies();
+    allMovies = allAvailable.map(m => ({
+      id: m.id,
+      title: m.title,
+      genre: m.genre,
+      tagline: m.tagline || '',
+      initialPlot: m.initialPlot || '',
+      currentStep: m.currentStep,
+      totalSteps: m.totalSteps,
+      stepsCount: m.steps.length,
+      status: m.status,
+      createdAt: m.createdAt,
+      steps: m.steps.map(s => ({
+        stepNumber: s.stepNumber,
+        title: s.title,
+        duration: s.duration || 15,
+        videoUrl: s.videoUrl,
+        synopsis: s.synopsis
+      }))
+    }));
+  }
 
-  // Load recent chat messages from Supabase
+  // Load recent chat messages from Supabase (cached)
   const chatMessages = activeMovie 
     ? await loadRecentChatMessagesFromDb(activeMovie.id)
     : [];

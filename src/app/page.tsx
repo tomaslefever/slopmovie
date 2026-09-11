@@ -198,8 +198,8 @@ export default function CinemaStreamingPage() {
       }
     };
 
-    const interval = setInterval(pollUntilReady, 2000);
-    const initialCheck = setTimeout(pollUntilReady, 1200);
+    const interval = setInterval(pollUntilReady, 6000);
+    const initialCheck = setTimeout(pollUntilReady, 5000);
 
     return () => {
       isSubscribed = false;
