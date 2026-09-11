@@ -510,6 +510,9 @@ class CinemaOrchestrator {
     this.votesA = 0;
     this.votesB = 0;
     this.userVotes.clear();
+    this.blockbusterCandidates = [];
+    this.blockbusterUserVotes.clear();
+    this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
 
     // Persist movie and all 4 initial steps to Supabase
     await persistMovie(this.movie);
@@ -875,6 +878,9 @@ class CinemaOrchestrator {
     else if (this.phase === 'VOTING') {
       // 10-second voting has concluded -> Resolve winner
       this.setPhase('GENERATING', 6); // 6s buffer for secret ballot results reveal and zoom-out/zoom-in transitions
+      this.blockbusterCandidates = [];
+      this.blockbusterUserVotes.clear();
+      this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
 
       let chosenOption: 'A' | 'B';
       let wasRandomPick = false;
