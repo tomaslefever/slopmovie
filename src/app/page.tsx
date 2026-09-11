@@ -92,6 +92,9 @@ export default function CinemaStreamingPage() {
           if (data.blockbusterUserVoted) {
             setBlockbusterUserVoted(data.blockbusterUserVoted);
           }
+          if (data.blockbusterWinner) {
+            setBlockbusterWinner(data.blockbusterWinner);
+          }
           if (data.viewerPreferences) {
             setSubtitlesEnabled(data.viewerPreferences.subtitlesEnabled !== false);
             setSubtitleLanguage(data.viewerPreferences.subtitleLanguage === 'es' ? 'es' : 'en');
@@ -174,10 +177,13 @@ export default function CinemaStreamingPage() {
         const res = await fetch('/api/cinema/state');
         if (res.ok && isSubscribed && !stopped) {
           const data = await res.json();
-          // Stop polling as soon as the response includes the newly generated video link
+          if (data.blockbusterWinner) {
+            setBlockbusterWinner(data.blockbusterWinner);
+          }
+          // Stop polling as soon as the response includes the newly generated video link or a new movie
           const newVideoLinkReady = Boolean(
             data.activeStep?.videoUrl &&
-            data.activeStep.stepNumber !== generatingStepNum
+            (data.movie?.id !== cinemaState.movie?.id || data.activeStep.stepNumber !== generatingStepNum)
           );
           // Or as soon as generation completed and phase is no longer GENERATING
           if (newVideoLinkReady || (data.phase && data.phase !== 'GENERATING')) {
@@ -201,7 +207,7 @@ export default function CinemaStreamingPage() {
       clearInterval(interval);
       clearTimeout(initialCheck);
     };
-  }, [cinemaState?.phase, cinemaState?.movie?.currentStep]);
+  }, [cinemaState?.phase, cinemaState?.movie?.currentStep, cinemaState?.movie?.id]);
 
   // ── LOCAL CLIENT COUNTDOWN TICK (1 second) ──────────────────────────────────
   // Ticks down the UI countdown smoothly every second in local state.
@@ -253,6 +259,9 @@ export default function CinemaStreamingPage() {
         setCinemaState((prev) => {
           const snapshot = payload.payload;
           const defaultApiStatus = { hasDeepseek: false, hasFal: false, isMockMode: true };
+          if (snapshot?.blockbusterWinner !== undefined) {
+            setBlockbusterWinner(snapshot.blockbusterWinner);
+          }
           if (!prev) {
             return snapshot ? {
               ...snapshot,
@@ -279,17 +288,21 @@ export default function CinemaStreamingPage() {
             isPaused: snapshot.isPaused !== undefined ? snapshot.isPaused : prev.isPaused,
             isGenerationPaused: snapshot.isGenerationPaused !== undefined ? snapshot.isGenerationPaused : prev.isGenerationPaused,
             blockbusterCandidates: snapshot.blockbusterCandidates ?? prev.blockbusterCandidates,
-            blockbusterVoteCounts: snapshot.blockbusterVoteCounts ?? prev.blockbusterVoteCounts
+            blockbusterVoteCounts: snapshot.blockbusterVoteCounts ?? prev.blockbusterVoteCounts,
+            blockbusterWinner: snapshot.blockbusterWinner ?? prev.blockbusterWinner
           };
         });
       })
-      .on('broadcast', { event: 'phase_change' }, (payload: { payload: { phase: PlaybackPhase; timeRemaining?: number; votesA?: number; votesB?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean; phaseEndsAt?: string | number; phaseDuration?: number; options?: any } }) => {
+      .on('broadcast', { event: 'phase_change' }, (payload: { payload: { phase: PlaybackPhase; timeRemaining?: number; votesA?: number; votesB?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean; phaseEndsAt?: string | number; phaseDuration?: number; options?: any; winner?: any } }) => {
         if (payload.payload.phase === 'VOTING') {
           setUserVoted(null);
           setBlockbusterWinner(null);
         }
         if (payload.payload.selectedOption) {
           setBlockbusterWinner(null);
+        }
+        if (payload.payload.winner) {
+          setBlockbusterWinner(payload.payload.winner);
         }
         setCinemaState((prev) => {
           if (!prev) return prev;
@@ -314,6 +327,7 @@ export default function CinemaStreamingPage() {
             votesB: payload.payload.votesB ?? (payload.payload.phase === 'VOTING' ? 0 : prev.votesB),
             blockbusterCandidates: (payload.payload as any).blockbusterCandidates ?? prev.blockbusterCandidates,
             blockbusterVoteCounts: (payload.payload as any).blockbusterVoteCounts ?? prev.blockbusterVoteCounts,
+            blockbusterWinner: payload.payload.winner ?? prev.blockbusterWinner,
             activeStep: updatedStep
           };
         });
@@ -731,15 +745,10 @@ export default function CinemaStreamingPage() {
     );
   }
 
-  const isMovieFinished = Boolean(
-    cinemaState?.movie &&
-    cinemaState.movie.currentStep >= (cinemaState.movie.totalSteps || 50)
-  );
-
   const isBlockbusterActive = Boolean(
     cinemaState && (
       cinemaState.phase === 'BLOCKBUSTER_VOTING' ||
-      (cinemaState.phase === 'GENERATING' && isMovieFinished && (Boolean(blockbusterWinner) || (cinemaState.blockbusterCandidates && cinemaState.blockbusterCandidates.length > 0)))
+      (cinemaState.phase === 'GENERATING' && (Boolean(blockbusterWinner) || Boolean(cinemaState.blockbusterWinner) || (cinemaState.blockbusterCandidates && cinemaState.blockbusterCandidates.length > 0)))
     )
   );
 

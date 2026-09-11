@@ -1136,6 +1136,7 @@ export interface LiveCinemaStateRecord {
   videoResolution?: string | null;
   blockbusterCandidates?: BlockbusterCandidate[];
   blockbusterVoteCounts?: Record<'A' | 'B' | 'C' | 'D', number> | null;
+  blockbusterWinner?: { id?: 'A' | 'B' | 'C' | 'D'; title: string; logline?: string; genre?: string; premise?: string } | null;
   activeAd?: ImmersiveAd | null;
   adsConfig?: AdsConfig;
   selectedOption?: 'A' | 'B';
@@ -1190,6 +1191,7 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
       video_resolution: payload.videoResolution || null,
       blockbuster_candidates: payload.blockbusterCandidates || [],
       blockbuster_vote_counts: payload.blockbusterVoteCounts || { A: 0, B: 0, C: 0, D: 0 },
+      blockbuster_winner: payload.blockbusterWinner || null,
       active_ad_id: payload.activeAd?.id || null,
       ads_config: payload.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
       selected_option: payload.selectedOption || null,
@@ -1236,6 +1238,7 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
         videoResolution: payload.videoResolution ?? null,
         blockbusterCandidates: payload.blockbusterCandidates ?? [],
         blockbusterVoteCounts: payload.blockbusterVoteCounts ?? { A: 0, B: 0, C: 0, D: 0 },
+        blockbusterWinner: payload.blockbusterWinner ?? null,
         activeAd: payload.activeAd || null,
         adsConfig: payload.adsConfig || null,
         selectedOption: payload.selectedOption || null,
@@ -1296,6 +1299,7 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
         videoResolution: data.video_resolution ?? null,
         blockbusterCandidates: data.blockbuster_candidates || [],
         blockbusterVoteCounts: data.blockbuster_vote_counts || null,
+        blockbusterWinner: data.blockbuster_winner || null,
         adsConfig: data.ads_config,
         selectedOption: data.selected_option,
         wasRandomPick: data.was_random_pick,
@@ -1340,6 +1344,7 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
             C: Math.max(record.blockbusterVoteCounts?.C || 0, bibleState?.blockbusterVoteCounts?.C || 0),
             D: Math.max(record.blockbusterVoteCounts?.D || 0, bibleState?.blockbusterVoteCounts?.D || 0),
           } : null,
+          blockbusterWinner: bibleState?.blockbusterWinner ?? record.blockbusterWinner ?? null,
           activeAd: bibleFresh ? (bibleState.activeAd || null) : undefined,
           adsConfig: bibleFresh ? bibleState.adsConfig : record.adsConfig,
           selectedOption: bibleFresh ? bibleState.selectedOption : record.selectedOption,

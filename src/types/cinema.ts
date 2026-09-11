@@ -211,6 +211,7 @@ export interface CinemaState {
   videoResolution?: string | null;
   blockbusterCandidates?: BlockbusterCandidate[];
   blockbusterVoteCounts?: Record<'A' | 'B' | 'C' | 'D', number>;
+  blockbusterWinner?: { id?: 'A' | 'B' | 'C' | 'D'; title: string; logline?: string; genre?: string; premise?: string } | null;
   activeAd?: ImmersiveAd | null;
   adsConfig?: AdsConfig;
   apiStatus?: {

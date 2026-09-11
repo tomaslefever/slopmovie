@@ -57,6 +57,9 @@ export async function GET(request: Request) {
   if (liveState?.blockbusterVoteCounts) {
     cinemaEngine.blockbusterVoteCounts = liveState.blockbusterVoteCounts;
   }
+  if (liveState?.blockbusterWinner) {
+    cinemaEngine.blockbusterWinner = liveState.blockbusterWinner as any;
+  }
   if (liveState?.phase) {
     cinemaEngine.phase = liveState.phase;
   }
@@ -183,17 +186,21 @@ export async function GET(request: Request) {
     ? await loadRecentChatMessagesFromDb(activeMovie.id)
     : [];
 
-  const phase = liveState?.phase || 'PLAYING';
-  const phaseDuration = liveState?.phaseDuration || (phase === 'VOTING' ? 10 : phase === 'BLOCKBUSTER_VOTING' ? 60 : 15);
-  const phaseStartedAt = liveState?.phaseStartedAt || new Date().toISOString();
+  const phase = liveState?.phase || cinemaEngine.phase || 'PLAYING';
+  const phaseDuration = liveState?.phaseDuration || cinemaEngine.phaseDuration || (phase === 'VOTING' ? 10 : phase === 'BLOCKBUSTER_VOTING' ? 60 : 15);
+  const phaseStartedAt = liveState?.phaseStartedAt || (cinemaEngine.phaseStartedAt ? new Date(cinemaEngine.phaseStartedAt).toISOString() : new Date().toISOString());
 
   // Dynamically compute exact seconds remaining based on phaseEndsAt timestamp
-  const endsAtMs = liveState?.phaseEndsAt ? new Date(liveState.phaseEndsAt).getTime() : 0;
+  const endsAtMs = liveState?.phaseEndsAt
+    ? new Date(liveState.phaseEndsAt).getTime()
+    : (cinemaEngine.phaseEndsAt || 0);
   const timeRemaining = endsAtMs > 0
     ? Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000))
-    : (typeof liveState?.timeRemaining === 'number' ? liveState.timeRemaining : phaseDuration);
+    : (typeof liveState?.timeRemaining === 'number' ? liveState.timeRemaining : (cinemaEngine.timeRemaining ?? phaseDuration));
 
-  const phaseEndsAt = liveState?.phaseEndsAt || new Date(Date.now() + timeRemaining * 1000).toISOString();
+  const phaseEndsAt = liveState?.phaseEndsAt
+    ? liveState.phaseEndsAt
+    : (cinemaEngine.phaseEndsAt ? new Date(cinemaEngine.phaseEndsAt).toISOString() : new Date(Date.now() + timeRemaining * 1000).toISOString());
 
   const response = NextResponse.json({
     movie: activeMovie,
@@ -215,6 +222,13 @@ export async function GET(request: Request) {
     videoResolution: cinemaEngine.videoResolution,
     blockbusterCandidates: cinemaEngine.blockbusterCandidates,
     blockbusterVoteCounts: cinemaEngine.blockbusterVoteCounts,
+    blockbusterWinner: cinemaEngine.blockbusterWinner ? {
+      id: cinemaEngine.blockbusterWinner.id,
+      title: cinemaEngine.blockbusterWinner.title,
+      logline: cinemaEngine.blockbusterWinner.logline,
+      genre: cinemaEngine.blockbusterWinner.genre,
+      premise: cinemaEngine.blockbusterWinner.premise
+    } : (liveState?.blockbusterWinner || null),
     blockbusterUserVoted,
     activeAd: liveState?.activeAd || null,
     adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },

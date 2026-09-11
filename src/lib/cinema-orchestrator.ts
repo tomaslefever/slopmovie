@@ -169,6 +169,7 @@ class CinemaOrchestrator {
   // Next-blockbuster audience voting (60s, 4 candidates)
   public blockbusterCandidates: BlockbusterCandidate[] = [];
   public blockbusterVoteCounts: Record<'A' | 'B' | 'C' | 'D', number> = { A: 0, B: 0, C: 0, D: 0 };
+  public blockbusterWinner: BlockbusterCandidate | null = null;
   private blockbusterUserVotes: Map<string, 'A' | 'B' | 'C' | 'D'> = new Map();
 
   // Historical archive of previous generated ad clips for replay mode
@@ -674,29 +675,33 @@ class CinemaOrchestrator {
       // A forceReset (new blockbuster rotation) is mid-flight: the worker must NOT
       // auto-generate a competing movie while the director's/rotation's movie is being created.
       if (this.isResetting || this.phase === 'GENERATING' || this.phase === 'BLOCKBUSTER_VOTING') {
-        return;
+        if (this.phase !== 'BLOCKBUSTER_VOTING') return;
+      } else {
+        const liveState = await loadLiveCinemaStateFromDb().catch(() => null);
+        if (liveState?.phase === 'GENERATING' || liveState?.phase === 'BLOCKBUSTER_VOTING') {
+          return;
+        }
+        await this.initializeMovie();
+        if (!this.movie) return;
       }
-      const liveState = await loadLiveCinemaStateFromDb().catch(() => null);
-      if (liveState?.phase === 'GENERATING' || liveState?.phase === 'BLOCKBUSTER_VOTING') {
-        return;
-      }
-      await this.initializeMovie();
-      if (!this.movie) return;
     }
 
     // Blockbuster rotation watchdog: if a film completed but its rotation flow was
     // lost (serverless restart / swallowed error), rotate automatically after 3 minutes.
-    if (this.movie.status === 'completed') {
-      // During the async generation of the winning blockbuster, voting, or reset, never auto-rotate on top of it.
-      if (this.phase === 'GENERATING' || this.phase === 'BLOCKBUSTER_VOTING' || this.isResetting) {
+    if (this.movie && this.movie.status === 'completed') {
+      // During the async generation of the winning blockbuster or reset, never auto-rotate on top of it.
+      if (this.phase === 'GENERATING' || this.isResetting) {
         return;
       }
-      const completedAtMs = this.movie.completedAt ? new Date(this.movie.completedAt).getTime() : 0;
-      if (completedAtMs && Date.now() - completedAtMs > 180000 && !this.isResetting) {
-        console.log('[CinemaEngine] Completed movie detected without rotation for >180s — opening blockbuster voting.');
-        await this.prepareBlockbusterVoting();
+      if (this.phase !== 'BLOCKBUSTER_VOTING') {
+        const completedAtMs = this.movie.completedAt ? new Date(this.movie.completedAt).getTime() : 0;
+        if (completedAtMs && Date.now() - completedAtMs > 180000 && !this.isResetting) {
+          console.log('[CinemaEngine] Completed movie detected without rotation for >180s — opening blockbuster voting.');
+          await this.prepareBlockbusterVoting();
+        }
+        return;
       }
-      return;
+      // If phase is BLOCKBUSTER_VOTING, continue down to timer calculation and transition!
     }
 
     // If stream is paused by director, refresh heartbeat in Supabase without advancing timers
@@ -724,7 +729,8 @@ class CinemaOrchestrator {
     } else {
       // Authoritative time engine: phase timer expired. Advance immediately.
       if (!this.isAdvancing) {
-        console.log(`[CinemaWorker] ⏱️ Authoritative timer elapsed for phase '${this.phase}' (Step ${this.movie.currentStep}). Transitioning to next stage...`);
+        const stepNum = this.movie ? this.movie.currentStep : 1;
+        console.log(`[CinemaWorker] ⏱️ Authoritative timer elapsed for phase '${this.phase}' (Step ${stepNum}). Transitioning to next stage...`);
         this.isAdvancing = true;
         this.isAdvancingStartedAt = Date.now();
         try {
@@ -746,11 +752,13 @@ class CinemaOrchestrator {
     workerId?: string
   ): Promise<{ success: boolean; state: ReturnType<CinemaOrchestrator['getState']> }> {
     if (!this.movie) {
-      if (this.isResetting || this.phase === 'GENERATING' || this.phase === 'BLOCKBUSTER_VOTING') {
-        return { success: false, state: this.getState() };
+      if (this.phase !== 'BLOCKBUSTER_VOTING') {
+        if (this.isResetting || this.phase === 'GENERATING') {
+          return { success: false, state: this.getState() };
+        }
+        await this.initializeMovie();
+        if (!this.movie) return { success: false, state: this.getState() };
       }
-      await this.initializeMovie();
-      if (!this.movie) return { success: false, state: this.getState() };
     }
 
     if (this.isAdvancing) {
@@ -764,7 +772,7 @@ class CinemaOrchestrator {
     }
 
     // If client specified the step number, ensure it matches currentStep during PLAYING
-    if (typeof stepNumber === 'number' && this.movie.currentStep !== stepNumber && this.phase === 'PLAYING') {
+    if (typeof stepNumber === 'number' && this.movie && this.movie.currentStep !== stepNumber && this.phase === 'PLAYING') {
       console.log(`[CinemaEngine] completeStage: current step (${this.movie.currentStep}) does not match requested (${stepNumber}). Returning live state.`);
       return { success: true, state: this.getState() };
     }
@@ -772,7 +780,8 @@ class CinemaOrchestrator {
     this.isAdvancing = true;
     this.isAdvancingStartedAt = Date.now();
     try {
-      console.log(`[CinemaEngine] 🎬 Stage completion received from client for '${this.phase}' (Step ${this.movie.currentStep}). Transitioning...`);
+      const stepNum = this.movie ? this.movie.currentStep : 1;
+      console.log(`[CinemaEngine] 🎬 Stage completion received from client for '${this.phase}' (Step ${stepNum}). Transitioning...`);
       await this.handlePhaseTransition(workerId);
       return { success: true, state: this.getState() };
     } catch (err) {
@@ -784,7 +793,7 @@ class CinemaOrchestrator {
   }
 
   private async handlePhaseTransition(workerId?: string) {
-    if (!this.movie) return;
+    if (!this.movie && this.phase !== 'BLOCKBUSTER_VOTING') return;
 
     // ── NEXT BLOCKBUSTER AUDIENCE VOTE CONCLUDED (60s) ───────────────────────
     if (this.phase === 'BLOCKBUSTER_VOTING') {
@@ -799,19 +808,21 @@ class CinemaOrchestrator {
         }
       }
       const winner = this.resolveBlockbusterVote();
-      const savedCandidates = [...this.blockbusterCandidates];
+      const savedCandidates = this.blockbusterCandidates.length > 0 ? [...this.blockbusterCandidates] : [];
       const savedCounts = { ...this.blockbusterVoteCounts };
 
-      // Keep candidates in memory during GENERATING so the reveal and zoom-out/zoom-in animation play smoothly
+      // Keep winner and candidates in memory during GENERATING so the reveal and zoom-out/zoom-in animation play smoothly
+      this.blockbusterWinner = winner;
+      this.blockbusterCandidates = savedCandidates;
       this.setPhase('GENERATING', 90);
 
-      const winnerPayload = winner ? {
+      const winnerPayload = {
         id: winner.id,
         title: winner.title,
         logline: winner.logline,
         genre: winner.genre,
         premise: winner.premise
-      } : null;
+      };
 
       broadcastCinemaEvent('blockbuster_vote_ended', {
         winner: winnerPayload,
@@ -832,22 +843,18 @@ class CinemaOrchestrator {
       // Persist GENERATING state to Supabase so all workers/endpoints know we are generating the new film
       await this.persistCurrentStateToSupabase(workerId);
 
-      if (winner) {
-        this.addSystemMessage(`🏆 NEXT BLOCKBUSTER: "${winner.title}" (${winner.genre}) won the audience vote! Generating now — the premiere begins automatically when it's ready.`);
-        // ASYNC BY DESIGN: does not await. The new movie broadcasts new_movie_started
-        // and starts playing when its generation finishes.
-        this.startNextBlockbusterMovie(winner).catch((err) => {
-          console.error('[Cinema] Async blockbuster generation failed:', err);
-        });
-      } else {
-        this.startNextBlockbusterMovie().catch((err) => {
-          console.error('[Cinema] Async blockbuster generation failed:', err);
-        });
-      }
+      this.addSystemMessage(`🏆 NEXT BLOCKBUSTER: "${winner.title}" (${winner.genre}) won the audience vote! Generating now — the premiere begins automatically when it's ready.`);
+      // ASYNC BY DESIGN: does not await. The new movie broadcasts new_movie_started
+      // and starts playing when its generation finishes.
+      this.startNextBlockbusterMovie(winner).catch((err) => {
+        console.error('[Cinema] Async blockbuster generation failed:', err);
+      });
 
       await this.broadcastStateSnapshot(workerId);
       return;
     }
+
+    if (!this.movie) return;
 
     const currentStep = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
       || this.movie.steps[this.movie.steps.length - 1];
@@ -1497,13 +1504,15 @@ class CinemaOrchestrator {
     return this.blockbusterUserVotes.get(userId) || null;
   }
 
-  /**
-   * Resolve the blockbuster vote winner and START generating the selected movie.
-   * ASYNC BY DESIGN: generation runs in the background and the stream switches
-   * (new_movie_started) automatically when the new movie finishes generating.
-   */
-  private resolveBlockbusterVote(): BlockbusterCandidate | null {
-    if (this.blockbusterCandidates.length === 0) return null;
+  private resolveBlockbusterVote(): BlockbusterCandidate {
+    if (this.blockbusterCandidates.length === 0) {
+      this.blockbusterCandidates = [
+        { id: 'A', title: 'Cyberpunk Odyssey', genre: 'Sci-Fi Action', logline: 'A rogue hacker uncovers an AI conspiracy in Neo-Tokyo.', premise: 'Cyberpunk dystopian thriller' },
+        { id: 'B', title: 'Shadows of the West', genre: 'Western Thriller', logline: 'A lone gunslinger hunts a mystical outlaw across the badlands.', premise: 'Gritty supernatural western' },
+        { id: 'C', title: 'Neon Phantom', genre: 'Cyberpunk Noir', logline: 'A detective investigates memory thefts in a neon-drenched city.', premise: 'Futuristic detective noir' },
+        { id: 'D', title: 'Samurai Horizon', genre: 'Feudal Action', logline: 'A masterless warrior defends a mountain temple from warlords.', premise: 'Honor and katana warfare' }
+      ];
+    }
 
     const maxVotes = Math.max(...(['A', 'B', 'C', 'D'] as const).map(id => this.blockbusterVoteCounts[id] || 0));
     const leaders = maxVotes > 0
@@ -2038,7 +2047,8 @@ class CinemaOrchestrator {
       this.userVotes.clear();
       this.activeAd = null;
       this.pendingPreGeneratedAd = null;
-      this.blockbusterCandidates = [];
+      // Do NOT clear blockbusterCandidates or blockbusterWinner here!
+      // They are retained during GENERATING so that the audience sees the winning movie card and synthesis screen.
       this.blockbusterUserVotes.clear();
       this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
 
@@ -2051,6 +2061,9 @@ class CinemaOrchestrator {
       // Now initialize fresh with real AI (customPrompt bypasses Supabase restore)
       const freshPrompt = customPrompt || `force_reset_${Date.now()}`;
       const newMovie = await this.initializeMovie(freshPrompt);
+      // New film premiere is now active! Clear blockbuster selection state
+      this.blockbusterWinner = null;
+      this.blockbusterCandidates = [];
       broadcastCinemaEvent('new_movie_started', { movie: newMovie });
       await this.broadcastStateSnapshot();
       return newMovie;
@@ -2106,6 +2119,13 @@ class CinemaOrchestrator {
       videoResolution: this.videoResolution,
       blockbusterCandidates: this.blockbusterCandidates,
       blockbusterVoteCounts: this.blockbusterVoteCounts,
+      blockbusterWinner: this.blockbusterWinner ? {
+        id: this.blockbusterWinner.id,
+        title: this.blockbusterWinner.title,
+        logline: this.blockbusterWinner.logline,
+        genre: this.blockbusterWinner.genre,
+        premise: this.blockbusterWinner.premise
+      } : null,
       activeAd: this.activeAd,
       adsConfig: this.adsConfig,
       apiStatus: {
@@ -2621,6 +2641,13 @@ class CinemaOrchestrator {
         videoResolution: this.videoResolution,
         blockbusterCandidates: this.blockbusterCandidates,
         blockbusterVoteCounts: this.blockbusterVoteCounts,
+        blockbusterWinner: this.blockbusterWinner ? {
+          id: this.blockbusterWinner.id,
+          title: this.blockbusterWinner.title,
+          logline: this.blockbusterWinner.logline,
+          genre: this.blockbusterWinner.genre,
+          premise: this.blockbusterWinner.premise
+        } : null,
         activeAd: this.activeAd,
         adsConfig: this.adsConfig,
         selectedOption: currentStepObj?.selectedOption,
@@ -2648,6 +2675,13 @@ class CinemaOrchestrator {
           videoResolution: this.videoResolution,
           blockbusterCandidates: this.blockbusterCandidates,
           blockbusterVoteCounts: this.blockbusterVoteCounts,
+          blockbusterWinner: this.blockbusterWinner ? {
+            id: this.blockbusterWinner.id,
+            title: this.blockbusterWinner.title,
+            logline: this.blockbusterWinner.logline,
+            genre: this.blockbusterWinner.genre,
+            premise: this.blockbusterWinner.premise
+          } : null,
           activeAd: this.activeAd || null,
           adsConfig: this.adsConfig,
           selectedOption: currentStepObj?.selectedOption || null,
@@ -2686,7 +2720,8 @@ class CinemaOrchestrator {
       videoModel: state.videoModel,
       videoResolution: state.videoResolution,
       blockbusterCandidates: state.blockbusterCandidates,
-      blockbusterVoteCounts: state.blockbusterVoteCounts
+      blockbusterVoteCounts: state.blockbusterVoteCounts,
+      blockbusterWinner: state.blockbusterWinner
     });
   }
 }

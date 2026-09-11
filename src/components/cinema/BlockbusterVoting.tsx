@@ -47,9 +47,10 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
   };
   const totalVotes = safeCounts.A + safeCounts.B + safeCounts.C + safeCounts.D;
 
-  // Resolve winner candidate strictly from authoritative winner
+  // Resolve winner candidate strictly from authoritative winner or fallback candidate
   const winningId: 'A' | 'B' | 'C' | 'D' | null = winner?.id || null;
-  const winningCandidate = (winningId ? candidates.find(c => c.id === winningId) : null) || candidates[0];
+  const winningCandidate = (winningId ? candidates.find(c => c.id === winningId) : null) 
+    || (winner?.title ? { id: winner.id || 'A', title: winner.title, genre: winner.genre || 'Cinema', logline: winner.logline || '', premise: '' } : candidates[0]);
 
   // Stage transition: when authoritative winner arrives, show results for 1.4s, then animate zoom-out for losers and zoom-in for winner
   const [isZoomTransitionActive, setIsZoomTransitionActive] = useState(false);
@@ -63,6 +64,23 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
       setIsZoomTransitionActive(false);
     }
   }, [isAuthoritativeWinnerReady]);
+
+  // Watchdog: If local timer expires during BLOCKBUSTER_VOTING, notify server to complete stage
+  useEffect(() => {
+    if (phase === 'BLOCKBUSTER_VOTING' && currentSeconds <= 0 && !isAuthoritativeWinnerReady) {
+      const timeout = setTimeout(() => {
+        fetch('/api/cinema/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'complete_stage',
+            stage: 'BLOCKBUSTER_VOTING'
+          })
+        }).catch(() => {});
+      }, 2000);
+      return () => clearTimeout(timeout);
+    }
+  }, [phase, currentSeconds, isAuthoritativeWinnerReady]);
 
   const handleCastVote = (candidateId: 'A' | 'B' | 'C' | 'D') => {
     if (isVotingEnded || userVoted === candidateId) return;
