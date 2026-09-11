@@ -96,13 +96,11 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       });
     }
 
-    // 3. Shot 2: Climax / Consequence (15s)
-    if (activeStep.videoUrl2) {
-      list.push({
-        type: 'shot2',
-        url: getSanitizedVideoUrl(activeStep.videoUrl2, 1)
-      });
-    }
+    // 3. Shot 2: Climax / Consequence (15s) - ALWAYS included so 2 videos are concatenated
+    list.push({
+      type: 'shot2',
+      url: getSanitizedVideoUrl(activeStep.videoUrl2, 1)
+    });
 
     return list;
   }, [activeStep.videoUrl, activeStep.videoUrl2, activeStep.hasMidRollAd, activeStep.adVideoUrl, activeStep.stepNumber]);

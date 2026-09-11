@@ -268,6 +268,10 @@ class CinemaOrchestrator {
           seen.add(s.videoUrl as string);
           pool.push({ videoUrl: s.videoUrl as string, thumbnailUrl: s.thumbnailUrl });
         }
+        if (isRealGeneratedVideoUrl(s.videoUrl2) && !seen.has(s.videoUrl2 as string)) {
+          seen.add(s.videoUrl2 as string);
+          pool.push({ videoUrl: s.videoUrl2 as string, thumbnailUrl: s.thumbnailUrl });
+        }
       }
     }
     for (const url of this.generatedAdVideoArchive) {
@@ -283,8 +287,7 @@ class CinemaOrchestrator {
   /**
    * Selecciona un video generado ALEATORIO de TODAS las escenas con URL válida
    * de video generado (no importa de qué película provengan). Devuelve null si
-   * el archivo no tiene ningún video generado (en ese caso el llamador recurre
-   * a los clips simulados, que también son videos en movimiento).
+   * el archivo no tiene ningún video generado.
    */
   public async pickRandomArchivedVideo(): Promise<{ videoUrl: string; thumbnailUrl?: string; isRealGenerated: true } | null> {
     if (!this.archivedGeneratedPoolPromise) {
@@ -296,6 +299,48 @@ class CinemaOrchestrator {
     if (pool.length === 0) return null;
     const pick = pool[Math.floor(Math.random() * pool.length)];
     return { ...pick, isRealGenerated: true };
+  }
+
+  /**
+   * Selecciona DOS videos existentes para reproducirlos consecutivamente (Shot 1 + Shot 2 = 30s)
+   * cuando la generación con IA está desactivada. Utiliza videos generados del pool o
+   * los clips cinematic mock para garantizar siempre dos tomas en movimiento sin repetición.
+   */
+  public async pickTwoArchivedOrMockVideos(stepNumber: number): Promise<{
+    shot1: { videoUrl: string; thumbnailUrl?: string };
+    shot2: { videoUrl: string; thumbnailUrl?: string };
+  }> {
+    if (!this.archivedGeneratedPoolPromise) {
+      this.archivedGeneratedPoolPromise = this.buildArchivedGeneratedVideoPool().finally(() => {
+        this.archivedGeneratedPoolPromise = null;
+      });
+    }
+    const pool = await this.archivedGeneratedPoolPromise;
+    const mockIndex = Math.abs((stepNumber || 1) - 1) % CINEMATIC_MOCK_VIDEOS.length;
+    const mock1 = CINEMATIC_MOCK_VIDEOS[mockIndex];
+    const mock2 = CINEMATIC_MOCK_VIDEOS[(mockIndex + 1) % CINEMATIC_MOCK_VIDEOS.length];
+
+    if (pool.length === 0) {
+      return {
+        shot1: { videoUrl: mock1.url, thumbnailUrl: mock1.poster },
+        shot2: { videoUrl: mock2.url, thumbnailUrl: mock2.poster }
+      };
+    } else if (pool.length === 1) {
+      return {
+        shot1: { videoUrl: pool[0].videoUrl, thumbnailUrl: pool[0].thumbnailUrl },
+        shot2: { videoUrl: mock2.url, thumbnailUrl: mock2.poster }
+      };
+    } else {
+      const idx1 = Math.floor(Math.random() * pool.length);
+      let idx2 = Math.floor(Math.random() * pool.length);
+      if (idx2 === idx1) {
+        idx2 = (idx1 + 1) % pool.length;
+      }
+      return {
+        shot1: { videoUrl: pool[idx1].videoUrl, thumbnailUrl: pool[idx1].thumbnailUrl },
+        shot2: { videoUrl: pool[idx2].videoUrl, thumbnailUrl: pool[idx2].thumbnailUrl }
+      };
+    }
   }
 
   /**
@@ -332,11 +377,15 @@ class CinemaOrchestrator {
           const archivedFallback = this.isGenerationPaused ? await this.pickRandomArchivedVideo() : null;
           savedMovie.steps = savedMovie.steps.map((s, idx) => {
             const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+            const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
             const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
+            const needsReplacement2 = !s.videoUrl2 || s.videoUrl2.startsWith('/videos/');
             return {
               ...s,
               videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
-              thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster
+              thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster,
+              videoUrl2: needsReplacement2 ? mock2.url : s.videoUrl2,
+              duration: s.hasMidRollAd ? 45 : 30
             };
           });
           this.movie = savedMovie;
@@ -443,6 +492,7 @@ class CinemaOrchestrator {
 
         let stepVideoUrl: string;
         let stepThumbnailUrl: string | undefined;
+        let stepVideoUrl2: string;
 
         if (!this.isGenerationPaused) {
           try {
@@ -457,31 +507,29 @@ class CinemaOrchestrator {
             });
             stepVideoUrl = videoResult.videoUrl;
             stepThumbnailUrl = videoResult.thumbnailUrl;
+            const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
+            stepVideoUrl2 = mock2.url;
           } catch (err) {
             console.warn(`[Cinema] Fal.ai video generation failed for step ${step.stepNumber}, using mock fallback:`, err);
             const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+            const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
             stepVideoUrl = mock.url;
             stepThumbnailUrl = mock.poster;
+            stepVideoUrl2 = mock2.url;
           }
         } else {
-          console.log(`[Cinema] 🛡️ Generación PAUSADA: Buscando un video generado archivado (de cualquier película) para el paso ${step.stepNumber} sin llamar a fal.ai.`);
-          const archived = await this.pickRandomArchivedVideo();
-          if (archived) {
-            stepVideoUrl = archived.videoUrl;
-            stepThumbnailUrl = archived.thumbnailUrl;
-          } else {
-            const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
-            stepVideoUrl = mock.url;
-            stepThumbnailUrl = mock.poster;
-          }
+          console.log(`[Cinema] 🛡️ Generación PAUSADA: Seleccionando 2 videos existentes para el paso ${step.stepNumber}.`);
+          const twoVideos = await this.pickTwoArchivedOrMockVideos(step.stepNumber);
+          stepVideoUrl = twoVideos.shot1.videoUrl;
+          stepThumbnailUrl = twoVideos.shot1.thumbnailUrl;
+          stepVideoUrl2 = twoVideos.shot2.videoUrl;
         }
 
-        const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
         return {
           ...step,
           videoUrl: stepVideoUrl,
           thumbnailUrl: stepThumbnailUrl,
-          videoUrl2: mock2.url,
+          videoUrl2: stepVideoUrl2,
           duration: 30,
           propReferenceImages: stepPropImages
         };
@@ -546,11 +594,15 @@ class CinemaOrchestrator {
         const archivedFallback = this.isGenerationPaused ? await this.pickRandomArchivedVideo() : null;
         savedMovie.steps = savedMovie.steps.map((s, idx) => {
           const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+          const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
           const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
+          const needsReplacement2 = !s.videoUrl2 || s.videoUrl2.startsWith('/videos/');
           return {
             ...s,
             videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
-            thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster
+            thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster,
+            videoUrl2: needsReplacement2 ? mock2.url : s.videoUrl2,
+            duration: s.hasMidRollAd ? 45 : 30
           };
         });
         this.movie = savedMovie;
@@ -1051,14 +1103,8 @@ class CinemaOrchestrator {
         // 1. DISPATCH FAL.AI DUAL-SHOT VIDEO GENERATION (2 consecutive 15s videos = 30s)
         const videoPromise = (async () => {
           if (this.isGenerationPaused) {
-            const archived = await this.pickRandomArchivedVideo();
-            const mockIndex = nextStepNum % CINEMATIC_MOCK_VIDEOS.length;
-            const mock1 = CINEMATIC_MOCK_VIDEOS[mockIndex];
-            const mock2 = CINEMATIC_MOCK_VIDEOS[(mockIndex + 1) % CINEMATIC_MOCK_VIDEOS.length];
-            return {
-              shot1: { videoUrl: archived?.videoUrl || mock1.url, thumbnailUrl: archived?.thumbnailUrl || mock1.poster },
-              shot2: { videoUrl: mock2.url, thumbnailUrl: mock2.poster }
-            };
+            console.log(`[Cinema] 🛡️ Generación PAUSADA: Seleccionando 2 videos existentes para la escena ${nextStepNum}.`);
+            return this.pickTwoArchivedOrMockVideos(nextStepNum);
           } else {
             await this.refreshGenerationPrefsFromDb();
             return generateDualShotVideoWithFal({
