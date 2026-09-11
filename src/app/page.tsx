@@ -34,6 +34,7 @@ export default function CinemaStreamingPage() {
   const [cinemaState, setCinemaState] = useState<CinemaState | null>(null);
   const [userVoted, setUserVoted] = useState<'A' | 'B' | null>(null);
   const [blockbusterUserVoted, setBlockbusterUserVoted] = useState<'A' | 'B' | 'C' | 'D' | null>(null);
+  const [blockbusterWinner, setBlockbusterWinner] = useState<{ id?: 'A' | 'B' | 'C' | 'D'; title: string; logline?: string; genre?: string } | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [supabaseReady, setSupabaseReady] = useState(false);
   const [userId, setUserId] = useState<string>('');
@@ -426,9 +427,21 @@ export default function CinemaStreamingPage() {
           setCinemaState((prev) => prev ? { ...prev, blockbusterVoteCounts: payload.payload.counts } : prev);
         }
       })
+      .on('broadcast', { event: 'blockbuster_vote_ended' }, (payload: any) => {
+        if (payload.payload?.winner) {
+          setBlockbusterWinner(payload.payload.winner);
+        }
+        if (payload.payload?.counts) {
+          setCinemaState((prev) => prev ? { ...prev, blockbusterVoteCounts: payload.payload.counts } : prev);
+        }
+        if (payload.payload?.candidates) {
+          setCinemaState((prev) => prev ? { ...prev, blockbusterCandidates: payload.payload.candidates } : prev);
+        }
+      })
       .on('broadcast', { event: 'blockbuster_vote_started' }, (payload: any) => {
         setUserVoted(null);
         setBlockbusterUserVoted(null);
+        setBlockbusterWinner(null);
         if (payload.payload?.candidates) {
           setCinemaState((prev) => prev ? {
             ...prev,
@@ -467,6 +480,7 @@ export default function CinemaStreamingPage() {
       .on('broadcast', { event: 'new_movie_started' }, (payload: any) => {
         setUserVoted(null);
         setBlockbusterUserVoted(null);
+        setBlockbusterWinner(null);
         if (payload.payload?.movie) {
           setCinemaState((prev) => {
             if (!prev) return prev;
@@ -712,6 +726,13 @@ export default function CinemaStreamingPage() {
     );
   }
 
+  const isBlockbusterActive = Boolean(
+    cinemaState && (
+      cinemaState.phase === 'BLOCKBUSTER_VOTING' ||
+      (cinemaState.phase === 'GENERATING' && (Boolean(blockbusterWinner) || (cinemaState.blockbusterCandidates && cinemaState.blockbusterCandidates.length > 0)))
+    )
+  );
+
   return (
     <div className="w-screen h-screen bg-[#050608] flex flex-col overflow-hidden text-neutral-100 font-sans">
       {/* Top Navigation */}
@@ -759,28 +780,32 @@ export default function CinemaStreamingPage() {
                 onOpenBuyAds={() => setIsBuyAdsModalOpen(true)}
               />
 
-              {/* Voting & Decision Overlay (stays centered until next clip starts) */}
-              <VotingOverlay
-                isVisible={cinemaState.phase === 'VOTING' || cinemaState.phase === 'GENERATING'}
-                phase={cinemaState.phase}
-                timeRemaining={cinemaState.timeRemaining}
-                options={cinemaState.activeStep.options}
-                votesA={cinemaState.votesA}
-                votesB={cinemaState.votesB}
-                userVoted={userVoted}
-                selectedOption={cinemaState.activeStep.selectedOption}
-                wasRandomPick={cinemaState.activeStep.wasRandomPick}
-                onVote={handleVote}
-              />
-
-              {/* Next Blockbuster Audience Vote (60s, 4 candidate films) */}
-              {cinemaState.phase === 'BLOCKBUSTER_VOTING' && (
+              {/* Next Blockbuster Audience Vote (60s vote + 15s reveal/synthesis, 4 candidate films) */}
+              {isBlockbusterActive && (
                 <BlockbusterVoting
                   candidates={cinemaState.blockbusterCandidates || []}
                   counts={cinemaState.blockbusterVoteCounts || { A: 0, B: 0, C: 0, D: 0 }}
                   timeRemaining={cinemaState.timeRemaining}
                   userVoted={blockbusterUserVoted}
+                  phase={cinemaState.phase}
+                  winner={blockbusterWinner}
                   onVote={handleBlockbusterVote}
+                />
+              )}
+
+              {/* Scene Decision Overlay (hidden if blockbuster voting is active) */}
+              {!isBlockbusterActive && (
+                <VotingOverlay
+                  isVisible={cinemaState.phase === 'VOTING' || cinemaState.phase === 'GENERATING'}
+                  phase={cinemaState.phase}
+                  timeRemaining={cinemaState.timeRemaining}
+                  options={cinemaState.activeStep.options}
+                  votesA={cinemaState.votesA}
+                  votesB={cinemaState.votesB}
+                  userVoted={userVoted}
+                  selectedOption={cinemaState.activeStep.selectedOption}
+                  wasRandomPick={cinemaState.activeStep.wasRandomPick}
+                  onVote={handleVote}
                 />
               )}
             </div>

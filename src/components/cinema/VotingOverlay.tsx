@@ -52,6 +52,21 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   const winnerPercent = winnerId === 'A' ? percentA : percentB;
   const winnerVotes = winnerId === 'A' ? votesA : votesB;
 
+  // When voting concludes, keep 2 options visible for 1.3s to reveal results and sweep percentage bars,
+  // then trigger the zoom-out fade for the loser and zoom-in fade into the centered hero view.
+  const [isZoomTransitionActive, setIsZoomTransitionActive] = useState(false);
+
+  useEffect(() => {
+    if (isVotingEnded) {
+      const timer = setTimeout(() => {
+        setIsZoomTransitionActive(true);
+      }, 1300);
+      return () => clearTimeout(timer);
+    } else {
+      setIsZoomTransitionActive(false);
+    }
+  }, [isVotingEnded]);
+
   const handleCastVote = useCallback((optionId: 'A' | 'B') => {
     if (isVotingEnded) return;
     if (userVoted === optionId) return;
@@ -144,13 +159,13 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
         className="absolute inset-0 z-40 bg-black/75 md:bg-black/65 md:backdrop-blur-[6px] flex flex-col items-center justify-center p-3 md:p-6 overflow-y-auto"
       >
         <AnimatePresence mode="wait">
-          {!isVotingEnded ? (
-            /* ACTIVE VOTING VIEW */
+          {!isZoomTransitionActive ? (
+            /* ACTIVE VOTING & RESULTS REVEAL VIEW */
             <motion.div
               key="active-voting-view"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              exit={{ opacity: 0, scale: 0.72, filter: 'blur(10px)', transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] } }}
               transition={{ duration: 0.25 }}
               className="w-full flex flex-col items-center"
             >
@@ -194,12 +209,14 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                 <div className="flex items-center space-x-2">
                   <Timer className="w-3.5 h-3.5 md:w-4 md:h-4 text-cyan-400" />
                   <h2 className="text-lg md:text-2xl font-black uppercase tracking-widest text-white">
-                    Audience Vote
+                    {isVotingEnded ? "Voting Concluded • Results Revealed" : "Audience Vote"}
                   </h2>
                   <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-400" />
                 </div>
                 <p className="hidden md:block text-xs text-neutral-400 mt-1 max-w-md">
-                  Choose the next story continuation. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote instantly.
+                  {isVotingEnded
+                    ? "Tallying audience votes · Transitioning to selected narrative branch..."
+                    : <>Choose the next story continuation. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote instantly.</>}
                 </p>
               </div>
 
@@ -207,13 +224,15 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
               <div className="grid grid-cols-2 gap-2 md:gap-6 w-full max-w-4xl">
                 {/* OPTION A */}
                 <motion.div
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={!isVotingEnded ? { scale: 1.02 } : undefined}
+                  whileTap={!isVotingEnded ? { scale: 0.98 } : undefined}
                   onClick={() => handleCastVote('A')}
                   className={`relative p-3 md:p-4 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
-                    userVoted === 'A'
-                      ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_30px_rgba(0,240,255,0.3)]'
-                      : 'bg-neutral-900/60 hover:bg-neutral-900/80 border-white/10 hover:border-cyan-500/50'
+                    isVotingEnded && winnerId === 'A'
+                      ? 'bg-cyan-950/60 border-cyan-400 shadow-[0_0_35px_rgba(0,240,255,0.4)] ring-1 ring-cyan-400/60'
+                      : userVoted === 'A'
+                        ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_30px_rgba(0,240,255,0.3)]'
+                        : 'bg-neutral-900/60 hover:bg-neutral-900/80 border-white/10 hover:border-cyan-500/50'
                   }`}
                 >
                   {/* Top Tag & Hotkey */}
@@ -245,21 +264,47 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                     </div>
                   )}
 
-                  {/* Percentage Bar & Votes */}
-                  <div className="space-y-1 md:space-y-1.5 pt-1.5 md:pt-2 border-t border-white/5">
-                    <div className="flex items-center justify-between text-[10px] md:text-xs font-mono">
-                      <span className="text-neutral-400">{votesA} votes</span>
-                      <span className="font-bold text-cyan-400">{percentA}%</span>
+                  {/* Secret Ballot during voting / Results bar when concluded */}
+                  {isVotingEnded ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.35 }}
+                      className="space-y-1 md:space-y-1.5 pt-1.5 md:pt-2 border-t border-white/5"
+                    >
+                      <div className="flex items-center justify-between text-[10px] md:text-xs font-mono">
+                        <span className="text-neutral-300 flex items-center gap-1">
+                          {votesA} {votesA === 1 ? 'vote' : 'votes'}
+                          {winnerId === 'A' && (
+                            <span className="text-amber-300 font-bold flex items-center gap-0.5 ml-1">
+                              <Trophy className="w-3 h-3" /> WINNER
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-bold text-cyan-400">{percentA}%</span>
+                      </div>
+                      <div className="w-full h-1.5 md:h-2 rounded-full bg-neutral-800 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${percentA}%` }}
+                          transition={{ duration: 0.6, ease: "easeOut" }}
+                          className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full"
+                        />
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="pt-1.5 md:pt-2 border-t border-white/5 flex items-center justify-between">
+                      <span className="text-[10px] md:text-xs font-mono text-neutral-400 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                        {userVoted === 'A' ? 'Vote registered • Secret ballot' : 'Click or Key [1] to vote'}
+                      </span>
+                      {userVoted === 'A' && (
+                        <span className="text-[10px] md:text-xs font-mono font-bold text-cyan-300 flex items-center gap-1 bg-cyan-950/80 px-2 py-0.5 rounded-full border border-cyan-400/50">
+                          <Check className="w-3 h-3" /> YOUR PICK
+                        </span>
+                      )}
                     </div>
-                    <div className="w-full h-1.5 md:h-2 rounded-full bg-neutral-800 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${percentA}%` }}
-                        transition={{ duration: 0.5 }}
-                        className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 rounded-full"
-                      />
-                    </div>
-                  </div>
+                  )}
 
                   {userVoted === 'A' && (
                     <div className="absolute top-2 right-2 md:top-4 md:right-4 flex items-center space-x-1 text-[9px] md:text-xs text-cyan-400 font-bold bg-cyan-950/90 border border-cyan-400 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded-full">
@@ -271,13 +316,15 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
 
                 {/* OPTION B */}
                 <motion.div
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={!isVotingEnded ? { scale: 1.02 } : undefined}
+                  whileTap={!isVotingEnded ? { scale: 0.98 } : undefined}
                   onClick={() => handleCastVote('B')}
                   className={`relative p-3 md:p-4 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
-                    userVoted === 'B'
-                      ? 'bg-amber-950/40 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.3)]'
-                      : 'bg-neutral-900/60 hover:bg-neutral-900/80 border-white/10 hover:border-amber-500/50'
+                    isVotingEnded && winnerId === 'B'
+                      ? 'bg-amber-950/60 border-amber-400 shadow-[0_0_35px_rgba(251,191,36,0.4)] ring-1 ring-amber-400/60'
+                      : userVoted === 'B'
+                        ? 'bg-amber-950/40 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.3)]'
+                        : 'bg-neutral-900/60 hover:bg-neutral-900/80 border-white/10 hover:border-amber-500/50'
                   }`}
                 >
                   {/* Top Tag & Hotkey */}
@@ -309,21 +356,47 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                     </div>
                   )}
 
-                  {/* Percentage Bar & Votes */}
-                  <div className="space-y-1 md:space-y-1.5 pt-1.5 md:pt-2 border-t border-white/5">
-                    <div className="flex items-center justify-between text-[10px] md:text-xs font-mono">
-                      <span className="text-neutral-400">{votesB} votes</span>
-                      <span className="font-bold text-amber-400">{percentB}%</span>
+                  {/* Secret Ballot during voting / Results bar when concluded */}
+                  {isVotingEnded ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.35 }}
+                      className="space-y-1 md:space-y-1.5 pt-1.5 md:pt-2 border-t border-white/5"
+                    >
+                      <div className="flex items-center justify-between text-[10px] md:text-xs font-mono">
+                        <span className="text-neutral-300 flex items-center gap-1">
+                          {votesB} {votesB === 1 ? 'vote' : 'votes'}
+                          {winnerId === 'B' && (
+                            <span className="text-amber-300 font-bold flex items-center gap-0.5 ml-1">
+                              <Trophy className="w-3 h-3" /> WINNER
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-bold text-amber-400">{percentB}%</span>
+                      </div>
+                      <div className="w-full h-1.5 md:h-2 rounded-full bg-neutral-800 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${percentB}%` }}
+                          transition={{ duration: 0.6, ease: "easeOut" }}
+                          className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full"
+                        />
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="pt-1.5 md:pt-2 border-t border-white/5 flex items-center justify-between">
+                      <span className="text-[10px] md:text-xs font-mono text-neutral-400 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                        {userVoted === 'B' ? 'Vote registered • Secret ballot' : 'Click or Key [2] to vote'}
+                      </span>
+                      {userVoted === 'B' && (
+                        <span className="text-[10px] md:text-xs font-mono font-bold text-amber-300 flex items-center gap-1 bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-400/50">
+                          <Check className="w-3 h-3" /> YOUR PICK
+                        </span>
+                      )}
                     </div>
-                    <div className="w-full h-1.5 md:h-2 rounded-full bg-neutral-800 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${percentB}%` }}
-                        transition={{ duration: 0.5 }}
-                        className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full"
-                      />
-                    </div>
-                  </div>
+                  )}
 
                   {userVoted === 'B' && (
                     <div className="absolute top-2 right-2 md:top-4 md:right-4 flex items-center space-x-1 text-[9px] md:text-xs text-amber-400 font-bold bg-amber-950/90 border border-amber-400 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded-full">
@@ -344,10 +417,10 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
             /* VOTING ENDED: SELECTED OPTION CENTERED UNTIL NEXT CLIP STARTS */
             <motion.div
               key="selected-option-centered-view"
-              initial={{ opacity: 0, scale: 0.92, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
+              initial={{ opacity: 0, scale: 0.88, y: 25, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
               exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
               className="w-full max-w-2xl flex flex-col items-center text-center my-auto"
             >
               {/* Header Status Badge */}
