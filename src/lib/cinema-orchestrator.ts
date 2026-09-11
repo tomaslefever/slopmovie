@@ -1,7 +1,7 @@
 import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
 import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek, generateImmersiveAdPromptWithDeepSeek, ensureOptionPrompts } from './deepseek';
 import type { CommentInfluence } from './deepseek';
-import { generateVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel, isRealGeneratedVideoUrl } from './fal-video';
+import { generateVideoWithFal, generateDualShotVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel, isRealGeneratedVideoUrl } from './fal-video';
 import type { VideoModelId, VideoResolution } from './fal-video';
 
 declare global {
@@ -476,10 +476,13 @@ class CinemaOrchestrator {
           }
         }
 
+        const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
         return {
           ...step,
           videoUrl: stepVideoUrl,
           thumbnailUrl: stepThumbnailUrl,
+          videoUrl2: mock2.url,
+          duration: 30,
           propReferenceImages: stepPropImages
         };
       })
@@ -506,8 +509,7 @@ class CinemaOrchestrator {
       totalVotesCast: 0
     };
 
-    this.phase = 'PLAYING';
-    this.timeRemaining = 15;
+    this.setPhase('PLAYING', 30);
     this.votesA = 0;
     this.votesB = 0;
     this.userVotes.clear();
@@ -881,23 +883,8 @@ class CinemaOrchestrator {
         return;
       }
 
-      // Check if automatic commercial break should trigger a continuación of this scene!
-      const currentStepCount = this.movie.steps.length;
-      if (
-        this.adsConfig.autoAdsEnabled &&
-        currentStepCount > 0 &&
-        currentStepCount % this.adsConfig.adIntervalSteps === 0 &&
-        currentStepCount !== this.adsConfig.lastAdStep &&
-        currentStepCount < TOTAL_STEPS - 3 // Never break during the denouement/finale: scene 50 must end the film
-      ) {
-        this.adsConfig.lastAdStep = currentStepCount;
-        // Trigger commercial break immediately after this scene plays.
-        // It takes currentStep.videoUrl as reference and transitions to VOTING afterwards.
-        await this.triggerCommercialBreak(undefined, 'VOTING');
-        return;
-      }
-
-      // No break this time — drop any stale pre-generated ad clip
+      // Ads are now seamlessly embedded in Block 2 (Mid-roll) within the scene itself.
+      // Scene completion transitions directly to audience voting!
       this.pendingPreGeneratedAd = null;
 
       // Enter 10-second VOTING phase!
@@ -1010,7 +997,8 @@ class CinemaOrchestrator {
       const commentInfluence = await this.selectCommentForInfluence();
 
       const nextStepNum = currentStep.stepNumber + 1;
-      const storyReferenceUrl = this.preAdVideoUrl ?? currentStep.videoUrl;
+      // Narrative continuity: always link to Shot 2 of previous scene (or Shot 1), NEVER to an ad!
+      const storyReferenceUrl = currentStep.videoUrl2 || currentStep.videoUrl;
 
       // Extract pre-computed Cinematique prompts from winning option (with guaranteed fallback)
       const guaranteedWinningOption = ensureOptionPrompts(winningOption, chosenOption, {
@@ -1025,7 +1013,29 @@ class CinemaOrchestrator {
 
       const videoPromptToUse = guaranteedWinningOption.visualPrompt!;
       const cameraPromptToUse = guaranteedWinningOption.cameraMotionPrompt || "Cinematic camera dolly tracking with shallow depth of field, 24fps";
+      const videoPrompt2ToUse = guaranteedWinningOption.visualPrompt2 || `${videoPromptToUse}, climax reaction and dramatic consequence`;
+      const cameraPrompt2ToUse = guaranteedWinningOption.cameraMotionPrompt2 || "Cinematic tracking shot, closer framing, high intensity, 24fps";
       const voiceDirectionToUse = guaranteedWinningOption.voiceDirection || currentStep.voiceDirection || this.movie.bible.characters[0]?.voicePrompt;
+
+      // Check if a mid-roll commercial ad should be embedded in Block 2 of this scene
+      const isAdStep = Boolean(
+        this.adsConfig.autoAdsEnabled &&
+        nextStepNum > 1 &&
+        nextStepNum % this.adsConfig.adIntervalSteps === 0 &&
+        nextStepNum !== this.adsConfig.lastAdStep &&
+        nextStepNum < TOTAL_STEPS - 2
+      );
+
+      let adToPlay: ImmersiveAd | null = null;
+      if (isAdStep) {
+        adToPlay = this.pickRandomCommercialAd() || DEFAULT_IMMERSIVE_ADS[0];
+        this.adsConfig.lastAdStep = nextStepNum;
+        if (adToPlay) {
+          adToPlay.impressions = (adToPlay.impressions || 0) + 1;
+          recordAdMetric(adToPlay.id, 'impression');
+          this.activeAd = adToPlay;
+        }
+      }
 
       // Ensure all active props have their reference assets stored in Supabase Storage
       const activePropImages = this.movie.bible.props
@@ -1034,34 +1044,26 @@ class CinemaOrchestrator {
 
       let nextStep: MovieStep | null = null;
       try {
-        console.log(`[Cinema] 🚀 Immediate Fal.ai video dispatch for Step ${nextStepNum} using winning Option ${chosenOption}'s pre-generated prompt: "${videoPromptToUse.slice(0, 90)}..."`);
+        console.log(`[Cinema] 🚀 Immediate Fal.ai dual-shot video dispatch for Step ${nextStepNum} (30s block${isAdStep ? ' + 15s mid-roll ad = 45s' : ''})`);
 
-        // 1. DISPATCH FAL.AI VIDEO GENERATION IMMEDIATELY (ZERO LLM WAIT TIME)
-        const videoPromise: Promise<{ videoUrl: string; thumbnailUrl?: string }> = (async () => {
+        // 1. DISPATCH FAL.AI DUAL-SHOT VIDEO GENERATION (2 consecutive 15s videos = 30s)
+        const videoPromise = (async () => {
           if (this.isGenerationPaused) {
             const archived = await this.pickRandomArchivedVideo();
-            if (archived) {
-              return archived;
-            }
-            const previousSteps = [
-              ...(this.movie?.steps ?? []),
-              ...this.completedMovies.flatMap(m => m.steps)
-            ].filter(s => s.videoUrl);
-
-            if (previousSteps.length > 0) {
-              const randomStep = previousSteps[Math.floor(Math.random() * previousSteps.length)];
-              return { videoUrl: randomStep.videoUrl, thumbnailUrl: randomStep.thumbnailUrl };
-            }
             const mockIndex = nextStepNum % CINEMATIC_MOCK_VIDEOS.length;
-            const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
-            return { videoUrl: mock.url, thumbnailUrl: mock.poster };
+            const mock1 = CINEMATIC_MOCK_VIDEOS[mockIndex];
+            const mock2 = CINEMATIC_MOCK_VIDEOS[(mockIndex + 1) % CINEMATIC_MOCK_VIDEOS.length];
+            return {
+              shot1: { videoUrl: archived?.videoUrl || mock1.url, thumbnailUrl: archived?.thumbnailUrl || mock1.poster },
+              shot2: { videoUrl: mock2.url, thumbnailUrl: mock2.poster }
+            };
           } else {
-            // Re-adopt the director's persisted model/resolution BEFORE spending credits
             await this.refreshGenerationPrefsFromDb();
-
-            return generateVideoWithFal({
-              prompt: videoPromptToUse,
-              cameraMotion: cameraPromptToUse,
+            return generateDualShotVideoWithFal({
+              prompt1: videoPromptToUse,
+              cameraMotion1: cameraPromptToUse,
+              prompt2: videoPrompt2ToUse,
+              cameraMotion2: cameraPrompt2ToUse,
               stepNumber: nextStepNum,
               previousVideoUrl: storyReferenceUrl,
               propReferenceImages: activePropImages,
@@ -1072,8 +1074,37 @@ class CinemaOrchestrator {
           }
         })();
 
-        // 2. RUN DEEPSEEK IN PARALLEL IN BACKGROUND: Flesh out dialogue, new characters/props,
-        // and pre-generate the NEXT pair of options (with their own visualPrompts)
+        // 2. DISPATCH AD VIDEO GENERATION IN PARALLEL IF AD STEP (BLOCK 2 MID-ROLL)
+        const adPromise = (async (): Promise<string | null> => {
+          if (!isAdStep || !adToPlay) return null;
+          if (this.isGenerationPaused) {
+            return adToPlay.generatedAdVideoUrl || adToPlay.videoUrl || DEFAULT_IMMERSIVE_ADS[0].videoUrl || null;
+          }
+          try {
+            await this.refreshGenerationPrefsFromDb();
+            const adPrompt = await this.buildAdGenerationPrompt(adToPlay);
+            const adRes = await generateVideoWithFal({
+              prompt: adPrompt,
+              cameraMotion: "Smooth dolly or static hold, matching the previous scene's camera language",
+              stepNumber: nextStepNum,
+              previousVideoUrl: storyReferenceUrl || undefined,
+              model: this.videoModel,
+              resolution: this.videoResolution || undefined
+            });
+            if (adRes.videoUrl && !this.generatedAdVideoArchive.includes(adRes.videoUrl)) {
+              this.generatedAdVideoArchive.push(adRes.videoUrl);
+            }
+            adToPlay.generatedAdVideoUrl = adRes.videoUrl;
+            persistImmersiveAd(adToPlay);
+            return adRes.videoUrl;
+          } catch (err) {
+            console.warn('[Cinema] Ad generation error, using fallback:', err);
+            return adToPlay.videoUrl || DEFAULT_IMMERSIVE_ADS[0].videoUrl || null;
+          }
+        })();
+
+        // 3. RUN DEEPSEEK IN PARALLEL IN BACKGROUND: Flesh out dialogue, new characters/props,
+        // and pre-generate the NEXT pair of options (with their dual visualPrompts)
         const deepseekPromise: Promise<MovieStep | null> = generateNextStepWithDeepSeek(
           this.movie,
           chosenOption,
@@ -1084,20 +1115,17 @@ class CinemaOrchestrator {
           return null;
         });
 
-        // Await video rendering and LLM option generation concurrently
-        const [videoRes, nextStepRaw] = await Promise.all([videoPromise, deepseekPromise]);
+        // Await dual-shot video rendering, LLM option generation, and optional ad concurrently
+        const [videoRes, nextStepRaw, adVideoUrl] = await Promise.all([videoPromise, deepseekPromise, adPromise]);
 
         if (commentInfluence) {
           this.addSystemMessage(`💡 La idea de @${commentInfluence.userName} moldea la Opción ${commentInfluence.optionId} de esta ronda (comentario marcado como usado).`);
         }
 
         if (this.isGenerationPaused) {
-          this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generación de video pausada. Escena #${nextStepNum}: "${guaranteedWinningOption.title}" con nuevas opciones de votación activas (sin gasto de créditos).`);
-        } else {
-          // If this scene triggers a commercial break when it finishes playing,
-          // generate the ad clip NOW (with THIS scene as the visual reference) so
-          // the break starts with the ad already rendered — only playback, no waiting.
-          this.preGenerateUpcomingAd(nextStepNum, videoRes.videoUrl);
+          this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generación pausada. Escena #${nextStepNum}: "${guaranteedWinningOption.title}" (30s) activa.`);
+        } else if (isAdStep && adVideoUrl) {
+          this.addSystemMessage(`📺 [MID-ROLL SPONSOR] Anuncio integrado en Bloque 2 para "${adToPlay?.brandName}". Duración total escena: 45s.`);
         }
 
         // Handle newly introduced characters & props from the LLM if any
@@ -1127,7 +1155,10 @@ class CinemaOrchestrator {
         // Consume and reset preAdVideoUrl — it must never persist past this step
         this.preAdVideoUrl = null;
 
-        // Construct nextStep merging the immediate video render and the next pre-computed options
+        const hasAd = Boolean(isAdStep && adVideoUrl);
+        const stepDuration = hasAd ? 45 : 30;
+
+        // Construct nextStep merging the dual video renders and next pre-computed options
         nextStep = {
           stepNumber: nextStepNum,
           title: guaranteedWinningOption.title || nextStepRaw?.title || `Scene ${nextStepNum}`,
@@ -1140,16 +1171,28 @@ class CinemaOrchestrator {
               speaker: this.movie.bible.characters[0]?.name || "Character",
               text: guaranteedWinningOption.title,
               textEs: guaranteedWinningOption.title
+            },
+            {
+              start: hasAd ? 31.0 : 16.0,
+              end: hasAd ? 44.0 : 29.0,
+              speaker: this.movie.bible.characters[0]?.name || "Character",
+              text: guaranteedWinningOption.text || guaranteedWinningOption.title,
+              textEs: guaranteedWinningOption.text || guaranteedWinningOption.title
             }
           ],
           voiceDirection: nextStepRaw?.voiceDirection || voiceDirectionToUse,
           visualPrompt: videoPromptToUse,
           cameraMotionPrompt: cameraPromptToUse,
-          videoUrl: videoRes.videoUrl,
-          thumbnailUrl: videoRes.thumbnailUrl,
+          visualPrompt2: videoPrompt2ToUse,
+          cameraMotionPrompt2: cameraPrompt2ToUse,
+          videoUrl: videoRes.shot1.videoUrl,
+          thumbnailUrl: videoRes.shot1.thumbnailUrl,
+          videoUrl2: videoRes.shot2.videoUrl,
+          hasMidRollAd: hasAd,
+          adVideoUrl: hasAd ? (adVideoUrl ?? undefined) : undefined,
           referenceVideoUrl: storyReferenceUrl,
           propReferenceImages: activePropImages,
-          duration: 15,
+          duration: stepDuration,
           votingWindowSeconds: 10,
           options: nextStepRaw?.options || [
             ensureOptionPrompts({ id: 'A', title: 'Advance the Offensive', text: 'Push forward into the breach.', dramaticHook: 'High risk frontal assault.', expectedConsequence: 'Immediate combat escalation.', votes: 0 }, 'A', { characterName: this.movie.bible.characters[0]?.name, envName: this.movie.bible.environments[0]?.name, cinematicStyle: this.movie.bible.cinematicStyle }),
@@ -1170,26 +1213,63 @@ class CinemaOrchestrator {
         await persistMovie(this.movie);
         await persistMovieStep(this.movie.id, nextStep);
 
-        this.setPhase('PLAYING', 15);
-        // Realtime broadcast of new clip
+        // Transition immediately to PLAYING for the full stepDuration (30s or 45s)
+        this.votesA = 0;
+        this.votesB = 0;
+        this.userVotes.clear();
+        this.setPhase('PLAYING', stepDuration);
+
+        // Realtime broadcast of new clip and phase transition
         broadcastCinemaEvent('new_step', {
           step: nextStep,
           currentStep: nextStep.stepNumber,
-          phaseDuration: 15,
+          phaseDuration: stepDuration,
           phaseStartedAt: this.phaseStartedAt,
           phaseEndsAt: this.phaseEndsAt
         });
+
+        broadcastCinemaEvent('phase_change', {
+          phase: 'PLAYING',
+          timeRemaining: stepDuration,
+          phaseDuration: stepDuration,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
+        });
+
+        await this.broadcastStateSnapshot(workerId);
       } catch (err) {
         console.error("Error generating next step:", err);
+        // Fallback recovery if something catastrophic happened
+        const mockIndex = nextStepNum % CINEMATIC_MOCK_VIDEOS.length;
+        const mock1 = CINEMATIC_MOCK_VIDEOS[mockIndex];
+        const mock2 = CINEMATIC_MOCK_VIDEOS[(mockIndex + 1) % CINEMATIC_MOCK_VIDEOS.length];
+        const fallbackStep: MovieStep = {
+          stepNumber: nextStepNum,
+          title: guaranteedWinningOption.title || `Scene ${nextStepNum}`,
+          synopsis: guaranteedWinningOption.synopsis || guaranteedWinningOption.title,
+          visualPrompt: videoPromptToUse,
+          cameraMotionPrompt: cameraPromptToUse,
+          videoUrl: mock1.url,
+          videoUrl2: mock2.url,
+          duration: 30,
+          votingWindowSeconds: 10,
+          options: [
+            ensureOptionPrompts({ id: 'A', title: 'Advance', text: 'Push forward.', dramaticHook: 'Assault', expectedConsequence: 'Combat', votes: 0 }, 'A', {}),
+            ensureOptionPrompts({ id: 'B', title: 'Regroup', text: 'Fall back.', dramaticHook: 'Defense', expectedConsequence: 'Tactical delay', votes: 0 }, 'B', {})
+          ],
+          activeCharacters: currentStep.activeCharacters,
+          activeProps: currentStep.activeProps,
+          environment: currentStep.environment,
+          createdAt: new Date().toISOString()
+        };
+        this.movie.steps.push(fallbackStep);
+        this.movie.currentStep = fallbackStep.stepNumber;
+        this.votesA = 0;
+        this.votesB = 0;
+        this.userVotes.clear();
+        this.setPhase('PLAYING', 30);
+        await this.broadcastStateSnapshot(workerId);
       }
-
-      // Reset voting
-      this.votesA = 0;
-      this.votesB = 0;
-      this.userVotes.clear();
-
-      this.setPhase('PLAYING', 15);
-      await this.broadcastStateSnapshot(workerId);
     }
     else if (this.phase === 'GENERATING') {
       // Watchdog: If the engine is in GENERATING and the timer elapsed,

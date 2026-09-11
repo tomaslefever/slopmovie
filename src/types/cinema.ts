@@ -41,8 +41,10 @@ export interface DecisionOption {
   dramaticHook: string;
   expectedConsequence: string;
   votes: number;
-  visualPrompt?: string; // Pre-generated Cinematique 6-layer visual prompt ready for video model
-  cameraMotionPrompt?: string; // Pre-generated Cinematique 4-layer camera motion prompt
+  visualPrompt?: string; // Pre-generated Cinematique 6-layer visual prompt for Shot 1 (Opening)
+  cameraMotionPrompt?: string; // Pre-generated Cinematique 4-layer camera motion prompt for Shot 1
+  visualPrompt2?: string; // Pre-generated Cinematique visual prompt for Shot 2 (Climax / Resolution)
+  cameraMotionPrompt2?: string; // Pre-generated Cinematique camera motion prompt for Shot 2
   synopsis?: string; // Pre-generated synopsis if this option wins
   dialogueSnippet?: string; // Pre-generated spoken dialogue if this option wins
   subtitles?: SubtitleCue[]; // Pre-generated timed subtitles if this option wins
@@ -51,8 +53,8 @@ export interface DecisionOption {
 
 export interface SubtitleCue {
   id?: string;
-  start: number; // in seconds (0 to 15)
-  end: number;   // in seconds (0 to 15)
+  start: number; // in seconds (0 to 30)
+  end: number;   // in seconds (0 to 30)
   speaker?: string; // e.g. "Kael", "Lyra"
   text: string; // English dialogue / narration
   textEs?: string; // Optional Spanish translation for multilingual subtitles
@@ -63,13 +65,18 @@ export interface MovieStep {
   title: string;
   synopsis: string;
   dialogueSnippet?: string;
-  subtitles?: SubtitleCue[]; // Timed subtitles for the 15-second clip
+  subtitles?: SubtitleCue[]; // Timed subtitles for the scene clip
   voiceDirection?: string; // Character voice prompt and emotional direction for consistent audio
-  visualPrompt: string; // Detailed Image prompt with character & prop consistency anchors
-  cameraMotionPrompt: string; // Camera movement & cinematography prompt
-  videoUrl: string; // 15-second video clip URL
+  visualPrompt: string; // Detailed prompt for Shot 1 (Apertura)
+  cameraMotionPrompt: string; // Camera movement prompt for Shot 1
+  videoUrl: string; // Shot 1 video clip URL (15s)
+  visualPrompt2?: string; // Detailed prompt for Shot 2 (Clímax / Desenlace)
+  cameraMotionPrompt2?: string; // Camera movement prompt for Shot 2
+  videoUrl2?: string; // Shot 2 video clip URL (15s)
   thumbnailUrl?: string;
-  duration: number; // exactly 15 seconds
+  hasMidRollAd?: boolean; // True if this scene includes an immersive sponsor ad in Block 2
+  adVideoUrl?: string; // In-world sponsor ad video clip URL (15s in Block 2)
+  duration: number; // 30 seconds (or 45s when hasMidRollAd is true)
   votingWindowSeconds: number; // exactly 10 seconds
   options: [DecisionOption, DecisionOption];
   selectedOption?: 'A' | 'B';

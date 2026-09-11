@@ -1717,6 +1717,16 @@ export function ensureOptionPrompts(
     ? "High-energy forward Steadicam push-in tracking subject with kinetic momentum, subtle camera shake, 180-degree shutter, 24fps motion blur"
     : "Deliberate lateral dolly tracking shot parallel to subject, smooth parallax against background architecture, 24fps motion blur";
 
+  const visualPrompt2 = (opt.visualPrompt2 && typeof opt.visualPrompt2 === 'string' && opt.visualPrompt2.trim().length > 20)
+    ? opt.visualPrompt2.trim()
+    : `${visualPrompt}. Direct narrative climax and consequence: dramatic close-up and dynamic character interaction, heightened tension, 24fps motion blur, ${style}`;
+
+  const cameraMotionPrompt2 = (opt.cameraMotionPrompt2 && typeof opt.cameraMotionPrompt2 === 'string' && opt.cameraMotionPrompt2.trim().length > 15)
+    ? opt.cameraMotionPrompt2.trim()
+    : id === 'A'
+    ? "Rapid dolly tracking wrap-around arc ending in an intense choker close-up, sharp anamorphic focus pull, 24fps motion blur"
+    : "Slow deliberate zoom-in closing the distance, razor-sharp rack focus onto the character's eyes, 24fps cinematic motion blur";
+
   const synopsis = opt.synopsis || `${charName} executes "${title}": ${text}`;
   const dialogueSnippet = opt.dialogueSnippet || `${charName}: '${title} is our only way through.'`;
   const subtitles = Array.isArray(opt.subtitles) && opt.subtitles.length > 0
@@ -1747,6 +1757,8 @@ export function ensureOptionPrompts(
     votes: opt.votes || 0,
     visualPrompt,
     cameraMotionPrompt,
+    visualPrompt2,
+    cameraMotionPrompt2,
     synopsis,
     dialogueSnippet,
     subtitles,
@@ -2801,24 +2813,26 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
       // STATIC system prompt (no per-request interpolation): DeepSeek's context
       // caching reuses the cached prefix across all 46+ scene calls, slashing
       // input-token cost. All dynamic content lives in the user message.
-      const systemPrompt = `You are an elite Interactive Cinema AI Director writing ONE 15-second scene of a 50-step interactive film for MiniMax H3-Max (480p 16:9).
+      const systemPrompt = `You are an elite Interactive Cinema AI Director writing ONE 30-second continuous scene (composed of two 15-second cinematic shots: Shot 1 Opening and Shot 2 Climax) of a 50-step interactive film for MiniMax H3-Max (480p 16:9).
 Rules:
 1. ALL output in cinematic ENGLISH.
-2. Include timed "subtitles" (start, end, speaker, text EN, textEs ES).
+2. Include timed "subtitles" across the 30-second scene (start, end, speaker, text EN, textEs ES).
 3. Never invent props freely: define "newCharacter" (with voicePrompt) AND their signature "newProp" ONLY when a NEW character enters; otherwise both null.
-4. "activeProps": only prop IDs physically visible or manipulated in THIS shot; empty [] otherwise.
+4. "activeProps": only prop IDs physically visible or manipulated in THIS scene; empty [] otherwise.
 5. "activeCharacters": only characters on screen.
-6. CINEMATIQUE "visualPrompt": Craft a rich 6-layer visual prompt: [Shot Framing: MCU / Cowboy / ECU / Choker / Low-Angle / OTS] + [Subject & Wardrobe] + [Setting Architecture with Foreground/Mid/Background Depth] + [Lighting: Chiaroscuro / Rembrandt / Motivated practicals / Kelvin Temp] + [Lenses & Stock: Panavision anamorphic oval bokeh / Cooke S4 warmth / Zeiss sharpness / Kodak Vision3 500T grain] + [Atmosphere & 24fps film still].
-7. CINEMATIQUE "cameraMotionPrompt": Craft a rich 4-layer camera prompt: [Rig: Steadicam glide / Slow dolly push-in / Lateral track with 3-layer parallax / Technocrane arc / Dolly zoom vertigo] + [Pacing & Trajectory] + [Focal length & Focus pull/Rack focus] + [Optical flare physics & 24fps motion blur].
+6. CINEMATIQUE "visualPrompt" (Shot 1, 15s): Craft a rich 6-layer visual prompt: [Shot Framing: MCU / Cowboy / Low-Angle / OTS] + [Subject & Wardrobe] + [Setting Architecture with Depth] + [Lighting: Chiaroscuro / Practical fixtures / Kelvin Temp] + [Lenses & Stock: Panavision anamorphic, Kodak Vision3 500T grain] + [Atmosphere & 24fps film still].
+7. CINEMATIQUE "cameraMotionPrompt" (Shot 1, 15s): Craft a rich 4-layer camera prompt: [Rig: Steadicam glide / Lateral track with 3-layer parallax / Technocrane arc] + [Pacing & Trajectory] + [Focal length & Focus pull] + [24fps motion blur].
 8. The two voting "options" MUST be a genuinely NEW dilemma every scene: never repeat, re-title or re-skin an option already offered earlier in this film (the previous-options ledger is in the user message). Invent fresh stakes, fresh risks and fresh consequences each time — a voter should never recognize an earlier choice in a new costume.
-9. PRE-GENERATED VIDEO PROMPTS FOR OPTIONS: In each of the two voting "options" (A and B), you MUST pre-generate the exact video prompts so whichever option wins can be rendered immediately by the video model without querying the LLM again:
-- "visualPrompt": Full Cinematique 6-layer visual prompt for the scene that results if this option wins.
-- "cameraMotionPrompt": Full Cinematique 4-layer camera motion prompt if this option wins.
+9. PRE-GENERATED DUAL-SHOT VIDEO PROMPTS (30s TOTAL): In each of the two voting "options" (A and B), you MUST pre-generate the exact video prompts for BOTH Shot 1 (Opening Action - 15s) and Shot 2 (Climax / Resolution - 15s) so whichever option wins can be rendered immediately in parallel by the video model without querying the LLM again:
+- "visualPrompt": Full Cinematique 6-layer visual prompt for Shot 1 (opening action/establishing).
+- "cameraMotionPrompt": Full Cinematique 4-layer camera motion prompt for Shot 1.
+- "visualPrompt2": Full Cinematique 6-layer visual prompt for Shot 2 (direct narrative continuation, tighter framing or dramatic consequence continuing Shot 1).
+- "cameraMotionPrompt2": Full Cinematique 4-layer camera motion prompt for Shot 2.
 - "synopsis": 1-2 sentence synopsis of the resulting scene.
 - "dialogueSnippet": Key dialogue line in English.
-- "subtitles": Timed subtitles cues array.
+- "subtitles": Timed subtitles cues array across the 30-second duration.
 Respond ONLY with JSON:
-{"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""}],"voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":"","visualPrompt":"","cameraMotionPrompt":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":7.0,"speaker":"","text":"","textEs":""},{"start":8.0,"end":14.0,"speaker":"","text":"","textEs":""}]},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":"","visualPrompt":"","cameraMotionPrompt":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":7.0,"speaker":"","text":"","textEs":""},{"start":8.0,"end":14.0,"speaker":"","text":"","textEs":""}]}]}`;
+{"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""},{"start":15.0,"end":28.0,"speaker":"","text":"","textEs":""}],"voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""},{"start":15.0,"end":28.0,"speaker":"","text":"","textEs":""}]},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""},{"start":15.0,"end":28.0,"speaker":"","text":"","textEs":""}]}]}`;
 
       // Compact ledger of every voting option already offered in this film.
       // Without it the model has no memory of past dilemmas and recycles the

@@ -378,8 +378,7 @@ export async function generateVideoWithFal({
     }
   }
 
-  // Fallback / Simulation mode
-  const mockIndex = (stepNumber - 1) % CINEMATIC_MOCK_VIDEOS.length;
+  const mockIndex = Math.abs((stepNumber || 1) - 1) % CINEMATIC_MOCK_VIDEOS.length;
   const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
 
   return {
@@ -391,5 +390,88 @@ export async function generateVideoWithFal({
     aspectRatio: modelOption.aspectRatio,
     previousVideoReference: previousVideoUrl,
     propImagesReferences: propReferenceImages
+  };
+}
+
+export interface DualShotVideoParams {
+  prompt1: string;
+  cameraMotion1: string;
+  prompt2?: string;
+  cameraMotion2?: string;
+  stepNumber: number;
+  previousVideoUrl?: string;
+  propReferenceImages?: string[];
+  voiceDirection?: string;
+  model?: VideoModelId;
+  resolution?: VideoResolution;
+}
+
+export interface DualShotVideoResult {
+  videoUrl1: string;
+  thumbnailUrl1: string;
+  videoUrl2: string;
+  thumbnailUrl2: string;
+  shot1: { videoUrl: string; thumbnailUrl: string };
+  shot2: { videoUrl: string; thumbnailUrl: string };
+  isRealAiGenerated: boolean;
+  modelUsed: string;
+  resolution: string;
+}
+
+/**
+ * Generates TWO continuous 15-second cinematic shots in parallel using Fal.ai.
+ * Shot 1: Opening / Action
+ * Shot 2: Continuation / Climax / Resolution
+ * Concurrent execution ensures total wait time is virtually identical to a single shot (~20-30s).
+ */
+export async function generateDualShotVideoWithFal({
+  prompt1,
+  cameraMotion1,
+  prompt2,
+  cameraMotion2,
+  stepNumber,
+  previousVideoUrl,
+  propReferenceImages = [],
+  voiceDirection = "",
+  model,
+  resolution
+}: DualShotVideoParams): Promise<DualShotVideoResult> {
+  const p2 = prompt2 || `${prompt1}. Continuing narrative action and direct consequence. Dynamic camera framing.`;
+  const cm2 = cameraMotion2 || "Smooth cinematic dolly forward with shallow depth of field, 24fps motion blur";
+
+  // Dispatch both shots in parallel to Fal.ai cluster
+  const [shot1Res, shot2Res] = await Promise.all([
+    generateVideoWithFal({
+      prompt: prompt1,
+      cameraMotion: cameraMotion1,
+      stepNumber,
+      previousVideoUrl,
+      propReferenceImages,
+      voiceDirection,
+      model,
+      resolution
+    }),
+    generateVideoWithFal({
+      prompt: p2,
+      cameraMotion: cm2,
+      stepNumber: stepNumber + 100, // ensures distinct mock if simulation mode
+      previousVideoUrl,
+      propReferenceImages,
+      voiceDirection,
+      model,
+      resolution
+    })
+  ]);
+
+  return {
+    videoUrl1: shot1Res.videoUrl,
+    thumbnailUrl1: shot1Res.thumbnailUrl,
+    videoUrl2: shot2Res.videoUrl,
+    thumbnailUrl2: shot2Res.thumbnailUrl,
+    shot1: { videoUrl: shot1Res.videoUrl, thumbnailUrl: shot1Res.thumbnailUrl },
+    shot2: { videoUrl: shot2Res.videoUrl, thumbnailUrl: shot2Res.thumbnailUrl },
+    isRealAiGenerated: Boolean(shot1Res.isRealAiGenerated || shot2Res.isRealAiGenerated),
+    modelUsed: shot1Res.modelUsed,
+    resolution: shot1Res.resolution
   };
 }
