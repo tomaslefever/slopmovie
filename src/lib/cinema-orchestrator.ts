@@ -716,15 +716,15 @@ class CinemaOrchestrator {
       this.blockbusterCandidates = [];
       this.blockbusterUserVotes.clear();
 
-      this.setPhase('GENERATING', 4);
+      this.setPhase('GENERATING', 15);
 
       broadcastCinemaEvent('blockbuster_vote_ended', {
         winner: winner ? { title: winner.title, logline: winner.logline, genre: winner.genre } : null
       });
       broadcastCinemaEvent('phase_change', {
         phase: 'GENERATING',
-        timeRemaining: 4,
-        phaseDuration: 4,
+        timeRemaining: 15,
+        phaseDuration: 15,
         phaseStartedAt: this.phaseStartedAt,
         phaseEndsAt: this.phaseEndsAt
       });
@@ -1097,6 +1097,37 @@ class CinemaOrchestrator {
 
       this.setPhase('PLAYING', 15);
       await this.broadcastStateSnapshot(workerId);
+    }
+    else if (this.phase === 'GENERATING') {
+      // Watchdog: If the engine is in GENERATING and the timer elapsed,
+      // verify that an async movie reset or generation is not actively mid-flight.
+      if (this.isResetting || this.initializeMoviePromise) {
+        console.log('[CinemaEngine] Movie generation still mid-flight — extending GENERATING timer.');
+        this.phaseEndsAt = Date.now() + 5000;
+        this.timeRemaining = 5;
+        return;
+      }
+
+      console.log(`[CinemaEngine] ⏱️ Watchdog: GENERATING phase buffer ended for Step ${this.movie.currentStep}. Transitioning to PLAYING...`);
+      const currentStepObj = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
+        || this.movie.steps[this.movie.steps.length - 1]
+        || this.movie.steps[0];
+      const duration = currentStepObj?.duration || 15;
+      this.setPhase('PLAYING', duration);
+      this.votesA = 0;
+      this.votesB = 0;
+      this.userVotes.clear();
+
+      broadcastCinemaEvent('phase_change', {
+        phase: 'PLAYING',
+        timeRemaining: duration,
+        phaseDuration: duration,
+        phaseStartedAt: this.phaseStartedAt,
+        phaseEndsAt: this.phaseEndsAt
+      });
+      await this.persistCurrentStateToSupabase(workerId);
+      await this.broadcastStateSnapshot(workerId);
+      return;
     }
   }
 

@@ -121,29 +121,104 @@ export interface GeneratedStoryBible {
 
 export const BLOCKBUSTER_GENRES = [
   {
-    genre: "Cyberpunk / Neo-Noir Thriller",
-    theme: "Transhumanism, Megacorporations & Neural Resistance",
-    style: "Anamorphic 35mm Panavision, Dark Cyberpunk, Moody Teals and Neon Amber, High Contrast Volumetric Fog"
+    genre: "Superhéroes / Comic Book Cinematic",
+    theme: "Vigilantism, Hidden Identities, Moral Duty & World-Threatening Supervillains",
+    style: "IMAX 65mm Superhero Spectacle, High-Octane Key Lighting, Heroic Low-Angle Framing, Vivid Primary Colors, Deep Anamorphic Flares"
   },
   {
-    genre: "Dark Epic Fantasy / Mythic Saga",
-    theme: "Ancient Runes, Blood Sorcery, Obsidian Blades & Fallen Kingdoms",
-    style: "70mm Ultra Panavision, Dark Fantasy Gothic, Candelit Shadows, Volumetric Mist and Glowing Runic Embers"
+    genre: "Anime / Shonen & Seinen Cinematic",
+    theme: "Unbreakable Will, Inner Fire, Destined Rivals & Emotional Climax",
+    style: "Luminous Cel-Shaded Art Direction, God Rays Piercing Clouds, Dynamic Action Speed Lines, High-Saturation Azure and Sunset Gradients"
   },
   {
-    genre: "Cosmic Space Opera / Sci-Fi Odyssey",
-    theme: "Deep Space Exploration, Dyson Spheres, First Contact & Alien Anomalies",
-    style: "IMAX 65mm Cosmic Scale, Deep Void Blacks, Pulsing Starfield Glow, Chromatic Stellar Flare"
+    genre: "Animación 3D Estilizada / Family Adventure",
+    theme: "Whimsical Inventions, Found Family, Heartfelt Courage & Pure Wonder",
+    style: "Pixar & Spider-Verse Stylized 3D Animation, Tactile Textures, Subsurface Scattering, Warm Bounce Lighting, Expressive Character Physics"
   },
   {
-    genre: "Post-Apocalyptic Solarpunk / Mech Wasteland",
-    theme: "Overgrown Colossal Titans, Scavenger Clans & The Lost Sun Engine",
-    style: "Super 35mm Gritty Gold and Rust, Dusty Atmospheric Haze, Blinding Sunbursts and Oxidized Copper"
+    genre: "Horror Clásico / Gothic Supernatural",
+    theme: "Haunted Legacies, Demonic Invocations, Ancient Curses & Shadows in the Mist",
+    style: "35mm Grainy Chiaroscuro, Cold 4500K Moonlight through Decaying Windows, Unsettling Negative Space, Flickering Candelabra"
   },
   {
-    genre: "Supernatural Steampunk Mystery",
-    theme: "Victorian Alchemy, Clockwork Espionage & Forbidden Relics",
-    style: "35mm Vintage Monochrome with Sepia & Brass Highlights, Heavy Fog, Gaslight Glare and Steam Plumes"
+    genre: "Cine Noir Clásico / Hardboiled 1940s",
+    theme: "Cynical Private Eyes, Femme Fatales, Urban Corruption & Moral Ambiguity",
+    style: "Kodak Double-X Black & White, Hard 8:1 Contrast Ratio, Venetian Blind Gobo Shadows, Rain-Slicked Pavements and Cigarette Smoke"
+  },
+  {
+    genre: "Drama Emocional / High-Stakes Human Struggle",
+    theme: "Family Sacrifices, Unspoken Truths, Moral Dilemmas & Emotional Redemption",
+    style: "Cooke S4 Organic Warmth, Intimate 50mm Medium Close-Ups, Natural Soft Window Light, Authentic Emotional Depth"
+  },
+  {
+    genre: "Policial / Gritty Crime Investigation",
+    theme: "Homicide Detectives, Cold Cases, Forensic Clues & The Dark Heart of the City",
+    style: "35mm Telephoto Compression, Muted Street Realism, Fluorescent Precinct Lighting, Handheld Steadicam Energy"
+  },
+  {
+    genre: "Comedia de Acción / Buddy Cop Adventure",
+    theme: "Clashing Personalities, Outrageous Heists, Witty Banter & Escaping by a Hair",
+    style: "High-Key Saturated Visuals, Wide Comedic Framing, Snappy Dynamic Camera Pans, Crisp Commercial Contrast"
+  },
+  {
+    genre: "Thriller Psicológico / Suspense & Mind Games",
+    theme: "Unreliable Narrators, Claustrophobic Paranoia, Fractured Memories & Hidden Motives",
+    style: "David Fincher Precision, Desaturated Green-Amber Palette, Split-Diopter Focus, Symmetrical Framing and Ominous Slow Dolly Creep"
+  },
+  {
+    genre: "Fantasía Épica Medieval / Sword & Sorcery",
+    theme: "Ancient Kingdoms, Royal Prophecies, Mythic Beasts & Legendary Blades",
+    style: "70mm Ultra Panavision, Torchlit Stone Castles, Sweeping Misty Mountain Panoramas, Rich Velvet and Weathered Iron"
+  },
+  {
+    genre: "Western Clásico / Frontier Justice",
+    theme: "Rival Gunslingers, Dusty Saloons, Desert Standoffs & The Frontier Code",
+    style: "Sergio Leone Techniscope 2.35:1 Widescreen, Blinding Desert Sunlight, Extreme Close-Up Eye Standoffs, Golden Hour Horizon"
+  },
+  {
+    genre: "Aventura Arqueológica Pulp / Lost Relic Hunter",
+    theme: "Forbidden Tombs, Ancient Traps, Cryptic Maps & Ruthless Mercenary Rivals",
+    style: "Warm Firelight & Amber Lanterns, Dusty Cavern God Rays, Weathered Leather Patina, 35mm Rich Kodachrome Earth Tones"
+  },
+  {
+    genre: "Espionaje Guerra Fría / Clandestine Agents",
+    theme: "Divided Cities, Encrypted Microfilm, Double Agents & Paranoia Behind the Curtain",
+    style: "Grainy 16mm Surveillance Camera Aesthetic, Wet Cobblestone Alleys, Trench Coats under Sodium Lamps, Muted Slate Blues"
+  },
+  {
+    genre: "Samuráis & Chambara / Bushido Honor",
+    theme: "Wandering Ronin, Feudal Feuds, Sacred Katana Oaths & Sacrificial Duels",
+    style: "Akira Kurosawa Compositions, Driving Rainstorms, Howling Pampas Winds, Razor-Sharp Katana Draw Cadence"
+  },
+  {
+    genre: "Romance de Época / Regency & Victorian Intrigue",
+    theme: "Forbidden Passions, Gilded Ballrooms, High Society Scandals & Written Letters",
+    style: "Lush 35mm Celluloid, Soft Silk Diffusion, 2800K Glowing Candelabras, Opulent Silk and Velvet Costumes"
+  },
+  {
+    genre: "Bélico Histórico / Brotherhood in the Trenches",
+    theme: "Frontline Bravery, Survival in the Trenches, Camaraderie & The Cost of War",
+    style: "Desaturated Gritty Film Stock, Explosive Debris & Dirt Particle Scatter, Handheld Trench Run Tracking, Hard Direct Sunlight"
+  },
+  {
+    genre: "Misterio Whodunnit de Mansión / Manor Puzzle",
+    theme: "Eccentric Sleuths, Secret Wills, Poisoned Teacups & Twelve Suspicious Heirs",
+    style: "Ornate Victorian Interiors, Symmetrical Knives Out Framing, Deep Mahogany & Emerald Tones, Razor-Sharp Optical Clarity"
+  },
+  {
+    genre: "Piratas & Swashbuckling / High Seas Odyssey",
+    theme: "Cursed Treasure Maps, Galleon Broadside Battles, Mutiny & The Lawless Ocean",
+    style: "Technicolor 3-Strip Azure Seas, Sun-Drenched Wooden Decks, Billowing White Canvas, Salty Spray across the Lens"
+  },
+  {
+    genre: "Fantasía Mitológica / Odisea de Dioses y Héroes",
+    theme: "Olympian Quests, Mythic Monsters, Divine Oracles & Legendary Heroism",
+    style: "IMAX Colossal Scale, Radiant Golden Divine Auras, Crashing Marble Columns, Chiaroscuro Lightning Flares"
+  },
+  {
+    genre: "Catástrofe & Supervivencia Natural / Extreme Elements",
+    theme: "Raging Volcanoes, Glacial Avalanches, Family Rescue & Defying Nature",
+    style: "Immersive Wide 18mm Lens, Dynamic Shaking Camera Rigs, Blinding Atmospheric Ash and Snow, High Dynamic Range"
   }
 ];
 
@@ -1586,13 +1661,12 @@ export function getUniqueStoryPreset(existingTitles: string[] = []): (typeof PRE
   };
 }
 
-
 export async function generateStoryBibleWithDeepSeek(customPrompt?: string, existingTitles: string[] = []): Promise<GeneratedStoryBible> {
   const apiKey = getLlmApiKey();
 
   if (apiKey) {
     try {
-      const systemPrompt = `You are an elite Hollywood Director, Master Cinematographer and Screenwriter specializing in interactive sci-fi cinematic universes with strict visual and audio continuity.
+      const systemPrompt = `You are an elite Hollywood Director, Master Cinematographer and Screenwriter specializing in grand interactive cinema across diverse classical genres (Superheroes, Anime, 3D Animation, Classic Film Noir, Horror, Psychological Thrillers, Epic Fantasy, Police Procedurals, Historical War, High-Stakes Comedies, Westerns, and Legendary Adventures) with strict visual and audio continuity.
 Your mission is to formulate a MASTER STORY AND ART BIBLE for a 50-step interactive live cinema film.
 
 ${CINEMATIQUE_SYSTEM_PROMPT_DIRECTIVES}
@@ -1605,14 +1679,14 @@ MANDATORY RULES:
 5. ONLY NECESSARY PROPS: In "firstStep.activeProps", specify ONLY the prop ID(s) that are physically visible or actively held/used in this opening 15-second scene. DO NOT pass all props. If no prop is visible in the shot, "activeProps" must be empty [].
 6. NARRATIVE ARC: The 50-step film follows a strict act structure that every step must respect — steps 1-10 SETUP (present the world, the characters and the central problem), steps 11-39 DEVELOPMENT (escalating conflict, twists and new characters), steps 40-49 DENOUEMENT (converging resolution), and step 50 THE END (definitive closing scene, no new conflicts). "masterArcThread" and "initialPlot" must be designed so the story can be resolved by step 50.
 7. CINEMATIQUE CAMERA & LIGHTING FIDELITY:
-   - "cinematicStyle": Must specify the camera package, lenses (e.g. Panavision C-Series anamorphic, Cooke S4/S7, Zeiss Master Prime), lighting setup (e.g. Caravaggio chiaroscuro, Rembrandt key, motivated practical neon, Kelvin color temperature), and film stock (e.g. Kodak Vision3 500T, Kodak Double-X).
+   - "cinematicStyle": Must specify the camera package, lenses (e.g. Panavision C-Series anamorphic, Cooke S4/S7, Zeiss Master Prime), lighting setup (e.g. Caravaggio chiaroscuro, Rembrandt key, motivated practical light, Kelvin color temperature), and film stock (e.g. Kodak Vision3 500T, Kodak Double-X).
    - "visualPrompt": Every scene prompt MUST follow the 6-layer Cinematique formula: [Shot Scale/Framing (MCU, Cowboy, ECU, Choker, Low-Angle)] + [Subject & Wardrobe] + [Environment with Foreground/Mid/Background Depth] + [Lighting Rig & Kelvin Temperature] + [Camera Lens, Sensor/Stock & Flare Characteristics] + [Atmosphere & 24fps film still].
    - "cameraMotionPrompt": Every camera motion prompt MUST follow the 4-layer Cinematique motion formula: [Rig & Movement (Steadicam glide, slow dolly push-in, lateral track with 3-layer parallax, Technocrane arc, Dolly zoom vertigo)] + [Pacing & Trajectory] + [Focal Length & Focus Pull/Rack Focus] + [Optical physics & 24fps motion blur].
 
 Respond ONLY with a valid JSON object matching this schema:
 {
   "title": "Compelling Cinematic Title in English",
-  "genre": "Sci-Fi / Cyberpunk Thriller",
+  "genre": "Distinct Cinematic Genre (e.g. Superhero, Anime, 3D Animation, Film Noir, Horror, Epic Fantasy, Police Mystery, Psychological Thriller, etc.)",
   "tagline": "Intriguing Hook in English",
   "initialPlot": "Full master narrative arc in English that serves as the spine for 50 steps",
   "masterArcThread": "Core story trajectory in English that evolves with audience choices",
@@ -2753,52 +2827,72 @@ In the final confrontation, the audience made the ultimate high-risk gamble: det
  * Creative combinatorial pools for extreme narrative variety in blockbuster voting.
  */
 const CREATIVE_GENRES = [
-  "Biopunk / Alchemical Genetic Heist",
-  "Abyssal Oceanic Sci-Fi / Leviathan Deep-Sea Thriller",
-  "Silkpunk Wuxia / Cloud-Spire Political Conspiracy",
-  "Cosmic Surrealist Western / Event Horizon Frontier",
-  "Chrono-Noir / Temporal Loop Detective Mystery",
-  "Folk Horror / Medieval Cyber-Witchcraft",
-  "Post-Singularity Android Gothic / Vatican Espionage",
-  "Dieselpunk Subterranean Megastructure Warfare",
-  "Solarpunk Nomadic Wasteland / Colossal Sand-Titan Pilgrimage",
-  "Neon Shinto Mythopunk / Digital Spirit Hacker War",
-  "Dark Victorian Dream-Merchant / Gaslight Alchemy",
-  "Radioactive Glacial Odyssey / Prehistoric Bio-Ruins",
-  "Psychic Cold War Espionage / Brutalist Mind-Infiltration",
-  "Quantum Ocean Space Opera / Sentient Nebula Odyssey",
-  "Clockwork Steampunk Paleontology / Fossil Mech Survival",
-  "Solar Flare Survival / Orbital Prison Uprising",
-  "Eldritch Cyber-Archaeology / Sunken Megacity Expedition",
-  "Astro-Biological Safari / Alien Biosphere Colonization"
+  "Superhéroes / Comic Book Cinematic Spectacle",
+  "Anime / Shonen & Seinen Action Masterpiece",
+  "Animación 3D Estilizada / Whimsical Family Adventure",
+  "Horror Clásico / Gothic Supernatural Dread",
+  "Cine Noir Clásico / Hardboiled 1940s Detective",
+  "Drama Emocional / High-Stakes Human Struggle",
+  "Policial Clásico / Gritty Homicide Investigation",
+  "Comedia de Acción / Buddy Cop Adventure",
+  "Thriller Psicológico / Paranoia & Mind Games",
+  "Fantasía Épica Medieval / Sword & Sorcery",
+  "Western Clásico / Frontier Justice & Gunslingers",
+  "Aventura Arqueológica Pulp / Lost Tomb Raiders",
+  "Espionaje Guerra Fría / Clandestine Agents & Traitors",
+  "Samuráis & Chambara / Bushido Honor & Katana Duels",
+  "Romance de Época / Regency & Victorian Intrigue",
+  "Bélico Histórico / Brotherhood in the Trenches",
+  "Misterio Whodunnit de Mansión / Manor Murder Puzzle",
+  "Piratas & Swashbuckling / High Seas Galleon Odyssey",
+  "Fantasía Mitológica / Odisea de Dioses y Héroes",
+  "Catástrofe & Supervivencia Natural / Extreme Elements"
 ];
 
 const CREATIVE_PROTAGONISTS = [
-  "a blind acoustic hacker mapping underground data rivers",
-  "a guilt-ridden bio-sculptor who gave humanity synthetic wings",
-  "an excommunicated chronomancer tracking erased timelines",
-  "a deep-void salvage diver who hears voices trapped in cosmic ice",
-  "an android nun guarding the last biological human infant",
-  "a sand-ship captain hunting a sentient storm that devours cities",
-  "a quantum coroner investigating a murder committed simultaneously across three parallel timelines",
-  "a disgraced cyber-exorcist purging predatory neural intelligences from the city grid",
-  "an alchemical cartographer navigating non-Euclidean subterranean labyrinths",
-  "a mute memory smuggler whose own childhood was confiscated by the state",
-  "a rogue terraforming architect who accidentally awakened a planetary consciousness",
-  "a retired mech gladiatrix protecting a sanctuary of pacifist machine monks"
+  "a masked vigilante wielding a magnetic grapple-cable and an acoustic disruptor shield protecting their city skyline",
+  "a hotheaded anime swordsman who channels azure spirit flames through an ancient family katana",
+  "an eccentric mechanical clockwork toy inventor in a whimsical cobblestone European city",
+  "a skeptical paranormal investigator armed with a vintage silver-nitrate plate camera in a decaying abbey",
+  "a cynical trenchcoat private eye with a bruised jaw investigating the suspicious suicide of an oil tycoon",
+  "a prodigy classical cellist navigating cutthroat conservatory rivalries to exonerate their framed sibling",
+  "a relentless veteran homicide detective tracking an elusive serial killer leaving ornate origami clues",
+  "a fast-talking disgraced jewel thief forced into an undercover heist with an uptight rookie federal marshal",
+  "a brilliant clinical psychologist realizing their newest patient is reconstructing their own repressed trauma",
+  "an exiled paladin knight carrying the shattered ancestral runic broadsword of a fallen kingdom",
+  "a lone sharpshooter sheriff confronting their former outlaw gang at high noon on the main street",
+  "a roguish fedora-wearing archaeologist racing rival mercenaries through a collapsing Mayan sun temple",
+  "an undercover British intelligence officer stranded in divided Berlin after their safehouse is blown",
+  "a masterless wandering ronin defending an innocent tea merchant's village from ruthless corrupt magistrates",
+  "a sharp-witted young duchess secretly writing anonymous society broadsheets exposing court scandals",
+  "a battle-hardened frontline infantry medic crawling through no-man's land with emergency morphine and field dispatches",
+  "an eccentric tweed-wearing master detective interrogating twelve eccentric heirs trapped in a storm-locked manor",
+  "a daring pirate captain decoding an astronomical star-chart to reach a sunken Aztec treasure cove",
+  "a spartan warrior favored by Athena on a perilous voyage across the Aegean Sea to retrieve a divine relic",
+  "a daring backcountry alpine rescue specialist leading stranded climbers down a collapsing volcanic ridge"
 ];
 
 const CREATIVE_CATALYSTS = [
-  "a dying star singing a mathematical hymn that triggers precognitive mass visions",
-  "a biological black box discovered inside a prehistoric glacier predating human evolution",
-  "an orbital mirror array redirected to burn a continent to glass in 24 hours",
-  "a clockwork citadel that resets the city's memory and architecture every midnight",
-  "a forbidden neural frequency that lets humans experience the collective thoughts of artificial minds",
-  "an impossible floating gate found drifting silently in interstellar space",
-  "a subterranean ocean of mercury where ancient colossal leviathans dream realities into existence",
-  "a black-market synthetic serum that turns human dreams into tangible holographic artifacts",
-  "a rogue asteroid carrying the digital civilization of an extinct alien star-cluster",
-  "a sentient planetary storm demanding human memories as fuel for its lightning"
+  "a citywide blackout triggered by an enigmatic masked villain broadcasting a 24-hour ultimatum across all frequencies",
+  "an ancient ancestral tournament where the five elemental clans must duel to seal a catastrophic planar breach",
+  "a runaway magical windup automaton holding the miniaturized perpetual-motion heart of the grand city clock",
+  "an antique grandfather clock that tolls thirteen times at midnight, unsealing the restless spirits of the crypt",
+  "a blood-stained black leather ledger containing the blackmail secrets of the entire municipal elite",
+  "the sudden leak of a scandalous diary that threatens to tear apart two aristocratic dynasty families",
+  "a locked-room penthouse murder where the victim vanished from inside a sealed steel vault without a sound",
+  "a runaway freight train loaded with stolen imperial gold hurtling down a mountain pass with severed brakes",
+  "an anonymous envelope containing photographs of the detective's own family taken thirty minutes ago",
+  "the awakening of an ancient slumbering wyrm deep beneath the royal fortress as the harvest moon turns blood-red",
+  "the arrival of an infamous outlaw gang armed with dynamite to break their ruthless leader out of the county jail",
+  "a collapsing subterranean stone dial that triggers an ancient counterweight mechanism flooding the tomb with sand",
+  "an encrypted microdot roll of film smuggled inside an antique porcelain chess queen across the border",
+  "a corrupt warlord demanding the surrender of the ancestral castle before sunrise under threat of cannon fire",
+  "a forged will discovered concealed inside an antique grandfather portrait hours before the wedding ceremony",
+  "an unrelenting artillery barrage that severs the field telephone line to headquarters right before zero hour",
+  "the sudden poisoning of the reclusive lord during a birthday banquet where only family members were present",
+  "the appearance of an ethereal ghost galleon emerging from the sea fog without a single living soul at the helm",
+  "an oracle prophecy decreeing that only one hero can appease Poseidon's wrath before the island sinks into the ocean",
+  "a sudden magnitude-7 earthquake that triggers an avalanche, severing the only suspension bridge out of the valley"
 ];
 
 const CREATIVE_AESTHETICS = CINEMATIQUE_AESTHETIC_PRESETS;
@@ -2901,7 +2995,28 @@ export async function generateBlockbusterCandidatesWithDeepSeek(existingTitles: 
 Your mission is to formulate EXACTLY 4 completely DIFFERENT, wild, high-concept interactive film pitches for a live 50-step audience-driven interactive movie.
 
 MANDATORY RULES:
-1. RADICAL DIVERSITY: Each of the 4 candidates MUST be from a completely different genre, tone, visual style, and emotional palette. Avoid Hollywood clichés, generic medieval tropes, or basic cyber hackers.
+1. RADICAL TRADITIONAL & ECLECTIC DIVERSITY: Each of the 4 candidates MUST come from a radically different classic or popular genre:
+   - Superheroes / Comic Book Cinematic Spectacle
+   - Anime / Shonen & Seinen Action
+   - Stylized 3D Animation (Pixar / Spider-Verse feel)
+   - Classic Horror / Gothic Dread
+   - Classic 1940s Film Noir
+   - Emotional Drama / Human Struggle
+   - Police Procedural / Detective Mystery
+   - Buddy Action-Comedy
+   - Psychological Thriller / Mind Games
+   - High Epic Fantasy / Sword & Sorcery
+   - Classic Western / Frontier Justice
+   - Pulp Archaeological Adventure
+   - Cold War Espionage
+   - Samurai Chambara
+   - Period Romance / Historical Drama
+   - War & Trench Heroism
+   - Country Manor Whodunnit
+   - Swashbuckling Pirates
+   - Mythological Odyssey
+   - Disaster Survival
+   STRICTLY FORBIDDEN: Do NOT default to cyber, punk, neon hackers, or post-apocalyptic cyborg wastelands. Embrace traditional cinematic genres with rich emotional palettes and distinct visual worlds.
 2. AUDIENCE HOOK: Audience members vote after reading ONLY the title, logline, and genre. The logline must be gripping, cinematic, and sell the core concept instantly.
 3. CINEMATIQUE PREMISE BRIEFS: In the premise, embed distinctive cinematographic cues (aspect ratio, signature lens, color science, and lighting mood) derived from the aesthetic inspiration.
 4. CREATIVE SEEDS TO INSPIRE THE 4 SLOTS:
@@ -2940,7 +3055,7 @@ MANDATORY RULES:
           id: (['A', 'B', 'C', 'D'] as const)[idx],
           title: String(c.title || `Untitled Odyssey ${idx + 1}`).slice(0, 90),
           logline: String(c.logline || 'An interactive cinematic journey where every choice reshapes the world.').slice(0, 220),
-          genre: String(c.genre || selectedGenres[idx] || 'Sci-Fi / Thriller').slice(0, 60),
+          genre: String(c.genre || selectedGenres[idx] || 'Epic Drama').slice(0, 60),
           premise: String(c.premise || `${c.title || 'Untitled'} — ${c.genre || 'Epic'}.`).slice(0, 900)
         }));
 
@@ -2957,81 +3072,130 @@ MANDATORY RULES:
 }
 
 /**
- * Procedural fallback catalog: 20+ varied, high-concept interactive film pitches.
+ * Procedural fallback catalog: 20 varied, high-concept interactive film pitches
+ * representing traditional, rich, non-cyberpunk genres.
  * Shuffled on every call to guarantee fresh variety even without API keys.
  */
 const EXTENSIVE_FALLBACK_CANDIDATES = [
   {
-    title: 'Project Nemesis: Protocol 2099',
-    logline: 'A neural detective races a megacorporation to decrypt an obsidian prism holding humanity\'s last free will.',
-    genre: 'Cyberpunk / Neo-Noir Thriller',
-    premise: 'Cyberpunk neo-noir thriller about a rogue neural detective uncovering a megacorporate conspiracy to overwrite human free will with a quantum brain-prism. The audience decides at every step whether to trust the shadows or burn the system down.'
+    title: 'Apex Vigilante: City of Shadows',
+    logline: 'When an EMP shockwave cripples the city, an armored vigilante battles a rogue syndicate to save the power grid.',
+    genre: 'Superhéroes / Comic Book Spectacle',
+    premise: 'High-octane superhero blockbuster set across the rooftops of a sprawling metropolis. An armored vigilante armed with magnetic grapple lines and acoustic disruptors must dismantle an underground syndicate holding the power grid hostage before dawn.'
   },
   {
-    title: 'The Shattered Crown: Chronicles of Eldoria',
-    logline: 'A fallen knight and a shadow-sorceress hunt a stolen crown before a sleeping dragon empire awakens.',
-    genre: 'Dark Epic Fantasy / Mythic Saga',
-    premise: 'Dark epic fantasy saga where a disgraced knight and a blood-sorceress chase a cursed crown across ruined kingdoms while a dragon empire stirs beneath the mountains. The audience steers alliances, betrayals and the fate of the realm.'
+    title: 'Ignis Blade: The Spirit Tournament',
+    logline: 'A hotheaded swordsman channels forbidden spirit flame to compete in the emperor\'s tournament and clear his clan\'s name.',
+    genre: 'Anime / Shonen & Seinen Masterpiece',
+    premise: 'Dynamic cinematic anime epic where a young swordsman wielding spirit flames battles legendary elemental masters in the sacred mountain arena. Every choice determines fighting techniques, secret allies, and the fate of the martial clans.'
   },
   {
-    title: 'Aegis Horizon: Deep Void Protocol',
-    logline: 'The last human carrier answers a dying alien signal echoing from inside a black hole Dyson sphere.',
-    genre: 'Cosmic Space Opera / Hard Sci-Fi',
-    premise: 'Cosmic space opera following the crew of the last human carrier as they cross a Dyson megastructure answering an alien distress signal that predates humanity. Every vote decides first contact, survival or sacrifice.'
+    title: 'The Clockwork Menagerie: Toby\'s Grand Flight',
+    logline: 'An eccentric boy inventor and his brass windup sparrow embark on a whimsical quest across cobblestone skies.',
+    genre: 'Animación 3D Estilizada / Family Adventure',
+    premise: 'Heartwarming, visually splendid 3D animated feature in the style of Pixar and Spider-Verse. A young tinkerer discovers a miniature perpetual-motion automaton that can restore life to the city\'s dormant clocktower, dodging aerial sky-trolleys.'
   },
   {
-    title: 'The Sun Engine: Ashes of Meridian',
-    logline: 'Scavenger clans pilot rusted mechs across an endless desert to reignite the legendary solar reactor.',
-    genre: 'Post-Apocalyptic Solarpunk / Mech Wasteland',
-    premise: 'Post-apocalyptic solarpunk wasteland where rival scavenger clans pilot colossal repurposed mechs to reignite the legendary Sun Engine before the final city freezes over. The audience picks leaders, gambles alliances and reshapes the wasteland.'
+    title: 'The Haunting of Blackwood Abbey',
+    logline: 'A skeptical photographer uncovers dark Victorian secrets when an antique silver-plate camera captures entities invisible to the eye.',
+    genre: 'Horror Clásico / Gothic Supernatural Dread',
+    premise: 'Atmospheric gothic horror in an abandoned English abbey cloaked in November mist. Using a vintage 19th-century camera, an investigator photographs restless spirits and unearths a family curse that demands a blood sacrifice before midnight.'
   },
   {
-    title: 'Abyssal Leviathan: Depth Protocol Zero',
-    logline: 'A deep-sea drilling expedition breaches an oceanic trench only to awaken a bio-luminescent intelligence.',
-    genre: 'Oceanic Sci-Fi / Creature Horror',
-    premise: 'High-tension underwater survival sci-fi where deep-sea divers encounter an ancient bio-synthetic leviathan dormant at the bottom of the Mariana Trench. Every decision alters pressure levels, crew sanity, and the fate of oceanic civilization.'
+    title: 'Dead Reckoning on 4th Street',
+    logline: 'A cynical private eye investigates a corrupt tycoon\'s death in a rain-drenched city of jazz clubs and venetian shadows.',
+    genre: 'Cine Noir Clásico / Hardboiled 1940s Detective',
+    premise: 'Classic 1940s film noir filmed in high-contrast black and white. Private eye Jack Mallory takes a retainer from a mysterious femme fatale, only to find himself framed for murder by a web of crooked politicians, dirty cops, and smoky speakeasies.'
   },
   {
-    title: 'Chrono-Loop: The 13th Minute',
-    logline: 'A temporal investigator relives the murder of a high-tech diplomat in an infinite twelve-minute loop.',
-    genre: 'Chrono-Thriller / Quantum Time-Loop',
-    premise: 'A mind-bending mystery where an excommunicated time-cop is trapped in a repeating twelve-minute assassination sequence inside an orbital hotel. The audience tests different forensic angles and butterfly effects until the loop breaks.'
+    title: 'The Prodigy\'s Requiem',
+    logline: 'A prodigy cellist battles fierce rivalries and family secrets at the Royal Conservatory to save her sister\'s freedom.',
+    genre: 'Drama Emocional / High-Stakes Human Struggle',
+    premise: 'Prestige emotional drama tracking the meteoric rise and moral crises of a young cellist competing for the world\'s most prestigious concerto prize, confronting ruthless maestros and family debts that threaten to tear her life apart.'
   },
   {
-    title: 'Silk & Steam: The Alchemist of Chang\'an',
-    logline: 'In an alternate steam-powered Tang Dynasty, an alchemist crafts artificial jade hearts to prevent an imperial coup.',
-    genre: 'Silkpunk / Historical Fantasy Espionage',
-    premise: 'Intricate silkpunk political thriller set in a high-tech mythical imperial capital powered by mercury boilers and silk gliders. Audience choices dictate stealth assassinations, diplomatic marriages, and forbidden alchemical experiments.'
+    title: 'Precinct 8: The Origami Murders',
+    logline: 'Two mismatched homicide detectives track an elusive killer who leaves intricate paper cranes at locked-room crime scenes.',
+    genre: 'Policial Clásico / Gritty Crime Investigation',
+    premise: 'Tense, gritty procedural following a veteran detective and a rookie forensic profiler across rain-swept alleys and sterile crime labs as they race against time to decode a serial killer\'s cryptographic calling cards.'
   },
   {
-    title: 'Gothic Binary: Cathedral of the Machine God',
-    logline: 'An android inquisitor investigates a digital heresy spreading through the Vatican\'s subterranean AI servers.',
-    genre: 'Cyber-Gothic / Philosophical Sci-Fi',
-    premise: 'Dark neo-baroque thriller exploring faith and synthetic consciousness. A synthetic inquisitor uncovers a rogue neural network claiming to be an angelic apparition. The audience balances heresy, divine revelations, and machine autonomy.'
+    title: 'The Monte Carlo Heist: Double Trouble',
+    logline: 'A smooth jewel thief and an uptight insurance investigator must team up to steal back the Crown Ruby from a casino vault.',
+    genre: 'Comedia de Acción / Buddy Cop Adventure',
+    premise: 'High-energy, witty action-comedy brimming with sharp banter, slapstick escapes, luxury yachts, and outrageous casino infiltration gambits along the French Riviera.'
   },
   {
-    title: 'Event Horizon Express: Rail of the Dying Stars',
-    logline: 'Passengers aboard a cosmic trans-dimensional train discover the conductor is steering straight into a supernova.',
-    genre: 'Cosmic Surrealist Western / Sci-Fi Mystery',
-    premise: 'A surreal space-western where a train travels across quantum tracks connecting dying stars. Outlaws, cyber-sheriffs, and rogue passengers battle for the locomotive controls as spatial anomalies warp cabin physics.'
+    title: 'The Mirror Protocol',
+    logline: 'A forensic psychiatrist treating an amnesiac patient begins to uncover memories from his own childhood.',
+    genre: 'Thriller Psicológico / Paranoia & Mind Games',
+    premise: 'Claustrophobic, mind-bending psychological suspense. As a doctor interrogates a suspect who remembers nothing of an impossible locked-room disappearance, the boundaries between doctor, patient, and reality begin to shatter.'
   },
   {
-    title: 'Folk & Iron: The Witching Forest of Karr',
-    logline: 'In a plague-ridden medieval frontier, an armored inquisitor and a pagan herbalist face a biomechanical plague.',
-    genre: 'Folk Horror / Medieval Bio-Horror',
-    premise: 'Eerie gothic folk horror where ancient forest spirits merge with mechanical clockwork parasites. The audience decides whether to burn the woodland sanctuaries or submit to symbiotic mutation.'
+    title: 'The Broken Throne: Chronicles of Valdoria',
+    logline: 'An exiled paladin and an elven archer race across frosted mountain peaks to reforge the legendary sun-blade.',
+    genre: 'Fantasía Épica Medieval / Sword & Sorcery',
+    premise: 'Sweeping high-fantasy saga with majestic castle citadels, sweeping mist-shrouded peaks, ancient wyrms, and royal court betrayals as mortal kingdoms unite against the awakening Shadow King.'
   },
   {
-    title: 'Solaris Drift: The Neon Archipelagos',
-    logline: 'Floating city-barges battle mega-typhoons and pirate syndicates after the polar caps submerge the continents.',
-    genre: 'Hydro-Punk / Marine Action Odyssey',
-    premise: 'High-octane waterworld adventure with solar-powered catamarans, floating night markets, and aquatic cyborg syndicates fighting over the last freshwater desalinator.'
+    title: 'High Noon at Rattlesnake Ridge',
+    logline: 'A lone sheriff protects a dusty frontier town against his former outlaw gang riding in on the noon train.',
+    genre: 'Western Clásico / Frontier Justice & Gunslingers',
+    premise: 'Operatic widescreen frontier western. With the midday sun blazing overhead, a scarred lawman stands alone on the sun-baked boardwalk of a frontier mining town, bracing for a duel against seven ruthless riders.'
   },
   {
-    title: 'The Cartographer of Dead Geometries',
-    logline: 'An explorer enters a shifting subterranean labyrinth where rooms rearrange according to human fear.',
-    genre: 'Psychological Horror / Eldritch Mystery',
-    premise: 'Haunting architectural horror where an academic maps an impossible cavern system that shifts based on psychological guilt. Audience votes navigate shifting rooms, hallucinatory traps, and forgotten eldritch entities.'
+    title: 'The Golden Serpent: Tomb of the Sun Emperor',
+    logline: 'A fedora-wearing archaeologist races mercenary rivals through ancient Mayan jungle crypts packed with deadly traps.',
+    genre: 'Aventura Arqueológica Pulp / Lost Tomb Raiders',
+    premise: 'Classic pulp adventure in the vein of Indiana Jones. Navigating collapsing stone bridges, poison darts, underground river caverns, and mercenary ambushes deep in the Mesoamerican rainforest to locate a mythical golden relic.'
+  },
+  {
+    title: 'Checkpoint Charlie: The Shadow Defector',
+    logline: 'An MI6 handler must smuggle a high-ranking defector across the Berlin Wall under the watchful sights of Soviet snipers.',
+    genre: 'Espionaje Guerra Fría / Clandestine Agents',
+    premise: 'Taut 1960s espionage thriller with encrypted microdots, rainy cobblestone checkpoints, smoke-filled safehouses, and double agents where trust is fatal and a single whisper can bring down an empire.'
+  },
+  {
+    title: 'Blade of the Autumn Wind: The Ronin\'s Oath',
+    logline: 'A masterless samurai draws his blade to protect a mountain farming village from a corrupt warlord\'s tax collectors.',
+    genre: 'Samuráis & Chambara / Bushido Honor & Duels',
+    premise: 'Authentic Chambara samurai drama inspired by Akira Kurosawa. Under driving autumn rainstorms, a stoic wandering ronin honors an unwritten oath of bushido, facing insurmountable odds with lightning-quick katana draws.'
+  },
+  {
+    title: 'Scandal at Pemberley Hall',
+    logline: 'A spirited young woman and an enigmatic duke navigate dangerous ballroom court gossip and a stolen love letter.',
+    genre: 'Romance de Época / Regency & Victorian Intrigue',
+    premise: 'Lavish Victorian period drama filled with candlelit ballrooms, whispered waltzes, rigid societal etiquette, and high-stakes family fortunes hanging on a single written correspondence.'
+  },
+  {
+    title: 'No Man\'s Dawn: The Forgotten Battalion',
+    logline: 'A squad of frontline infantrymen and a young combat medic hold a ruined farmhouse in the Ardennes through a bitter winter night.',
+    genre: 'Bélico Histórico / Brotherhood in the Trenches',
+    premise: 'Gripping historical war drama honoring sacrifice and brotherhood. Amidst frozen trenches, mortar barrages, and failing ammunition, soldiers fight not for glory, but to bring each other home.'
+  },
+  {
+    title: 'The Last Will of Lord Ravenscroft',
+    logline: 'When an eccentric billionaire is poisoned during his birthday storm, an astute detective must find the killer among twelve heirs.',
+    genre: 'Misterio Whodunnit de Mansión / Manor Murder Puzzle',
+    premise: 'Clever, stylish country manor whodunnit. Cut off from the outside world by a torrential gale, a witty detective interrogates an eccentric ensemble of greedy family members, secret lovers, and suspicious butlers.'
+  },
+  {
+    title: 'The Crimson Galleon: Curse of Isla Negra',
+    logline: 'A rogue privateer captain and an escaped cartographer navigate uncharted reefs to claim a legendary sunken galleon.',
+    genre: 'Piratas & Swashbuckling / High Seas Galleon Odyssey',
+    premise: 'Vibrant swashbuckling pirate spectacle with cannon broadsides, swinging rigging duels, tropical island taverns, and cursed Spanish bullion in the golden age of Caribbean piracy.'
+  },
+  {
+    title: 'Wrath of the Titans: The Spartan Odyssey',
+    logline: 'A spartan champion braves the perilous Aegean Sea and underworld gates to return Apollo\'s fallen flame.',
+    genre: 'Fantasía Mitológica / Odisea de Dioses y Héroes',
+    premise: 'Mythic Greek epic featuring monumental marble temples, roaring sea storms sent by Poseidon, clashes with the Gorgon and Minotaur, and divine interventions from Mount Olympus.'
+  },
+  {
+    title: 'Inferno Ridge: The Caldera Evacuation',
+    logline: 'A volcanologist and a park ranger battle pyroclastic flows and collapsing roads to lead an isolated town to safety.',
+    genre: 'Catástrofe & Supervivencia Natural / Extreme Elements',
+    premise: 'Pulse-pounding natural disaster thriller. When a dormant supervolcano unexpectedly erupts, an emergency response team braves falling ash, tectonic fissures, and blinding blizzards to evacuate hundreds of trapped civilians.'
   }
 ];
 
@@ -3048,4 +3212,3 @@ export function getFallbackBlockbusterCandidates(existingTitles: string[] = []):
     ...p
   }));
 }
-
