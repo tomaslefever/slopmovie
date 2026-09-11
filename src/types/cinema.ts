@@ -41,6 +41,12 @@ export interface DecisionOption {
   dramaticHook: string;
   expectedConsequence: string;
   votes: number;
+  visualPrompt?: string; // Pre-generated Cinematique 6-layer visual prompt ready for video model
+  cameraMotionPrompt?: string; // Pre-generated Cinematique 4-layer camera motion prompt
+  synopsis?: string; // Pre-generated synopsis if this option wins
+  dialogueSnippet?: string; // Pre-generated spoken dialogue if this option wins
+  subtitles?: SubtitleCue[]; // Pre-generated timed subtitles if this option wins
+  voiceDirection?: string; // Character voice and emotional cadence
 }
 
 export interface SubtitleCue {
