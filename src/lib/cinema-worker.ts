@@ -3,32 +3,50 @@ import { cinemaEngine } from './cinema-orchestrator';
 
 /**
  * Singleton Cinema Background Worker.
- * Enforces a SINGLE active worker across all processes via database leader election.
- * Only the worker holding the heartbeat lock in Supabase cinema_state executes transitions.
+ * Enforces a SINGLE, FIXED active worker that permanently drives the cinema timeline,
+ * regardless of how many movies start, finish, or rotate. Never re-creates per movie.
  */
 class CinemaWorker {
   private static instance: CinemaWorker;
   private isRunning: boolean = false;
-  private workerId: string = 'worker_' + Math.random().toString(36).substring(2, 9);
+  private workerId: string = 'worker_cinema_core';
   private interval: NodeJS.Timeout | null = null;
   private isLeader: boolean = false;
+  private isBusy: boolean = false;
 
   public static getInstance(): CinemaWorker {
+    if (typeof globalThis !== 'undefined' && (globalThis as any).__cinemaWorkerInstance) {
+      return (globalThis as any).__cinemaWorkerInstance;
+    }
     if (!CinemaWorker.instance) {
       CinemaWorker.instance = new CinemaWorker();
+    }
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).__cinemaWorkerInstance = CinemaWorker.instance;
     }
     return CinemaWorker.instance;
   }
 
-  private isBusy: boolean = false;
-
   public start() {
-    if (this.isRunning) return;
+    if (typeof globalThis !== 'undefined' && (globalThis as any).__cinemaWorkerStarted && this.isRunning) {
+      return;
+    }
+    if (this.isRunning && this.interval) {
+      return;
+    }
     this.isRunning = true;
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).__cinemaWorkerStarted = true;
+    }
 
-    console.log(`[CinemaWorker] Starting background worker (${this.workerId})...`);
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
 
-    // Run tick every 5000ms (reduced from 1000ms to conserve database/realtime egress)
+    console.log(`[CinemaWorker] 🚀 SINGLE FIXED WORKER (${this.workerId}) active. Managing all continuous movies.`);
+
+    // Run authoritative tick loop
     this.interval = setInterval(async () => {
       if (this.isBusy) return;
       this.isBusy = true;
@@ -45,7 +63,7 @@ class CinemaWorker {
         }
 
         if (!this.isLeader) {
-          console.log(`[CinemaWorker] ${this.workerId} ACQUIRED LEADER LOCK! Active worker running.`);
+          console.log(`[CinemaWorker] 👑 ${this.workerId} ACQUIRED LEADER LOCK! Fixed active worker running.`);
           this.isLeader = true;
           // Synchronize from database state before first tick
           await cinemaEngine.syncFromDatabase();
@@ -67,6 +85,9 @@ class CinemaWorker {
       this.interval = null;
     }
     this.isRunning = false;
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).__cinemaWorkerStarted = false;
+    }
     if (this.isLeader) {
       releaseWorkerLock(this.workerId).catch(() => {});
       this.isLeader = false;
