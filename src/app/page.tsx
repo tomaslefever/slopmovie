@@ -816,6 +816,7 @@ export default function CinemaStreamingPage() {
                   userVoted={userVoted}
                   selectedOption={cinemaState.activeStep.selectedOption}
                   wasRandomPick={cinemaState.activeStep.wasRandomPick}
+                  stepNumber={cinemaState.activeStep.stepNumber}
                   onVote={handleVote}
                 />
               )}

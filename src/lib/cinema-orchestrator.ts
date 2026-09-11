@@ -850,7 +850,15 @@ class CinemaOrchestrator {
         const duration = nextStepObj?.duration || 15;
 
         this.setPhase('PLAYING', duration);
-        this.addSystemMessage(`🎬 First-shot sequence continuing: Scene ${nextStepNum}/4 ("${nextStepObj?.title || 'Continuing'}")`);
+        if (nextStepNum === 2) {
+          this.addSystemMessage(`🎬 Scene 2/4: Establishing the protagonist & signature mission...`);
+        } else if (nextStepNum === 3) {
+          this.addSystemMessage(`🎬 Scene 3/4: A looming threat emerges... tensions rise!`);
+        } else if (nextStepNum === 4) {
+          this.addSystemMessage(`⚠️ SCENE 4/4: THE FIRST CONFLICT! The crisis explodes — the audience will decide the resolution!`);
+        } else {
+          this.addSystemMessage(`🎬 First-shot sequence continuing: Scene ${nextStepNum}/4 ("${nextStepObj?.title || 'Continuing'}")`);
+        }
 
         // Broadcast new_step so EVERY client (including late joiners) switches to the
         // next prologue scene authoritatively — 4 x 15s = 1 minute uninterrupted.
@@ -882,7 +890,11 @@ class CinemaOrchestrator {
       this.votesA = 0;
       this.votesB = 0;
       this.userVotes.clear();
-      this.addSystemMessage(`⏳ TIME TO VOTE! You have 10 seconds to choose the next scene branch.`);
+      if (currentStepNum === 4) {
+        this.addSystemMessage(`⚔️ FIRST AUDIENCE DECISION: The first conflict has arrived! Cast your vote now to decide the story's direction!`);
+      } else {
+        this.addSystemMessage(`⏳ TIME TO VOTE! You have 10 seconds to choose the next scene branch.`);
+      }
 
       broadcastCinemaEvent('phase_change', {
         phase: 'VOTING',

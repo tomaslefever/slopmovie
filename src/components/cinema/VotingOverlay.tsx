@@ -17,6 +17,7 @@ interface VotingOverlayProps {
   userVoted: 'A' | 'B' | null;
   selectedOption?: 'A' | 'B' | null;
   wasRandomPick?: boolean;
+  stepNumber?: number;
   onVote: (optionId: 'A' | 'B') => void;
   onVotingEnded?: () => void;
 }
@@ -31,6 +32,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   userVoted,
   selectedOption,
   wasRandomPick = false,
+  stepNumber,
   onVote
 }) => {
   // Exact 10s countdown from client timeRemaining prop (guaranteed 0 during GENERATING)
@@ -204,6 +206,13 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   </div>
                 </div>
 
+                {stepNumber === 4 && (
+                  <div className="mb-2 px-3 py-1 rounded-full bg-gradient-to-r from-red-600/30 via-amber-500/20 to-red-600/30 border border-red-500/50 text-[10px] md:text-xs font-mono font-bold text-red-300 uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] animate-pulse">
+                    <Flame className="w-3.5 h-3.5 text-red-400" />
+                    <span>Primer Conflicto • Decisión de la Audiencia</span>
+                  </div>
+                )}
+
                 <div className="flex items-center space-x-2">
                   <Timer className="w-3.5 h-3.5 md:w-4 md:h-4 text-cyan-400" />
                   <h2 className="text-lg md:text-2xl font-black uppercase tracking-widest text-white">
@@ -211,7 +220,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                       ? "Voting Concluded • Results Revealed"
                       : (isTimeExpired
                           ? "Time Elapsed • Tallying Votes..."
-                          : "Audience Vote"
+                          : (stepNumber === 4 ? "First Major Conflict: You Decide!" : "Audience Vote")
                         )
                     }
                   </h2>
@@ -222,7 +231,10 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                     ? "Audience decision verified · Transitioning to selected narrative branch..."
                     : (isTimeExpired
                         ? "Closing ballots. Calculating narrative choice with Realtime consensus..."
-                        : <>Choose the next story continuation. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote instantly.</>
+                        : (stepNumber === 4
+                            ? <>The first major crisis has erupted! Choose how our protagonist resolves this conflict. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to decide.</>
+                            : <>Choose the next story continuation. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote instantly.</>
+                          )
                       )
                   }
                 </p>

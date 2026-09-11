@@ -1847,12 +1847,12 @@ export function buildProceduralStoryBible(candidate: {
   const initialSteps: MovieStep[] = [
     {
       stepNumber: 1,
-      title: "Act I: The Inciting Threshold",
-      synopsis: `Minute 1 First-Shot (Part 1/4): ${initialPlot.slice(0, 160)}`,
-      dialogueSnippet: `${charName}: 'The oath is sworn. The path ahead admits no hesitation.'`,
+      title: "Act I: Establishing the World & Atmosphere",
+      synopsis: `Minute 1 First-Shot (Part 1/4): Establishing the cinematic universe and atmospheric visual tone. ${initialPlot.slice(0, 160)}`,
+      dialogueSnippet: `${charName}: 'The world stirs. From the silence of ${envName}, our journey begins.'`,
       subtitles: [
-        { start: 1.0, end: 7.0, speaker: charName, text: "The oath is sworn. The path ahead admits no hesitation.", textEs: "El juramento está hecho. El camino no admite vacilación." },
-        { start: 8.0, end: 14.0, speaker: charName, text: "They are approaching from the ridge. Ten seconds to prepare.", textEs: "Se aproximan desde la cresta. Diez segundos para prepararse." }
+        { start: 1.0, end: 7.0, speaker: charName, text: "The world stirs. From this threshold, our journey begins.", textEs: "El mundo despierta. Desde este umbral, comienza nuestro viaje." },
+        { start: 8.0, end: 14.0, speaker: charName, text: "Observe the horizon. Every shadow carries an ancient warning.", textEs: "Observen el horizonte. Cada sombra guarda una advertencia antigua." }
       ],
       voiceDirection: firstChar.voicePrompt,
       visualPrompt: `Establishing Low-Angle Hero Shot of ${charName} (${firstChar.visualTraits}, ${firstChar.clothing}) holding ${propName} (${firstProp.visualAppearance}) in ${envName}. Deep spatial perspective, ${firstEnv.lighting}. Shot on Panavision C-series 35mm anamorphic glass, oval bokeh, horizontal streak flare, atmospheric mist, Kodak Vision3 500T grain, 480p 16:9 film still`,
@@ -1869,16 +1869,16 @@ export function buildProceduralStoryBible(candidate: {
     },
     {
       stepNumber: 2,
-      title: "Act I: Rising Vanguard",
-      synopsis: `Minute 1 First-Shot (Part 2/4): Hostile scouts emerge across the mist. ${charName} advances with calculated precision.`,
-      dialogueSnippet: `${charName}: 'Stand your ground.'`,
+      title: "Act I: The Protagonist & The Mission",
+      synopsis: `Minute 1 First-Shot (Part 2/4): Establishing the protagonist ${charName} and their signature ${propName}. The mission stakes and personal purpose are revealed.`,
+      dialogueSnippet: `${charName}: 'I am ${charName}. With this ${propName}, my mission admits no failure.'`,
       subtitles: [
-        { start: 1.0, end: 7.0, speaker: charName, text: "Stand your ground. Steel tests steel today.", textEs: "Mantengan su posición. El acero probará al acero hoy." },
-        { start: 8.0, end: 14.0, speaker: charName, text: "The vanguard has arrived.", textEs: "La vanguardia ha llegado." }
+        { start: 1.0, end: 7.0, speaker: charName, text: `I am ${charName}. Bound to this ${propName}, the mission is my only truth.`, textEs: `Soy ${charName}. Ligado a esta ${propName}, la misión es mi única verdad.` },
+        { start: 8.0, end: 14.0, speaker: charName, text: "The path is set. We advance into the unknown.", textEs: "El camino está trazado. Avanzamos hacia lo desconocido." }
       ],
       voiceDirection: firstChar.voicePrompt,
       visualPrompt: `Cowboy Shot of ${charName} (${firstChar.visualTraits}) in coiled tactical posture navigating ${envName}. Mid-thigh framing with ${propName} secured, cross-lighting with 3000K amber key and 6500K cool rim. Cooke S4 prime lens warmth, wet rain reflections, 480p 16:9 film still`,
-      cameraMotionPrompt: "Smooth lateral dolly tracking shot on rails parallel to subject, three-layer parallax with blurred foreground bamboo and distant receding mountains, 24fps motion blur",
+      cameraMotionPrompt: "Smooth lateral dolly tracking shot on rails parallel to subject, three-layer parallax with blurred foreground terrain and distant receding horizon, 24fps motion blur",
       videoUrl: defaultVideo,
       duration: 15,
       votingWindowSeconds: 0,
@@ -1891,16 +1891,16 @@ export function buildProceduralStoryBible(candidate: {
     },
     {
       stepNumber: 3,
-      title: "Act I: The Crucible Closes",
-      synopsis: `Minute 1 First-Shot (Part 3/4): Shadows surround the perimeter. A decisive duel is imminent.`,
-      dialogueSnippet: `${charName}: 'Every step brings us closer to the breaking point.'`,
+      title: "Act I: The Looming Threat & Gathering Shadows",
+      synopsis: `Minute 1 First-Shot (Part 3/4): The baseline status quo fractures. Hostile signatures breach the outer perimeter as an encroaching threat surrounds ${charName}.`,
+      dialogueSnippet: `${charName}: 'Perimeter breach detected! The threat is closing in faster than anticipated.'`,
       subtitles: [
-        { start: 1.0, end: 7.0, speaker: charName, text: "Every step brings us closer to the breaking point.", textEs: "Cada paso nos acerca al punto de quiebre." },
-        { start: 8.0, end: 14.0, speaker: charName, text: "Steel yourself. The first choice decides all.", textEs: "Prepárense. La primera decisión lo define todo." }
+        { start: 1.0, end: 7.0, speaker: charName, text: "Perimeter breach detected! Hostile forces are closing in rapidly.", textEs: "¡Brecha en el perímetro detectada! Fuerzas hostiles se aproximan rápidamente." },
+        { start: 8.0, end: 14.0, speaker: charName, text: "Steel yourselves. The confrontation is upon us.", textEs: "Prepárense. La confrontación está sobre nosotros." }
       ],
       voiceDirection: firstChar.voicePrompt,
-      visualPrompt: `Over-the-Shoulder and Macro Insert Shot on ${propName} (${firstProp.visualAppearance}) as ${charName} readies it in ${envName}. Foreground shoulder silhouette softly out of focus, hard light slicing across the blade, 85mm prime at T2.0, creamy background separation, 480p 16:9 film still`,
-      cameraMotionPrompt: "Deliberate 2-second rack focus from foreground prop in razor sharpness to background character eyes, creamy circular bokeh, subtle focus breathing",
+      visualPrompt: `Over-the-Shoulder and Macro Insert Shot on ${propName} (${firstProp.visualAppearance}) as ${charName} readies it in ${envName}. Foreground shoulder silhouette softly out of focus, hard light slicing across the artifact, 85mm prime at T2.0, creamy background separation, 480p 16:9 film still`,
+      cameraMotionPrompt: "Deliberate 2-second rack focus from foreground prop in razor sharpness to background threat approaching, creamy circular bokeh, subtle focus breathing",
       videoUrl: defaultVideo,
       duration: 15,
       votingWindowSeconds: 0,
@@ -1913,12 +1913,12 @@ export function buildProceduralStoryBible(candidate: {
     },
     {
       stepNumber: 4,
-      title: "Act I: The First Standoff",
-      synopsis: `Minute 1 First-Shot (Part 4/4): Confronting the vanguard. The audience must choose the tactic.`,
-      dialogueSnippet: `${charName}: 'Which way do we strike?'`,
+      title: "Act I: The First Conflict — Audience Decision",
+      synopsis: `Minute 1 First-Shot (Part 4/4): THE FIRST MAJOR CONFLICT! Ambushed in a deadly crossfire, ${charName} urgently calls upon the audience to decide how to break through.`,
+      dialogueSnippet: `${charName}: 'We are pinned down in the crossfire! Frontal assault or tactical diversion? Spectators, you decide — choose our path!'`,
       subtitles: [
-        { start: 1.0, end: 7.0, speaker: charName, text: "Which way do we strike? You decide.", textEs: "¿Por dónde atacamos? Ustedes deciden." },
-        { start: 8.0, end: 14.0, speaker: charName, text: "Ten seconds to cast your vote.", textEs: "Diez segundos para emitir su voto." }
+        { start: 1.0, end: 7.0, speaker: charName, text: "We are surrounded in the crossfire! Direct strike or tactical diversion?", textEs: "¡Estamos rodeados en el fuego cruzado! ¿Ataque directo o maniobra evasiva?" },
+        { start: 8.0, end: 14.0, speaker: charName, text: "Spectators, the choice is yours — decide our fate right now!", textEs: "¡Espectadores, la decisión es de ustedes — elijan nuestro destino ahora mismo!" }
       ],
       voiceDirection: firstChar.voicePrompt,
       visualPrompt: `Choker Shot and Dutch Angle Close-Up of ${charName} (${firstChar.visualTraits}) at peak dramatic threshold in ${envName}. Forehead to chin tight framing, chiaroscuro lighting, eye catchlights, Panavision anamorphic optical character, immense stakes, 480p 16:9 film still`,
@@ -2010,6 +2010,11 @@ MANDATORY RULES:
    - "cinematicStyle": Must specify the camera package, lenses (e.g. Panavision C-Series anamorphic, Cooke S4/S7, Zeiss Master Prime), lighting setup (e.g. Caravaggio chiaroscuro, Rembrandt key, motivated practical light, Kelvin color temperature), and film stock (e.g. Kodak Vision3 500T, Kodak Double-X).
    - "visualPrompt": Every scene prompt MUST follow the 6-layer Cinematique formula: [Shot Scale/Framing (MCU, Cowboy, ECU, Choker, Low-Angle)] + [Subject & Wardrobe] + [Environment with Foreground/Mid/Background Depth] + [Lighting Rig & Kelvin Temperature] + [Camera Lens, Sensor/Stock & Flare Characteristics] + [Atmosphere & 24fps film still].
    - "cameraMotionPrompt": Every camera motion prompt MUST follow the 4-layer Cinematique motion formula: [Rig & Movement (Steadicam glide, slow dolly push-in, lateral track with 3-layer parallax, Technocrane arc, Dolly zoom vertigo)] + [Pacing & Trajectory] + [Focal Length & Focus Pull/Rack Focus] + [Optical physics & 24fps motion blur].
+8. FIRST-SHOT 4-CLIP PROGRESSION & CLIP 4 AUDIENCE INCITEMENT:
+   - Clip 1 (0-15s) [World & Tone]: Establish the cinematic universe, architectural environment, visual lighting, atmospheric mood, and initial status quo.
+   - Clip 2 (15-30s) [Protagonist & Mission]: Establish the protagonist, their identity, signature prop, mission objective, and personal stakes.
+   - Clip 3 (30-45s) [Looming Threat]: The baseline status quo fractures; a looming threat, perimeter breach, or hostile anomaly approaches.
+   - Clip 4 (45-60s) [The First Conflict & Audience Call to Decide]: THE FIRST MAJOR CONFLICT explodes with full force! Spoken dialogue and subtitles MUST actively and urgently incite the spectator/audience to decide how to resolve this crisis (e.g., "We're surrounded and taking heavy fire! Do we breach frontally or deploy the shadow protocol? Spectators, you decide — cast your vote now! / ¡Estamos rodeados! ¿Ataque frontal o maniobra evasiva? ¡Ustedes deciden!"). The 2 voting options (A and B) represent the two high-stakes solutions to this first conflict.
 
 Respond ONLY with a valid JSON object matching this schema:
 {
@@ -2058,12 +2063,12 @@ Respond ONLY with a valid JSON object matching this schema:
   "initialSteps": [
     {
       "stepNumber": 1,
-      "title": "Title of Scene 1 (0-15s): The Inciting Incident",
-      "synopsis": "High-impact visual opening introducing protagonist, world hook, and initial action in English",
-      "dialogueSnippet": "Spoken dialogue or voiceover in English",
+      "title": "Title of Scene 1 (0-15s): Establishing the World & Tone",
+      "synopsis": "High-impact visual opening establishing the film universe, setting the atmospheric tone and initial world status quo in English",
+      "dialogueSnippet": "Establishing monologue, radio transmission, or environmental voiceover in English",
       "subtitles": [
-        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
-        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
+        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line establishing the world...", "textEs": "Spanish translation..." },
+        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation setting the tone...", "textEs": "Spanish translation..." }
       ],
       "voiceDirection": "Acoustic direction in English based on character voicePrompt",
       "visualPrompt": "Cinematique 6-layer prompt: [Establishing / Low-Angle Shot] + [Protagonist & signature attire] + [Opening environment with deep spatial layers] + [Key lighting setup, practical sources & Kelvin temp] + [Camera package: 35mm Panavision anamorphic / Cooke S4, Kodak Vision3 500T] + [Atmospheric particles, mist, 24fps film still]",
@@ -2075,29 +2080,29 @@ Respond ONLY with a valid JSON object matching this schema:
     },
     {
       "stepNumber": 2,
-      "title": "Title of Scene 2 (15-30s): Rising Tension",
-      "synopsis": "Continuous action unfolding in seconds 15-30 as complications or hostile forces approach",
-      "dialogueSnippet": "Urgent dialogue or radio communication in English",
+      "title": "Title of Scene 2 (15-30s): Establishing the Protagonist & Mission",
+      "synopsis": "Continuous action in seconds 15-30 establishing the protagonist's identity, signature prop, mission objective, and personal stakes",
+      "dialogueSnippet": "Character declaration or mission briefing dialogue in English",
       "subtitles": [
-        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
-        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
+        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line defining identity and mission...", "textEs": "Spanish translation..." },
+        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English line establishing personal stakes...", "textEs": "Spanish translation..." }
       ],
       "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Cinematique 6-layer prompt: [Cowboy Shot or Dynamic Medium Shot] + [Character coiled readiness] + [Immediate architectural breach or hazard] + [Cross-lighting or Chiaroscuro high-contrast shadows] + [Panavision / Cooke lens character with streak flare] + [Volumetric steam and rich color grading]",
+      "visualPrompt": "Cinematique 6-layer prompt: [Cowboy Shot or Dynamic Medium Shot] + [Protagonist coiled readiness with signature prop visible] + [Immediate architectural setting] + [Cross-lighting or Chiaroscuro high-contrast shadows] + [Panavision / Cooke lens character with streak flare] + [Volumetric steam and rich color grading]",
       "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Lateral tracking shot on rails or fluid Steadicam] + [Parallel movement keeping pace with action] + [3-layer parallax foreground blur] + [24fps motion blur]",
       "activeCharacters": ["char_1"],
-      "activeProps": [],
+      "activeProps": ["prop_1"],
       "environment": "env_1",
       "options": []
     },
     {
       "stepNumber": 3,
-      "title": "Title of Scene 3 (30-45s): Point of Escalation",
-      "synopsis": "Continuous action in seconds 30-45 where the perimeter breaches or the mystery intensifies",
-      "dialogueSnippet": "Tense spoken dialogue in English",
+      "title": "Title of Scene 3 (30-45s): The Looming Threat & Gathering Shadows",
+      "synopsis": "Continuous action in seconds 30-45 where the baseline fractures as an encroaching hostile threat, anomaly, or perimeter breach draws dangerously near",
+      "dialogueSnippet": "Tense spoken dialogue sensing the impending threat in English",
       "subtitles": [
-        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
-        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
+        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line warning of the incoming danger...", "textEs": "Spanish translation..." },
+        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English line preparing for the breach...", "textEs": "Spanish translation..." }
       ],
       "voiceDirection": "Acoustic direction in English based on character voicePrompt",
       "visualPrompt": "Cinematique 6-layer prompt: [Over-the-Shoulder or Macro Insert Shot on Key Prop] + [Character micro-tension or prop physical patina] + [Encroaching perimeter backdrop] + [Hard directional gobo light or flickering warning pulse] + [Macro lens or 85mm prime wide open] + [Airborne embers, lens halation, 24fps film still]",
@@ -2109,15 +2114,15 @@ Respond ONLY with a valid JSON object matching this schema:
     },
     {
       "stepNumber": 4,
-      "title": "Title of Scene 4 (45-60s): Climax of First-Shot & Interactive Dilemma",
-      "synopsis": "Climactic action in seconds 45-60 culminating in the first critical decision dilemma for the audience",
-      "dialogueSnippet": "Climactic dialogue before voting in English",
+      "title": "Title of Scene 4 (45-60s): The First Major Conflict — Audience Decision Dilemma",
+      "synopsis": "Climactic action in seconds 45-60 where the first major conflict explodes in an urgent crisis, with the dialogue and subtitles actively and urgently inciting the spectator to decide between two divergent solutions",
+      "dialogueSnippet": "We are pinned down in the crossfire! Frontal breakthrough or tactical shadow diversion? Spectators, you decide — cast your vote now!",
       "subtitles": [
-        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
-        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English choice hook...", "textEs": "Spanish translation..." }
+        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "We are pinned down in the crossfire! Do we breach frontally or deploy the shadow diversion?", "textEs": "¡Estamos acorralados en el fuego cruzado! ¿Rompemos de frente o desplegamos la distracción sombra?" },
+        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "Spectators, the choice is yours — decide our fate right now!", "textEs": "¡Espectadores, la decisión es de ustedes — elijan nuestro destino ahora mismo!" }
       ],
-      "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Cinematique 6-layer prompt: [Choker Shot or Dramatic Dutch Angle Close-Up] + [Peak emotional conflict in character eyes] + [Imminent explosive or tactical threshold] + [Caravaggio Chiaroscuro or Rembrandt triangle key with eye catchlights] + [35mm anamorphic glass, subtle barrel distortion] + [Epic tension, deep blacks, high-contrast film still]",
+      "voiceDirection": "Acoustic direction in English based on character voicePrompt with maximum dramatic urgency",
+      "visualPrompt": "Cinematique 6-layer prompt: [Choker Shot or Dramatic Dutch Angle Close-Up] + [Peak emotional conflict in character eyes during the standoff] + [Imminent explosive or tactical threshold] + [Caravaggio Chiaroscuro or Rembrandt triangle key with eye catchlights] + [35mm anamorphic glass, subtle barrel distortion] + [Epic tension, deep blacks, high-contrast film still]",
       "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Imperceptibly slow dolly push-in or Vertigo zolly effect] + [Closing from medium to tight choker over 15s] + [Narrowing depth of field, focus breathing] + [180-degree shutter, 24fps motion blur]",
       "activeCharacters": ["char_1"],
       "activeProps": ["prop_1"],
@@ -2126,7 +2131,7 @@ Respond ONLY with a valid JSON object matching this schema:
         {
           "id": "A",
           "title": "Option A Title in English",
-          "text": "First bold choice the audience can make",
+          "text": "First bold choice resolving the first conflict",
           "dramaticHook": "Dramatic hook for Option A",
           "expectedConsequence": "Narrative consequence if Option A wins",
           "visualPrompt": "Cinematique 6-layer visual prompt: [Framing/Shot type] + [Characters/Wardrobe] + [Setting/Depth] + [Lighting/Kelvin] + [Lenses/Optics] + [Atmosphere] if Option A is chosen",
@@ -2141,7 +2146,7 @@ Respond ONLY with a valid JSON object matching this schema:
         {
           "id": "B",
           "title": "Option B Title in English",
-          "text": "Radically different alternative choice",
+          "text": "Radically different alternative choice resolving the first conflict",
           "dramaticHook": "Dramatic hook for Option B",
           "expectedConsequence": "Narrative consequence if Option B wins",
           "visualPrompt": "Cinematique 6-layer visual prompt if Option B is chosen",
@@ -2194,16 +2199,28 @@ Respond ONLY with a valid JSON object matching this schema:
       const dynamicCatalyst = sampleRandom(CREATIVE_CATALYSTS);
       const dynamicAesthetic = sampleRandom(CREATIVE_AESTHETICS);
 
+      const arcInstruction = `
+MANDATORY 4-CLIP OPENING ARC:
+- Clip 1 (0-15s): Establish the world, setting, visual tone, and atmosphere.
+- Clip 2 (15-30s): Establish the protagonist, identity, signature prop, mission, and personal stakes.
+- Clip 3 (30-45s): Looming threat emerges; status quo fractures as hostile danger approaches.
+- Clip 4 (45-60s): THE FIRST MAJOR CONFLICT! Spoken dialogue and subtitles MUST actively and urgently incite the audience to decide between Option A and Option B!`;
+
       const userMessage = targetTitle
         ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot).
 MANDATORY TITLE: You MUST use the exact title "${targetTitle}".
 MANDATORY GENRE: You MUST use the exact genre "${targetGenre || 'Cinematic Drama'}".
 Logline: "${targetLogline || ''}".
 Story Premise: "${targetPremise || ''}".
+${arcInstruction}
 Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
         : isRealCustom
-        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${targetPremise}". Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-        : `Create a high-tension interactive ${dynamicGenre} master bible featuring ${dynamicProtagonist} facing ${dynamicCatalyst} with visual aesthetic of ${dynamicAesthetic}, and the 4 opening scenes (1-minute continuous first-shot). Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${targetPremise}".
+${arcInstruction}
+Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        : `Create a high-tension interactive ${dynamicGenre} master bible featuring ${dynamicProtagonist} facing ${dynamicCatalyst} with visual aesthetic of ${dynamicAesthetic}, and the 4 opening scenes (1-minute continuous first-shot).
+${arcInstruction}
+Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
       const parsed = await callLlmJson<any>({
         label: 'story-bible',
@@ -2227,15 +2244,32 @@ Write all story elements, dialogue, subtitles, character voice prompts, and the 
           const stepNum = idx + 1;
           const isFinalFirstShot = stepNum === 4;
 
-          const defaultSubtitles = [
-            {
-              start: 1.0,
-              end: 14.0,
-              speaker: parsed.characters[0]?.name || "Protagonist",
-              text: stepData.dialogueSnippet || `Scene ${stepNum} sequence engaged.`,
-              textEs: `Secuencia de escena ${stepNum} iniciada.`
-            }
-          ];
+          const defaultSubtitles = stepNum === 4
+            ? [
+                {
+                  start: 1.0,
+                  end: 7.0,
+                  speaker: parsed.characters[0]?.name || "Protagonist",
+                  text: stepData.dialogueSnippet || "We are pinned down in the crossfire! Do we breach frontally or deploy the shadow diversion?",
+                  textEs: "¡Estamos acorralados en el fuego cruzado! ¿Rompemos de frente o desplegamos la distracción sombra?"
+                },
+                {
+                  start: 8.0,
+                  end: 14.0,
+                  speaker: parsed.characters[0]?.name || "Protagonist",
+                  text: "Spectators, the choice is yours — decide our fate right now!",
+                  textEs: "¡Espectadores, la decisión es de ustedes — elijan nuestro destino ahora mismo!"
+                }
+              ]
+            : [
+                {
+                  start: 1.0,
+                  end: 14.0,
+                  speaker: parsed.characters[0]?.name || "Protagonist",
+                  text: stepData.dialogueSnippet || (stepNum === 1 ? "Establishing contact. The world begins here." : (stepNum === 2 ? `Identity verified. The mission is underway.` : "Perimeter breach detected. Shadows approach.")),
+                  textEs: stepNum === 1 ? "Estableciendo contacto. El mundo comienza aquí." : (stepNum === 2 ? "Identidad verificada. La misión está en marcha." : "Brecha perimetral detectada. Las sombras se acercan.")
+                }
+              ];
 
           const options: [DecisionOption, DecisionOption] = isFinalFirstShot && Array.isArray(stepData.options) && stepData.options.length >= 2
             ? [
@@ -2376,10 +2410,10 @@ Write all story elements, dialogue, subtitles, character voice prompts, and the 
   const firstProp = preset.props[0];
 
   const firstShotTitles = [
-    (preset as any).firstStepTitle || "The Opening Gambit",
-    "Rising Shadows & The Secondary Breach",
-    "Threshold of the Crucible",
-    "Point of No Return: The First Choice"
+    (preset as any).firstStepTitle || "Act I: Establishing the World & Atmosphere",
+    "Act I: The Protagonist & The Mission",
+    "Act I: The Looming Threat: Shadows Approach",
+    "Act I: The First Conflict — Spectators, You Decide!"
   ];
 
   const initialSteps: MovieStep[] = [1, 2, 3, 4].map((stepNum) => {
@@ -2387,24 +2421,58 @@ Write all story elements, dialogue, subtitles, character voice prompts, and the 
     return {
       stepNumber: stepNum,
       title: firstShotTitles[stepNum - 1],
-      synopsis: `Minute 1 First-Shot (part ${stepNum}/4): ${preset.initialPlot.slice((stepNum - 1) * 60, stepNum * 60) || preset.initialPlot.slice(0, 150)}`,
+      synopsis: stepNum === 1
+        ? `Minute 1 First-Shot (Part 1/4): Establishing the cinematic universe and atmospheric tone of "${preset.title}". ${preset.initialPlot.slice(0, 150)}`
+        : stepNum === 2
+        ? `Minute 1 First-Shot (Part 2/4): Establishing the protagonist ${firstChar.name} and the signature ${firstProp.name}. The mission stakes are locked in.`
+        : stepNum === 3
+        ? `Minute 1 First-Shot (Part 3/4): The status quo fractures as a looming threat breaches the perimeter. Hostile forces close in.`
+        : `Minute 1 First-Shot (Part 4/4): THE FIRST MAJOR CONFLICT! Pinned down under crossfire, ${firstChar.name} urgently calls upon the audience to decide how to resolve this crisis.`,
       dialogueSnippet: stepNum === 1
-        ? (preset as any).firstStepDialogue || `${firstChar.name}: 'The destiny of this world begins right now.'`
-        : `${firstChar.name}: 'Scene ${stepNum}... keep moving forward.'`,
+        ? (preset as any).firstStepDialogue || `${firstChar.name}: 'The world stirs. Our journey begins now.'`
+        : stepNum === 2
+        ? `${firstChar.name}: 'I am ${firstChar.name}. With this ${firstProp.name}, the mission admits no compromise.'`
+        : stepNum === 3
+        ? `${firstChar.name}: 'Perimeter breach! Hostile forces are converging on our position.'`
+        : `${firstChar.name}: 'We are pinned down in the crossfire! Breach frontally or deploy the shadow diversion? Spectators, you decide — choose our path!'`,
       subtitles: [
         {
           start: 1.0,
           end: 7.0,
           speaker: firstChar.name,
-          text: `First-Shot Sequence ${stepNum}/4: The mission is underway.`,
-          textEs: `Secuencia First-Shot ${stepNum}/4: La misión está en marcha.`
+          text: stepNum === 1
+            ? "The world awakens. From this threshold, the journey begins."
+            : stepNum === 2
+            ? `I am ${firstChar.name}. The objective is clear and the stakes are absolute.`
+            : stepNum === 3
+            ? "Perimeter breach detected! Hostile forces are closing in rapidly."
+            : "We are surrounded in the crossfire! Direct strike or tactical diversion?",
+          textEs: stepNum === 1
+            ? "El mundo despierta. Desde este umbral, el viaje comienza."
+            : stepNum === 2
+            ? `Soy ${firstChar.name}. El objetivo es claro y lo que está en juego es absoluto.`
+            : stepNum === 3
+            ? "¡Brecha en el perímetro detectada! Fuerzas hostiles se aproximan rápidamente."
+            : "¡Estamos rodeados en el fuego cruzado! ¿Ataque directo o maniobra evasiva?"
         },
         {
           start: 8.0,
           end: 14.0,
           speaker: firstChar.name,
-          text: isFinal ? "The first critical decision is upon us." : "Stay focused on the target coordinates.",
-          textEs: isFinal ? "La primera decisión crítica está ante nosotros." : "Mantengan el foco en las coordenadas objetivo."
+          text: stepNum === 1
+            ? "Observe the environment. Every shadow holds a secret."
+            : stepNum === 2
+            ? "No turning back now. We push forward."
+            : stepNum === 3
+            ? "Steel yourselves. The confrontation is upon us."
+            : "Spectators, the choice is yours — decide our fate right now!",
+          textEs: stepNum === 1
+            ? "Observen el entorno. Cada sombra guarda un secreto."
+            : stepNum === 2
+            ? "No hay vuelta atrás. Avanzamos."
+            : stepNum === 3
+            ? "Prepárense. La confrontación está sobre nosotros."
+            : "¡Espectadores, la decisión es de ustedes — elijan nuestro destino ahora mismo!"
         }
       ],
       voiceDirection: firstChar.voicePrompt,
@@ -2505,7 +2573,13 @@ export function getNarrativeArcDirective(stepNum: number): string {
   if (stepNum >= 11) {
     return `NARRATIVE ARC PHASE — DEVELOPMENT (steps 11-39): The story is in its middle act. Escalate conflict: complications, betrayals, twists and mid-point reversals. Deepen character relationships and raise the stakes with every scene. New characters and their signature props may be introduced here. Keep every scene connected to the master plot while building momentum toward the final act.`;
   }
-  return `NARRATIVE ARC PHASE — SETUP / EXPOSITION (steps 1-10): The story is in its opening act. These scenes must plant the problem and present the situation: introduce the world, the protagonist, the central conflict and the stakes. Establish mood, tone and the rules of the universe. Near step 11 the protagonist must be locked into the main quest at the point of no return.`;
+  if (stepNum === 4) {
+    return `NARRATIVE ARC PHASE — THE FIRST CONFLICT & AUDIENCE DECISION (Step 4): Clips 1-3 established the world, protagonist, and looming threat. Clip 4 is where the first major conflict explodes with full intensity! Spoken dialogue and subtitles MUST actively and urgently incite the audience to choose between Option A and Option B.`;
+  }
+  if (stepNum <= 3) {
+    return `NARRATIVE ARC PHASE — PROLOGUE ESTABLISHMENT (Clip ${stepNum}/4): Establish the world (clip 1), the protagonist and mission (clip 2), and the looming threat (clip 3), setting the stage for the first major conflict in clip 4.`;
+  }
+  return `NARRATIVE ARC PHASE — SETUP / POST-FIRST-CONFLICT (steps 5-10): The story builds directly upon the audience's resolution of the first conflict at step 4. Escalate the initial stakes and lock the protagonist into the main quest toward the point of no return at step 11.`;
 }
 
 /**
