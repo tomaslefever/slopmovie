@@ -45,6 +45,15 @@ export async function persistMovie(movie: Movie): Promise<void> {
   if (!supabase) return;
 
   try {
+    // Invariant: strictly ONE movie can have status 'streaming' at any given time
+    if (movie.status === 'streaming') {
+      await supabase
+        .from('movies')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('status', 'streaming')
+        .neq('id', movie.id);
+    }
+
     const { error } = await supabase.from('movies').upsert({
       id: movie.id,
       title: movie.title,

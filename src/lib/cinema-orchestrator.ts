@@ -126,6 +126,7 @@ class CinemaOrchestrator {
   private timerInterval: NodeJS.Timeout | null = null;
   public userVotes: Map<string, 'A' | 'B'> = new Map();
   private isAdvancing: boolean = false;
+  private isAdvancingStartedAt: number = 0;
   private audienceRefreshTickCounter: number = 0;
 
   public setPhase(newPhase: PlaybackPhase, durationSeconds: number) {
@@ -596,6 +597,25 @@ class CinemaOrchestrator {
    * Execute one tick of the engine. Called ONLY by the single leader worker.
    */
   public async tickWorker(workerId: string) {
+    // Multi-instance / DB sync: check if active movie in Supabase differs from in-memory movie
+    if (isSupabaseConfigured() && !this.isResetting && !this.isAdvancing) {
+      try {
+        const liveState = await loadLiveCinemaStateFromDb();
+        if (liveState?.movieId && (!this.movie || this.movie.id !== liveState.movieId)) {
+          console.log(`[CinemaWorker] Active movie in DB (${liveState.movieId}) differs from memory. Re-syncing...`);
+          await this.syncFromDatabase();
+        }
+      } catch {
+        // non-blocking
+      }
+    }
+
+    // Watchdog: recover if isAdvancing was stalled for >90s
+    if (this.isAdvancing && Date.now() - this.isAdvancingStartedAt > 90000) {
+      console.warn('[CinemaWorker] Watchdog: isAdvancing stuck for >90s. Releasing lock.');
+      this.isAdvancing = false;
+    }
+
     if (!this.movie) {
       // A forceReset (new blockbuster rotation) is mid-flight: the worker must NOT
       // auto-generate a competing movie while the director's/rotation's movie is being created.
@@ -664,6 +684,7 @@ class CinemaOrchestrator {
       if (!this.isAdvancing) {
         console.log(`[CinemaWorker] ⏱️ Authoritative timer elapsed for phase '${this.phase}' (Step ${this.movie.currentStep}). Transitioning to next stage...`);
         this.isAdvancing = true;
+        this.isAdvancingStartedAt = Date.now();
         try {
           await this.handlePhaseTransition(workerId);
         } finally {
@@ -704,6 +725,7 @@ class CinemaOrchestrator {
     }
 
     this.isAdvancing = true;
+    this.isAdvancingStartedAt = Date.now();
     try {
       console.log(`[CinemaEngine] 🎬 Stage completion received from client for '${this.phase}' (Step ${this.movie.currentStep}). Transitioning...`);
       await this.handlePhaseTransition(workerId);

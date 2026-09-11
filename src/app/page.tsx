@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CinemaState, ChatMessage, PlaybackPhase, MovieStep, ImmersiveAd } from '@/types/cinema';
 import { CinemaPlayer } from '@/components/cinema/CinemaPlayer';
 import { VotingOverlay } from '@/components/cinema/VotingOverlay';
@@ -523,6 +523,26 @@ export default function CinemaStreamingPage() {
     };
   }, [supabaseReady]);
 
+  // Immediate scene transition callback when video playback concludes (no loops, no pauses)
+  const handleScenePlaybackEnded = useCallback(async () => {
+    if (!cinemaState?.movie || cinemaState.phase !== 'PLAYING') return;
+    const currentStepNum = cinemaState.movie.currentStep;
+
+    try {
+      await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'complete_stage',
+          stage: 'PLAYING',
+          stepNumber: currentStepNum
+        })
+      });
+    } catch (err) {
+      console.warn('[Cinema] Error completing playback stage on video end:', err);
+    }
+  }, [cinemaState?.movie, cinemaState?.phase]);
+
   // Subtitle preference handlers synced with Supabase (zero browser localStorage)
   const handleToggleSubtitles = async (enabled: boolean) => {
     setSubtitlesEnabled(enabled);
@@ -787,6 +807,7 @@ export default function CinemaStreamingPage() {
                     ? cinemaState.activeAd
                     : (cinemaState.movie.currentStep % 2 === 0 ? FALLBACK_IN_SCENE_AD : null)
                 }
+                onPlaybackEnded={handleScenePlaybackEnded}
                 onOpenBuyAds={() => setIsBuyAdsModalOpen(true)}
               />
 

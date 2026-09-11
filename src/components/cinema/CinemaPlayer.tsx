@@ -191,20 +191,15 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
   const handleEnded = () => {
     if (phase === 'PLAYING') {
-      // The scene clip truly ended: notify the page so the stage advances only
-      // now — never while the video is still playing. Keep looping seamlessly
-      // for clips shorter than the scene window.
+      // The scene clip truly ended: notify the page to advance immediately to the next scene.
+      // Do NOT loop or rewind the video — hold on the final frame until the next scene starts.
       if (!playbackEndedNotifiedRef.current) {
         playbackEndedNotifiedRef.current = true;
         onPlaybackEnded?.();
       }
-      if (videoRef.current) {
-        videoRef.current.currentTime = 0;
-        videoRef.current.play().catch(() => {});
-      }
       return;
     }
-    if (videoRef.current) {
+    if (phase === 'VOTING' && videoRef.current) {
       videoRef.current.currentTime = 0;
       videoRef.current.play().catch(() => {});
     }

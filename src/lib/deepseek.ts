@@ -71,6 +71,28 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
   const timeoutMs = params.timeoutMs ?? 30000;
 
   try {
+    const isNvidia = endpoint.includes('nvidia.com');
+    const requestBody: Record<string, any> = {
+      model,
+      messages: params.messages,
+      temperature: params.temperature ?? 1,
+      top_p: params.top_p ?? 0.95,
+      max_tokens: params.max_tokens ?? 2500,
+      stream: false
+    };
+
+    if (params.seed !== undefined || isNvidia) {
+      requestBody.seed = params.seed ?? Math.floor(Math.random() * 2147483647);
+    }
+    if (isNvidia) {
+      requestBody.chat_template_kwargs = { thinking: false };
+    }
+    if (params.response_format) {
+      requestBody.response_format = params.response_format;
+    } else {
+      requestBody.response_format = { type: "json_object" };
+    }
+
     const response = await fetch(endpoint, {
       signal: AbortSignal.timeout(timeoutMs),
       method: "POST",
@@ -78,17 +100,7 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model,
-        messages: params.messages,
-        temperature: params.temperature ?? 1,
-        top_p: params.top_p ?? 0.95,
-        max_tokens: params.max_tokens ?? 2500,
-        seed: params.seed ?? Math.floor(Math.random() * 2147483647),
-        chat_template_kwargs: { thinking: false },
-        response_format: params.response_format ?? { type: "json_object" },
-        stream: false
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
