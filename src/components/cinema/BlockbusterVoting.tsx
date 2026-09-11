@@ -33,8 +33,11 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
   winner,
   onVote
 }) => {
-  const currentSeconds = Math.max(0, Math.min(60, timeRemaining));
-  const isVotingEnded = phase === 'GENERATING' || currentSeconds <= 0 || Boolean(winner);
+  const currentSeconds = phase === 'GENERATING' ? 0 : Math.max(0, Math.min(60, timeRemaining));
+  const isTimeExpired = currentSeconds <= 0;
+  const isAuthoritativeWinnerReady = Boolean(winner?.id || winner?.title);
+  const isVotingEnded = phase === 'GENERATING' || isAuthoritativeWinnerReady;
+  const isInteractionDisabled = isTimeExpired || isVotingEnded;
 
   const safeCounts: Record<'A' | 'B' | 'C' | 'D', number> = {
     A: Number(counts?.A) || 0,
@@ -44,18 +47,14 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
   };
   const totalVotes = safeCounts.A + safeCounts.B + safeCounts.C + safeCounts.D;
 
-  // Resolve winner candidate
-  const winningId: 'A' | 'B' | 'C' | 'D' = winner?.id || (
-    (['A', 'B', 'C', 'D'] as const).reduce((best, cur) =>
-      (safeCounts[cur] || 0) > (safeCounts[best] || 0) ? cur : best, 'A'
-    )
-  );
-  const winningCandidate = candidates.find(c => c.id === winningId) || candidates[0];
+  // Resolve winner candidate strictly from authoritative winner
+  const winningId: 'A' | 'B' | 'C' | 'D' | null = winner?.id || null;
+  const winningCandidate = (winningId ? candidates.find(c => c.id === winningId) : null) || candidates[0];
 
-  // Stage transition: when voting ends, show results for 1.4s, then animate zoom-out for losers and zoom-in for winner
+  // Stage transition: when authoritative winner arrives, show results for 1.4s, then animate zoom-out for losers and zoom-in for winner
   const [isZoomTransitionActive, setIsZoomTransitionActive] = useState(false);
   useEffect(() => {
-    if (isVotingEnded) {
+    if (isAuthoritativeWinnerReady) {
       const timer = setTimeout(() => {
         setIsZoomTransitionActive(true);
       }, 1400);
@@ -63,7 +62,7 @@ export const BlockbusterVoting: React.FC<BlockbusterVotingProps> = ({
     } else {
       setIsZoomTransitionActive(false);
     }
-  }, [isVotingEnded]);
+  }, [isAuthoritativeWinnerReady]);
 
   const handleCastVote = (candidateId: 'A' | 'B' | 'C' | 'D') => {
     if (isVotingEnded || userVoted === candidateId) return;

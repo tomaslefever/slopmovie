@@ -668,17 +668,7 @@ class CinemaOrchestrator {
           }
         }).catch(() => {});
       }
-
-      // Fast, lightweight broadcast tick without heavy database/CDC spam
-      broadcastCinemaEvent('time_tick', {
-        timeRemaining: this.timeRemaining,
-        phase: this.phase,
-        votesA: this.votesA,
-        votesB: this.votesB,
-        totalAudience: this.totalAudience,
-        phaseEndsAt: this.phaseEndsAt,
-        phaseDuration: this.phaseDuration
-      });
+      // Note: Remaining seconds are NOT streamed. Clients run local countdown timers synchronized by phase start/ends timestamps.
     } else {
       // Authoritative time engine: phase timer expired. Advance immediately.
       if (!this.isAdvancing) {
@@ -939,7 +929,7 @@ class CinemaOrchestrator {
       // Broadcast phase change to GENERATING with the selected option
       broadcastCinemaEvent('phase_change', {
         phase: 'GENERATING',
-        timeRemaining: this.timeRemaining,
+        timeRemaining: 0,
         selectedOption: chosenOption,
         wasRandomPick,
         winningOption,

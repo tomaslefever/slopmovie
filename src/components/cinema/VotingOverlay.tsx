@@ -33,42 +33,40 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
   wasRandomPick = false,
   onVote
 }) => {
-  // Exact 10s countdown from client timeRemaining prop without any database lookups
-  const currentSeconds = Math.max(0, Math.min(10, timeRemaining));
-  const isVotingEnded = phase === 'GENERATING' || currentSeconds <= 0;
+  // Exact 10s countdown from client timeRemaining prop (guaranteed 0 during GENERATING)
+  const currentSeconds = phase === 'GENERATING' ? 0 : Math.max(0, Math.min(10, timeRemaining));
+  const isTimeExpired = currentSeconds <= 0;
+  const isAuthoritativeWinnerReady = Boolean(selectedOption);
+  const isVotingEnded = phase === 'GENERATING' || isAuthoritativeWinnerReady;
+  const isInteractionDisabled = isTimeExpired || isVotingEnded;
+
   const totalVotes = votesA + votesB;
   const percentA = totalVotes > 0 ? Math.round((votesA / totalVotes) * 100) : 50;
   const percentB = totalVotes > 0 ? Math.round((votesB / totalVotes) * 100) : 50;
 
-  // Resolve winner
-  const winnerId: 'A' | 'B' = selectedOption || (
-    votesA > votesB ? 'A' : (
-      votesB > votesA ? 'B' : (
-        options[0].votes >= options[1].votes ? 'A' : 'B'
-      )
-    )
-  );
-  const winnerOption = winnerId === 'A' ? options[0] : options[1];
+  // Resolve winner strictly when selectedOption is available from server
+  const winnerId: 'A' | 'B' | null = selectedOption || null;
+  const winnerOption = winnerId === 'A' ? options[0] : (winnerId === 'B' ? options[1] : options[0]);
   const winnerPercent = winnerId === 'A' ? percentA : percentB;
   const winnerVotes = winnerId === 'A' ? votesA : votesB;
 
-  // When voting concludes, keep 2 options visible for 1.3s to reveal results and sweep percentage bars,
+  // When winner is received from server, keep 2 options visible for 1.2s to reveal results,
   // then trigger the zoom-out fade for the loser and zoom-in fade into the centered hero view.
   const [isZoomTransitionActive, setIsZoomTransitionActive] = useState(false);
 
   useEffect(() => {
-    if (isVotingEnded) {
+    if (isAuthoritativeWinnerReady) {
       const timer = setTimeout(() => {
         setIsZoomTransitionActive(true);
-      }, 1300);
+      }, 1200);
       return () => clearTimeout(timer);
     } else {
       setIsZoomTransitionActive(false);
     }
-  }, [isVotingEnded]);
+  }, [isAuthoritativeWinnerReady]);
 
   const handleCastVote = useCallback((optionId: 'A' | 'B') => {
-    if (isVotingEnded) return;
+    if (isInteractionDisabled) return;
     if (userVoted === optionId) return;
 
     audioCues.playVoteCast();
@@ -80,11 +78,11 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
     });
 
     onVote(optionId);
-  }, [isVotingEnded, userVoted, onVote]);
+  }, [isInteractionDisabled, userVoted, onVote]);
 
   // Keyboard shortcut listeners (1 and 2)
   useEffect(() => {
-    if (!isVisible || isVotingEnded) return;
+    if (!isVisible || isInteractionDisabled) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '1' || e.key === 'a' || e.key === 'A') {
@@ -96,12 +94,12 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isVisible, isVotingEnded, handleCastVote]);
+  }, [isVisible, isInteractionDisabled, handleCastVote]);
 
   // Play alert chime ONCE when voting opens
   const hasAlertPlayedRef = useRef(false);
   useEffect(() => {
-    if (isVisible && phase === 'VOTING' && !isVotingEnded) {
+    if (isVisible && phase === 'VOTING' && !isTimeExpired && !isVotingEnded) {
       if (!hasAlertPlayedRef.current) {
         hasAlertPlayedRef.current = true;
         audioCues.playVotingAlert();
@@ -109,12 +107,12 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
     } else {
       hasAlertPlayedRef.current = false;
     }
-  }, [isVisible, phase, isVotingEnded]);
+  }, [isVisible, phase, isTimeExpired, isVotingEnded]);
 
   // Cinematic tension music lifecycle during voting: exactly one instance per round
   const hasMusicStartedRef = useRef(false);
   useEffect(() => {
-    if (isVisible && phase === 'VOTING' && !isVotingEnded) {
+    if (isVisible && phase === 'VOTING' && !isTimeExpired && !isVotingEnded) {
       if (!hasMusicStartedRef.current) {
         hasMusicStartedRef.current = true;
         audioCues.startTensionMusic();
@@ -128,12 +126,12 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
       hasMusicStartedRef.current = false;
       audioCues.stopTensionMusic();
     };
-  }, [isVisible, phase, isVotingEnded]);
+  }, [isVisible, phase, isTimeExpired, isVotingEnded]);
 
-  // Celebrate winner when voting closes
+  // Celebrate winner when authoritative decision arrives
   const hasCelebratedRef = useRef(false);
   useEffect(() => {
-    if (isVisible && isVotingEnded && !hasCelebratedRef.current) {
+    if (isVisible && isAuthoritativeWinnerReady && winnerId && !hasCelebratedRef.current) {
       hasCelebratedRef.current = true;
       audioCues.playWinnerReveal();
       confetti({
@@ -142,10 +140,10 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
         origin: { y: 0.5, x: 0.5 },
         colors: winnerId === 'A' ? ['#00f0ff', '#0070f3', '#ffffff'] : ['#ffaa00', '#ff0055', '#ffffff']
       });
-    } else if (!isVotingEnded) {
+    } else if (!isAuthoritativeWinnerReady) {
       hasCelebratedRef.current = false;
     }
-  }, [isVisible, isVotingEnded, winnerId]);
+  }, [isVisible, isAuthoritativeWinnerReady, winnerId]);
 
   if (!isVisible) return null;
 
@@ -209,14 +207,24 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                 <div className="flex items-center space-x-2">
                   <Timer className="w-3.5 h-3.5 md:w-4 md:h-4 text-cyan-400" />
                   <h2 className="text-lg md:text-2xl font-black uppercase tracking-widest text-white">
-                    {isVotingEnded ? "Voting Concluded • Results Revealed" : "Audience Vote"}
+                    {isAuthoritativeWinnerReady
+                      ? "Voting Concluded • Results Revealed"
+                      : (isTimeExpired
+                          ? "Time Elapsed • Tallying Votes..."
+                          : "Audience Vote"
+                        )
+                    }
                   </h2>
                   <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-400" />
                 </div>
                 <p className="hidden md:block text-xs text-neutral-400 mt-1 max-w-md">
-                  {isVotingEnded
-                    ? "Tallying audience votes · Transitioning to selected narrative branch..."
-                    : <>Choose the next story continuation. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote instantly.</>}
+                  {isAuthoritativeWinnerReady
+                    ? "Audience decision verified · Transitioning to selected narrative branch..."
+                    : (isTimeExpired
+                        ? "Closing ballots. Calculating narrative choice with Realtime consensus..."
+                        : <>Choose the next story continuation. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote instantly.</>
+                      )
+                  }
                 </p>
               </div>
 
@@ -224,11 +232,11 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
               <div className="grid grid-cols-2 gap-2 md:gap-6 w-full max-w-4xl">
                 {/* OPTION A */}
                 <motion.div
-                  whileHover={!isVotingEnded ? { scale: 1.02 } : undefined}
-                  whileTap={!isVotingEnded ? { scale: 0.98 } : undefined}
+                  whileHover={!isInteractionDisabled ? { scale: 1.02 } : undefined}
+                  whileTap={!isInteractionDisabled ? { scale: 0.98 } : undefined}
                   onClick={() => handleCastVote('A')}
                   className={`relative p-3 md:p-4 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
-                    isVotingEnded && winnerId === 'A'
+                    isAuthoritativeWinnerReady && winnerId === 'A'
                       ? 'bg-cyan-950/60 border-cyan-400 shadow-[0_0_35px_rgba(0,240,255,0.4)] ring-1 ring-cyan-400/60'
                       : userVoted === 'A'
                         ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_30px_rgba(0,240,255,0.3)]'
@@ -316,11 +324,11 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
 
                 {/* OPTION B */}
                 <motion.div
-                  whileHover={!isVotingEnded ? { scale: 1.02 } : undefined}
-                  whileTap={!isVotingEnded ? { scale: 0.98 } : undefined}
+                  whileHover={!isInteractionDisabled ? { scale: 1.02 } : undefined}
+                  whileTap={!isInteractionDisabled ? { scale: 0.98 } : undefined}
                   onClick={() => handleCastVote('B')}
                   className={`relative p-3 md:p-4 rounded-2xl cursor-pointer border transition-all duration-300 overflow-hidden group ${
-                    isVotingEnded && winnerId === 'B'
+                    isAuthoritativeWinnerReady && winnerId === 'B'
                       ? 'bg-amber-950/60 border-amber-400 shadow-[0_0_35px_rgba(251,191,36,0.4)] ring-1 ring-amber-400/60'
                       : userVoted === 'B'
                         ? 'bg-amber-950/40 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.3)]'
