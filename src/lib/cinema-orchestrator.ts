@@ -713,20 +713,34 @@ class CinemaOrchestrator {
     // ── NEXT BLOCKBUSTER AUDIENCE VOTE CONCLUDED (60s) ───────────────────────
     if (this.phase === 'BLOCKBUSTER_VOTING') {
       const winner = this.resolveBlockbusterVote();
-      this.blockbusterCandidates = [];
-      this.blockbusterUserVotes.clear();
+      const savedCandidates = [...this.blockbusterCandidates];
+      const savedCounts = { ...this.blockbusterVoteCounts };
 
+      // Keep candidates in memory during GENERATING so the reveal and zoom-out/zoom-in animation play smoothly
       this.setPhase('GENERATING', 15);
 
+      const winnerPayload = winner ? {
+        id: winner.id,
+        title: winner.title,
+        logline: winner.logline,
+        genre: winner.genre,
+        premise: winner.premise
+      } : null;
+
       broadcastCinemaEvent('blockbuster_vote_ended', {
-        winner: winner ? { title: winner.title, logline: winner.logline, genre: winner.genre } : null
+        winner: winnerPayload,
+        counts: savedCounts,
+        candidates: savedCandidates
       });
       broadcastCinemaEvent('phase_change', {
         phase: 'GENERATING',
         timeRemaining: 15,
         phaseDuration: 15,
         phaseStartedAt: this.phaseStartedAt,
-        phaseEndsAt: this.phaseEndsAt
+        phaseEndsAt: this.phaseEndsAt,
+        winner: winnerPayload,
+        blockbusterCandidates: savedCandidates,
+        blockbusterVoteCounts: savedCounts
       });
 
       if (winner) {
@@ -860,7 +874,7 @@ class CinemaOrchestrator {
     } 
     else if (this.phase === 'VOTING') {
       // 10-second voting has concluded -> Resolve winner
-      this.setPhase('GENERATING', 4); // Short generative transition buffer
+      this.setPhase('GENERATING', 6); // 6s buffer for secret ballot results reveal and zoom-out/zoom-in transitions
 
       let chosenOption: 'A' | 'B';
       let wasRandomPick = false;
