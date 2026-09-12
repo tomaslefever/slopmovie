@@ -565,6 +565,7 @@ class CinemaOrchestrator {
     this.blockbusterCandidates = [];
     this.blockbusterUserVotes.clear();
     this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
+    this.blockbusterWinner = null;
 
     // Persist movie and all 4 initial steps to Supabase
     await persistMovie(this.movie);
@@ -611,8 +612,18 @@ class CinemaOrchestrator {
 
       const liveState = await loadLiveCinemaStateFromDb(this.movie?.id);
       if (liveState) {
-        this.phase = liveState.phase || 'PLAYING';
-        this.phaseDuration = liveState.phaseDuration || 15;
+        const isLegitMovieMatch = !liveState.movieId || !this.movie || liveState.movieId === this.movie.id;
+        if (isLegitMovieMatch) {
+          // If active movie is streaming and not complete (<50), never adopt stale BLOCKBUSTER_VOTING
+          if (this.movie && this.movie.status === 'streaming' && (this.movie.currentStep || 1) < 50 && liveState.phase === 'BLOCKBUSTER_VOTING') {
+            console.log('[CinemaEngine] Correcting corrupt BLOCKBUSTER_VOTING on streaming movie. Setting phase to PLAYING.');
+            this.phase = 'PLAYING';
+            this.phaseDuration = 30;
+          } else {
+            this.phase = liveState.phase || 'PLAYING';
+            this.phaseDuration = liveState.phaseDuration || 15;
+          }
+        }
         this.phaseStartedAt = liveState.phaseStartedAt ? new Date(liveState.phaseStartedAt).getTime() : Date.now();
         this.phaseEndsAt = liveState.phaseEndsAt ? new Date(liveState.phaseEndsAt).getTime() : Date.now() + 15000;
         
@@ -633,14 +644,17 @@ class CinemaOrchestrator {
         const syncedModel = resolveVideoModel(liveState.videoModel);
         if (syncedModel) this.videoModel = syncedModel;
         if (isKnownVideoResolution(liveState.videoResolution)) this.videoResolution = liveState.videoResolution;
-        if (liveState.currentStep && this.movie) {
-          this.movie.currentStep = liveState.currentStep;
+        if (liveState.currentStep && this.movie && isLegitMovieMatch) {
+          this.movie.currentStep = Math.min(Math.max(1, liveState.currentStep), this.movie.steps.length);
         }
         if (Array.isArray(liveState.blockbusterCandidates) && liveState.blockbusterCandidates.length > 0) {
           this.blockbusterCandidates = liveState.blockbusterCandidates;
         }
         if (liveState.blockbusterVoteCounts) {
           this.blockbusterVoteCounts = liveState.blockbusterVoteCounts;
+        }
+        if (liveState.blockbusterWinner) {
+          this.blockbusterWinner = liveState.blockbusterWinner as any;
         }
       }
     } catch (err) {
@@ -768,6 +782,12 @@ class CinemaOrchestrator {
     // If client specified the stage that ended, ensure it matches current phase
     if (requestedStage && this.phase !== requestedStage) {
       console.log(`[CinemaEngine] completeStage: current phase (${this.phase}) already moved past (${requestedStage}). Returning live state.`);
+      return { success: true, state: this.getState() };
+    }
+
+    // Prevent stale blockbuster completion while a film is actively streaming
+    if (requestedStage === 'BLOCKBUSTER_VOTING' && this.movie && this.movie.status === 'streaming' && (this.movie.currentStep || 1) < 50) {
+      console.log(`[CinemaEngine] completeStage: rejected stale BLOCKBUSTER_VOTING completion for streaming movie (Step ${this.movie.currentStep}). Returning live state.`);
       return { success: true, state: this.getState() };
     }
 

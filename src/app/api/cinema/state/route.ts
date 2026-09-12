@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     cinemaEngine.phase = liveState.phase;
   }
 
-  const isTransitionPhase = liveState?.phase === 'BLOCKBUSTER_VOTING' || liveState?.phase === 'GENERATING';
+  const isTransitionPhase = (liveState?.phase === 'BLOCKBUSTER_VOTING' || liveState?.phase === 'GENERATING') && activeMovie?.status === 'completed';
 
   // If the live-state movie id points at an archived/completed movie (stale pointer),
   // fall back to the newest streaming/paused movie so the same old film is never resurrected.
@@ -74,6 +74,15 @@ export async function GET(request: Request) {
     if (dbActive) {
       activeMovie = dbActive;
     }
+  }
+
+  // If activeMovie is actively streaming, correct any corrupt blockbuster state
+  if (activeMovie && activeMovie.status === 'streaming' && (activeMovie.currentStep || 1) < 50) {
+    if (liveState?.phase === 'BLOCKBUSTER_VOTING') {
+      if (liveState) liveState.phase = 'PLAYING';
+      cinemaEngine.phase = 'PLAYING';
+    }
+    cinemaEngine.blockbusterWinner = null;
   }
 
   // Fallback to in-memory engine movie if available
@@ -227,13 +236,13 @@ export async function GET(request: Request) {
     videoResolution: cinemaEngine.videoResolution,
     blockbusterCandidates: cinemaEngine.blockbusterCandidates,
     blockbusterVoteCounts: cinemaEngine.blockbusterVoteCounts,
-    blockbusterWinner: cinemaEngine.blockbusterWinner ? {
+    blockbusterWinner: (activeMovie?.status === 'streaming' && (activeMovie.currentStep || 1) < 50) ? null : (cinemaEngine.blockbusterWinner ? {
       id: cinemaEngine.blockbusterWinner.id,
       title: cinemaEngine.blockbusterWinner.title,
       logline: cinemaEngine.blockbusterWinner.logline,
       genre: cinemaEngine.blockbusterWinner.genre,
       premise: cinemaEngine.blockbusterWinner.premise
-    } : (liveState?.blockbusterWinner || null),
+    } : (liveState?.blockbusterWinner || null)),
     blockbusterUserVoted,
     activeAd: liveState?.activeAd || null,
     adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },

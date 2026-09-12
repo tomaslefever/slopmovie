@@ -1341,9 +1341,16 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
       upsertData.worker_heartbeat = payload.workerHeartbeat || nowIso;
     }
 
-    await supabase.from('cinema_state').upsert(upsertData, { onConflict: 'id' });
-  } catch {
-    // Non-blocking fallback
+    const { error: upsertErr } = await supabase.from('cinema_state').upsert(upsertData, { onConflict: 'id' });
+    if (upsertErr) {
+      // Fallback: try update directly in case upsert is blocked by conflict constraints
+      const { error: updateErr } = await supabase.from('cinema_state').update(upsertData).eq('id', 'active_session');
+      if (updateErr) {
+        logSupabaseError('persistLiveCinemaState cinema_state', updateErr);
+      }
+    }
+  } catch (err) {
+    console.warn('[Supabase] Non-blocking exception in persistLiveCinemaState cinema_state:', err);
   }
 
   // 2. Dual-write to public.movies (existing table with RLS and realtime publication)
@@ -1390,18 +1397,18 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
       .from('movies')
       .update({
         current_step: payload.currentStep,
-        status: payload.isPaused ? 'paused' : 'streaming',
+        status: payload.isPaused ? 'paused' : (payload.phase === 'BLOCKBUSTER_VOTING' ? 'completed' : 'streaming'),
         bible: updatedBible
       })
       .eq('id', payload.movieId);
-  } catch {
-    // Non-blocking
+  } catch (err) {
+    console.warn('[Supabase] Non-blocking exception in persistLiveCinemaState movies:', err);
   }
 }
 
 /**
  * Load live cinema state from Supabase with in-memory caching (2.5s TTL)
- * Checks public.cinema_state first, falling back to public.movies.bible.liveState.
+ * Checks public.cinema_state first, verifying it belongs to an active movie or falling back to movies.bible.liveState.
  */
 export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveCinemaStateRecord | null> {
   const now = Date.now();
@@ -1420,45 +1427,62 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
     }
     const { data, error } = await query.maybeSingle();
     if (!error && data) {
-      const record: LiveCinemaStateRecord = {
-        movieId: data.movie_id,
-        phase: data.phase as PlaybackPhase,
-        timeRemaining: data.time_remaining,
-        currentStep: data.current_step,
-        totalAudience: data.total_audience,
-        votesA: data.votes_a,
-        votesB: data.votes_b,
-        isLive: data.is_live,
-        isPaused: data.is_paused,
-        isGenerationPaused: data.is_generation_paused,
-        videoModel: data.video_model ?? null,
-        videoResolution: data.video_resolution ?? null,
-        blockbusterCandidates: data.blockbuster_candidates || [],
-        blockbusterVoteCounts: data.blockbuster_vote_counts || null,
-        blockbusterWinner: data.blockbuster_winner || null,
-        adsConfig: data.ads_config,
-        selectedOption: data.selected_option,
-        wasRandomPick: data.was_random_pick,
-        phaseStartedAt: data.phase_started_at,
-        phaseEndsAt: data.phase_ends_at,
-        phaseDuration: data.phase_duration,
-        workerId: data.worker_id,
-        workerHeartbeat: data.worker_heartbeat,
-        updatedAt: data.updated_at
-      };
+      // If movieId wasn't explicitly requested, check if the cinema_state row references
+      // a defunct/completed movie when a real streaming movie exists in public.movies
+      let isStaleMovieRef = false;
+      if (!movieId && data.movie_id) {
+        const { data: movieRow } = await supabase
+          .from('movies')
+          .select('status')
+          .eq('id', data.movie_id)
+          .maybeSingle();
 
-      memoryCache.liveCinemaState = {
-        data: record,
-        expiresAt: now + 2500 // 2.5s TTL
-      };
+        if (movieRow?.status === 'completed' && data.phase !== 'BLOCKBUSTER_VOTING' && data.phase !== 'GENERATING') {
+          isStaleMovieRef = true;
+        }
+      }
 
-      return record;
+      if (!isStaleMovieRef) {
+        const record: LiveCinemaStateRecord = {
+          movieId: data.movie_id,
+          phase: data.phase as PlaybackPhase,
+          timeRemaining: data.time_remaining,
+          currentStep: data.current_step,
+          totalAudience: data.total_audience,
+          votesA: data.votes_a,
+          votesB: data.votes_b,
+          isLive: data.is_live,
+          isPaused: data.is_paused,
+          isGenerationPaused: data.is_generation_paused,
+          videoModel: data.video_model ?? null,
+          videoResolution: data.video_resolution ?? null,
+          blockbusterCandidates: data.blockbuster_candidates || [],
+          blockbusterVoteCounts: data.blockbuster_vote_counts || null,
+          blockbusterWinner: data.blockbuster_winner || null,
+          adsConfig: data.ads_config,
+          selectedOption: data.selected_option,
+          wasRandomPick: data.was_random_pick,
+          phaseStartedAt: data.phase_started_at,
+          phaseEndsAt: data.phase_ends_at,
+          phaseDuration: data.phase_duration,
+          workerId: data.worker_id,
+          workerHeartbeat: data.worker_heartbeat,
+          updatedAt: data.updated_at
+        };
+
+        memoryCache.liveCinemaState = {
+          data: record,
+          expiresAt: now + 2500 // 2.5s TTL
+        };
+
+        return record;
+      }
     }
-  } catch {
-    // Non-blocking fallback
+  } catch (err) {
+    console.warn('[Supabase] Exception in loadLiveCinemaStateFromDb cinema_state:', err);
   }
 
-  // 2. Fallback to movies.bible.liveState
+  // 2. Fallback to movies.bible.liveState from the active streaming movie
   const fallbackRecord = await loadBibleLiveState(supabase, movieId);
   if (fallbackRecord) {
     memoryCache.liveCinemaState = {
