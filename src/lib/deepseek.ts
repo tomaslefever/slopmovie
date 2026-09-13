@@ -21,37 +21,99 @@ function trackDeepseekUsage(label: string, usage?: { prompt_tokens?: number; com
   console.log(`[DeepSeek/NVIDIA tokens] ${label}: prompt=${usage.prompt_tokens ?? '?'} completion=${usage.completion_tokens ?? '?'} (cumulative: ${cumulativePromptTokens}/${cumulativeCompletionTokens})`);
 }
 
-// ── NVIDIA NIM / LLM Configuration ──────────────────────────────────────────
-const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
-const DEFAULT_MODEL = "nvidia/ising-calibration-1.5-31b";
+// ── Provider & LLM Configuration ──────────────────────────────────────────
+const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-export const CANDIDATE_MODELS = [
-  "nvidia/ising-calibration-1.5-31b",
-  "nvidia/nemotron-3-super-120b-a12b",
-  "meta/llama-3.2-11b-vision-instruct"
-];
+export interface ProviderEndpoint {
+  name: string;
+  endpoint: string;
+  apiKey: string;
+  models: string[];
+  headers?: Record<string, string>;
+}
+
+export function getAvailableProviders(): ProviderEndpoint[] {
+  const providers: ProviderEndpoint[] = [];
+
+  const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (openrouterKey) {
+    const customModel = process.env.DEEPSEEK_MODEL;
+    const models = customModel && customModel.includes('/')
+      ? [customModel, "nvidia/nemotron-3-super-120b-a12b:free", "openrouter/free", "nvidia/nemotron-3.5-lightning:free"]
+      : [
+          "nvidia/nemotron-3-super-120b-a12b:free",
+          "openrouter/free",
+          "nvidia/nemotron-3.5-lightning:free",
+          "nex-agi/nex-n2.5-mini:free"
+        ];
+
+    providers.push({
+      name: "OpenRouter",
+      endpoint: OPENROUTER_BASE_URL,
+      apiKey: openrouterKey,
+      models,
+      headers: {
+        "HTTP-Referer": "https://slopmovie.com",
+        "X-Title": "SlopMovie Cinema Engine"
+      }
+    });
+  }
+
+  const nvidiaKey = (process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY)?.trim();
+  if (nvidiaKey) {
+    const customEndpoint = process.env.DEEPSEEK_BASE_URL || process.env.NVIDIA_BASE_URL;
+    const cleanEndpoint = customEndpoint
+      ? (customEndpoint.trim().replace(/\/+$/, '').endsWith('/chat/completions')
+          ? customEndpoint.trim().replace(/\/+$/, '')
+          : `${customEndpoint.trim().replace(/\/+$/, '')}/chat/completions`)
+      : NVIDIA_BASE_URL;
+
+    const customModel = process.env.DEEPSEEK_MODEL;
+    const models = customModel && !customModel.includes('deepseek-v4')
+      ? [customModel, "nvidia/ising-calibration-1.5-31b", "nvidia/nemotron-3-super-120b-a12b"]
+      : [
+          "nvidia/ising-calibration-1.5-31b",
+          "nvidia/nemotron-3-super-120b-a12b",
+          "meta/llama-3.2-11b-vision-instruct"
+        ];
+
+    providers.push({
+      name: "NVIDIA NIM",
+      endpoint: cleanEndpoint,
+      apiKey: nvidiaKey,
+      models
+    });
+  }
+
+  return providers;
+}
 
 export function getLlmApiKey(): string | undefined {
-  const key = process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY;
-  return key?.trim() || undefined;
+  return process.env.OPENROUTER_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY;
 }
 
 export function getLlmEndpoint(): string {
   const custom = process.env.DEEPSEEK_BASE_URL || process.env.NVIDIA_BASE_URL;
-  if (!custom) {
-    return `${NVIDIA_BASE_URL}/chat/completions`;
+  if (custom) {
+    const clean = custom.trim().replace(/\/+$/, '');
+    return clean.endsWith('/chat/completions') ? clean : `${clean}/chat/completions`;
   }
-  const clean = custom.trim().replace(/\/+$/, '');
-  return clean.endsWith('/chat/completions') ? clean : `${clean}/chat/completions`;
+  if (process.env.OPENROUTER_API_KEY) {
+    return OPENROUTER_BASE_URL;
+  }
+  return NVIDIA_BASE_URL;
 }
 
 export function getLlmModel(): string {
   const custom = process.env.DEEPSEEK_MODEL;
-  // If the environment contains the slow legacy deepseek-v4 model, bypass it and use the high-speed model
-  if (!custom || custom.includes('deepseek-v4') || custom.includes('deepseek-pro')) {
-    return DEFAULT_MODEL;
+  if (custom && !custom.includes('deepseek-v4')) {
+    return custom;
   }
-  return custom;
+  if (process.env.OPENROUTER_API_KEY) {
+    return "nvidia/nemotron-3-super-120b-a12b:free";
+  }
+  return "nvidia/ising-calibration-1.5-31b";
 }
 
 export function cleanAndParseJson<T = any>(raw: string): T {
@@ -134,83 +196,80 @@ export interface CallLlmParams {
 }
 
 export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | null> {
-  const apiKey = getLlmApiKey();
-  if (!apiKey) return null;
+  const providers = getAvailableProviders();
+  if (providers.length === 0) return null;
 
-  const endpoint = getLlmEndpoint();
-  const primaryModel = getLlmModel();
   const timeoutMs = params.timeoutMs ?? 15000;
 
-  // Build model try-list: primary first, followed by remaining candidates
-  const modelsToTry = [
-    primaryModel,
-    ...CANDIDATE_MODELS.filter(m => m !== primaryModel)
-  ];
-
-  for (const model of modelsToTry) {
-    try {
-      const isNvidia = endpoint.includes('nvidia.com');
-      const requestBody: Record<string, any> = {
-        model,
-        messages: params.messages,
-        temperature: params.temperature ?? 0.8,
-        top_p: params.top_p ?? 0.95,
-        max_tokens: params.max_tokens ?? 1500,
-        stream: false
-      };
-
-      if (params.seed !== undefined || isNvidia) {
-        requestBody.seed = params.seed ?? Math.floor(Math.random() * 2147483647);
-      }
-      if (isNvidia) {
-        requestBody.chat_template_kwargs = { thinking: false };
-      }
-
-      if (params.tools && params.tools.length > 0) {
-        requestBody.tools = params.tools;
-        requestBody.tool_choice = params.tool_choice || {
-          type: "function",
-          function: { name: params.tools[0].function?.name }
+  for (const provider of providers) {
+    for (const model of provider.models) {
+      try {
+        const isNvidia = provider.endpoint.includes('nvidia.com');
+        const requestBody: Record<string, any> = {
+          model,
+          messages: params.messages,
+          temperature: params.temperature ?? 0.8,
+          top_p: params.top_p ?? 0.95,
+          max_tokens: params.max_tokens ?? 1500,
+          stream: false
         };
-      } else if (params.response_format) {
-        requestBody.response_format = params.response_format;
-      } else {
-        requestBody.response_format = { type: "json_object" };
-      }
 
-      const response = await fetch(endpoint, {
-        signal: AbortSignal.timeout(timeoutMs),
-        method: "POST",
-        headers: {
+        if (params.seed !== undefined || isNvidia) {
+          requestBody.seed = params.seed ?? Math.floor(Math.random() * 2147483647);
+        }
+        if (isNvidia) {
+          requestBody.chat_template_kwargs = { thinking: false };
+        }
+
+        if (params.tools && params.tools.length > 0) {
+          requestBody.tools = params.tools;
+          requestBody.tool_choice = params.tool_choice || {
+            type: "function",
+            function: { name: params.tools[0].function?.name }
+          };
+        } else if (params.response_format) {
+          requestBody.response_format = params.response_format;
+        } else {
+          requestBody.response_format = { type: "json_object" };
+        }
+
+        const headers: Record<string, string> = {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(requestBody)
-      });
+          "Authorization": `Bearer ${provider.apiKey}`,
+          ...(provider.headers || {})
+        };
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        console.warn(`[NVIDIA LLM ${params.label}] Model '${model}' HTTP ${response.status}: ${errorText.slice(0, 100)} - trying next candidate...`);
-        continue;
+        const response = await fetch(provider.endpoint, {
+          signal: AbortSignal.timeout(timeoutMs),
+          method: "POST",
+          headers,
+          body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          console.warn(`[LLM ${provider.name} ${params.label}] Model '${model}' HTTP ${response.status}: ${errorText.slice(0, 100)} - trying next candidate...`);
+          continue;
+        }
+
+        const data = await response.json();
+        trackDeepseekUsage(`${params.label} [${provider.name}:${model}]`, data.usage);
+
+        const choiceMsg = data.choices?.[0]?.message;
+        const toolArgs = choiceMsg?.tool_calls?.[0]?.function?.arguments;
+        const rawContent = toolArgs || choiceMsg?.content;
+
+        if (!rawContent || typeof rawContent !== 'string') continue;
+
+        const parsed = cleanAndParseJson<T>(rawContent);
+        if (parsed) return parsed;
+      } catch (err: any) {
+        console.warn(`[LLM ${provider.name} ${params.label}] Model '${model}' error/timeout: ${err?.message || err} - trying fallback...`);
       }
-
-      const data = await response.json();
-      trackDeepseekUsage(`${params.label} [${model}]`, data.usage);
-
-      const choiceMsg = data.choices?.[0]?.message;
-      const toolArgs = choiceMsg?.tool_calls?.[0]?.function?.arguments;
-      const rawContent = toolArgs || choiceMsg?.content;
-
-      if (!rawContent || typeof rawContent !== 'string') continue;
-
-      const parsed = cleanAndParseJson<T>(rawContent);
-      if (parsed) return parsed;
-    } catch (err: any) {
-      console.warn(`[NVIDIA LLM ${params.label}] Model '${model}' error/timeout: ${err?.message || err} - trying fallback...`);
     }
   }
 
-  console.error(`[NVIDIA LLM ${params.label}] All model candidates failed.`);
+  console.error(`[LLM ${params.label}] All provider model candidates failed.`);
   return null;
 }
 
