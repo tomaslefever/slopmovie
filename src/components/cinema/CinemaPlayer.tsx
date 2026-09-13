@@ -107,11 +107,14 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     return list;
   }, [activeStep.videoUrl, activeStep.videoUrl2, activeStep.hasMidRollAd, activeStep.adVideoUrl, getSanitizedVideoUrl]);
 
-  // Dual-Buffer Seamless A/B Player state
+  // dual-Buffer Seamless A/B Player state
   const [activeSlot, setActiveSlot] = useState<'A' | 'B'>('A');
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number>(0);
   const [slotSrcA, setSlotSrcA] = useState<string>(() => segments[0]?.url || fallbackUrl);
   const [slotSrcB, setSlotSrcB] = useState<string>(() => segments[1]?.url || segments[0]?.url || fallbackUrl);
+
+  const isMutedRef = useRef<boolean>(isMuted);
+  isMutedRef.current = isMuted;
 
   const playbackEndedNotifiedRef = useRef<boolean>(false);
   const activeSlotRef = useRef<'A' | 'B'>('A');
@@ -123,7 +126,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
   const isOptionVoting = phase === 'VOTING' || phase === 'OPTION_VOTING';
 
-  // Initialize slots when scene / activeStep changes
+  // Initialize slots when scene / activeStep changes (NOT on mute toggle)
   useEffect(() => {
     playbackEndedNotifiedRef.current = false;
     setCurrentSegmentIndex(0);
@@ -137,12 +140,13 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
     const videoA = videoRefA.current;
     const videoB = videoRefB.current;
+    const isFirstAd = segments[0]?.type === 'ad';
 
     if (videoA) {
       videoA.src = src0;
       videoA.currentTime = 0;
       videoA.loop = false;
-      videoA.muted = isOptionVoting ? true : isMuted;
+      videoA.muted = isOptionVoting ? true : (isFirstAd ? false : isMutedRef.current);
       videoA.play().catch(() => {
         videoA.muted = true;
         videoA.play().catch(() => {});
@@ -157,7 +161,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       videoB.preload = "auto";
       videoB.load();
     }
-  }, [activeStep.stepNumber, activeStep.videoUrl, activeStep.videoUrl2, isMuted, isOptionVoting, fallbackUrl, segments]);
+  }, [activeStep.stepNumber, activeStep.videoUrl, activeStep.videoUrl2, activeStep.hasMidRollAd, activeStep.adVideoUrl, isOptionVoting, fallbackUrl]);
 
   // Handle seamless transition when a slot finishes playing
   const handleSlotEnded = React.useCallback((finishedSlot: 'A' | 'B') => {
@@ -174,6 +178,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         const nextSlot = finishedSlot === 'A' ? 'B' : 'A';
         const targetVideo = nextSlot === 'A' ? videoRefA.current : videoRefB.current;
         const oldVideo = finishedSlot === 'A' ? videoRefA.current : videoRefB.current;
+        const isNextAd = allSegments[nextIdx]?.type === 'ad';
 
         if (oldVideo) {
           oldVideo.pause();
@@ -182,7 +187,8 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
         if (targetVideo) {
           targetVideo.currentTime = 0;
-          targetVideo.muted = isMuted;
+          // Ads MUST play with sound!
+          targetVideo.muted = isNextAd ? false : isMutedRef.current;
           targetVideo.play().catch(() => {
             targetVideo.muted = true;
             targetVideo.play().catch(() => {});
@@ -232,7 +238,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         activeVideo.play().catch(() => {});
       }
     }
-  }, [phase, isMuted, onPlaybackEnded]);
+  }, [phase, onPlaybackEnded]);
 
   // Video error fallback rotation
   const handleVideoError = React.useCallback((slot: 'A' | 'B') => {
@@ -266,6 +272,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
     if (!activeVideo) return;
 
+    const currentSegment = segments[currentSegmentIndex];
+    const isAdSegment = currentSegment?.type === 'ad';
+
     if (phase === 'COMMERCIAL_BREAK') {
       activeVideo.pause();
       activeVideo.muted = true;
@@ -277,12 +286,15 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       }
     } else if (phase === 'PLAYING') {
       activeVideo.loop = false;
-      activeVideo.muted = isMuted;
+      activeVideo.muted = isAdSegment ? false : isMuted;
       if (activeVideo.paused && !isPaused) {
-        activeVideo.play().catch(() => {});
+        activeVideo.play().catch(() => {
+          activeVideo.muted = true;
+          activeVideo.play().catch(() => {});
+        });
       }
     }
-  }, [phase, activeSlot, isMuted, isPaused, isOptionVoting]);
+  }, [phase, activeSlot, isMuted, isPaused, isOptionVoting, currentSegmentIndex, segments]);
 
   // Pause / resume stream
   useEffect(() => {
