@@ -59,7 +59,51 @@ export function cleanAndParseJson<T = any>(raw: string): T {
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
   }
-  return JSON.parse(cleaned);
+
+  // 1. Attempt standard JSON.parse
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    // 2. Intelligent JSON repair for truncated strings or unclosed braces
+    try {
+      let str = cleaned;
+      let inString = false;
+      let escaped = false;
+      let openBraces = 0;
+      let openBrackets = 0;
+
+      for (let i = 0; i < str.length; i++) {
+        const c = str[i];
+        if (c === '\\' && inString) {
+          escaped = !escaped;
+          continue;
+        }
+        if (c === '"' && !escaped) {
+          inString = !inString;
+        } else if (!inString) {
+          if (c === '{') openBraces++;
+          else if (c === '}') openBraces--;
+          else if (c === '[') openBrackets++;
+          else if (c === ']') openBrackets--;
+        }
+        escaped = false;
+      }
+
+      if (inString) str += '"';
+      while (openBrackets > 0) {
+        str += ']';
+        openBrackets--;
+      }
+      while (openBraces > 0) {
+        str += '}';
+        openBraces--;
+      }
+
+      return JSON.parse(str);
+    } catch {
+      throw err;
+    }
+  }
 }
 
 export interface CallLlmParams {
@@ -69,6 +113,8 @@ export interface CallLlmParams {
   max_tokens?: number;
   seed?: number;
   response_format?: { type: string };
+  tools?: any[];
+  tool_choice?: any;
   label: string;
   timeoutMs?: number;
 }
@@ -79,7 +125,7 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
 
   const endpoint = getLlmEndpoint();
   const primaryModel = getLlmModel();
-  const timeoutMs = params.timeoutMs ?? 12000;
+  const timeoutMs = params.timeoutMs ?? 15000;
 
   // Build model try-list: primary first, followed by remaining candidates
   const modelsToTry = [
@@ -95,7 +141,7 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
         messages: params.messages,
         temperature: params.temperature ?? 0.8,
         top_p: params.top_p ?? 0.95,
-        max_tokens: params.max_tokens ?? 1000,
+        max_tokens: params.max_tokens ?? 1500,
         stream: false
       };
 
@@ -105,7 +151,14 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
       if (isNvidia) {
         requestBody.chat_template_kwargs = { thinking: false };
       }
-      if (params.response_format) {
+
+      if (params.tools && params.tools.length > 0) {
+        requestBody.tools = params.tools;
+        requestBody.tool_choice = params.tool_choice || {
+          type: "function",
+          function: { name: params.tools[0].function?.name }
+        };
+      } else if (params.response_format) {
         requestBody.response_format = params.response_format;
       } else {
         requestBody.response_format = { type: "json_object" };
@@ -129,10 +182,14 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
 
       const data = await response.json();
       trackDeepseekUsage(`${params.label} [${model}]`, data.usage);
-      const content = data.choices?.[0]?.message?.content;
-      if (!content || typeof content !== 'string') continue;
 
-      const parsed = cleanAndParseJson<T>(content);
+      const choiceMsg = data.choices?.[0]?.message;
+      const toolArgs = choiceMsg?.tool_calls?.[0]?.function?.arguments;
+      const rawContent = toolArgs || choiceMsg?.content;
+
+      if (!rawContent || typeof rawContent !== 'string') continue;
+
+      const parsed = cleanAndParseJson<T>(rawContent);
       if (parsed) return parsed;
     } catch (err: any) {
       console.warn(`[NVIDIA LLM ${params.label}] Model '${model}' error/timeout: ${err?.message || err} - trying fallback...`);
@@ -2854,19 +2911,68 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
       // STATIC system prompt (no per-request interpolation): DeepSeek's context
       // caching reuses the cached prefix across all 46+ scene calls, slashing
       // input-token cost. All dynamic content lives in the user message.
-      const systemPrompt = `You are an elite Interactive Cinema AI Director writing ONE 30-second continuous scene (two 15s shots: Shot 1 Opening and Shot 2 Climax) of a 50-step interactive film for MiniMax H3-Max (480p 16:9).
-Rules:
-1. ALL output in cinematic ENGLISH.
-2. "newCharacter" (with voicePrompt) & "newProp" ONLY when a NEW character enters; otherwise null.
-3. "activeProps": only prop IDs physically in THIS scene; empty [] otherwise.
-4. "activeCharacters": only character IDs on screen.
-5. visualPrompt: 6-layer Cinematique prompt (Framing, Subject, Depth, Lighting/Kelvin, Optics/Stock, Atmosphere 24fps).
-6. cameraMotionPrompt: 4-layer Cinematique motion (Rig, Trajectory, Focus pull, 24fps blur).
-7. visualPrompt2 & cameraMotionPrompt2: Shot 2 dramatic consequence/climax.
-8. "options": Two genuinely NEW decision options with distinct stakes and trade-offs.
-
-Respond ONLY with JSON:
-{"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":""},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":""}]}`;
+      const stepTool = {
+        type: "function",
+        function: {
+          name: "create_cinema_step",
+          description: "Formulates the next scene, Cinematique visual prompts, and 2 decision options in English.",
+          parameters: {
+            type: "object",
+            properties: {
+              stepNumber: { type: "integer" },
+              title: { type: "string" },
+              synopsis: { type: "string" },
+              dialogueSnippet: { type: "string" },
+              voiceDirection: { type: "string" },
+              visualPrompt: { type: "string" },
+              cameraMotionPrompt: { type: "string" },
+              visualPrompt2: { type: "string" },
+              cameraMotionPrompt2: { type: "string" },
+              activeCharacters: { type: "array", items: { type: "string" } },
+              activeProps: { type: "array", items: { type: "string" } },
+              newCharacter: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  name: { type: "string" },
+                  role: { type: "string" },
+                  visualTraits: { type: "string" },
+                  clothing: { type: "string" },
+                  personality: { type: "string" },
+                  voiceStyle: { type: "string" },
+                  voicePrompt: { type: "string" }
+                }
+              },
+              newProp: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  name: { type: "string" },
+                  description: { type: "string" },
+                  visualAppearance: { type: "string" },
+                  narrativeSignificance: { type: "string" }
+                }
+              },
+              environment: { type: "string" },
+              options: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string", enum: ["A", "B"] },
+                    title: { type: "string" },
+                    text: { type: "string" },
+                    dramaticHook: { type: "string" },
+                    expectedConsequence: { type: "string" }
+                  },
+                  required: ["id", "title", "text", "dramaticHook", "expectedConsequence"]
+                }
+              }
+            },
+            required: ["title", "synopsis", "visualPrompt", "options"]
+          }
+        }
+      };
 
       // Compact ledger of recent voting options (last 6 steps)
       const usedOptionsLedger = (() => {
@@ -2898,12 +3004,14 @@ ${influenceDirective}`;
       const parsed = await callLlmJson<any>({
         label: 'next-step',
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: "You are an elite Interactive Cinema AI Director. Formulate the next scene in English by calling create_cinema_step with the required parameters." },
           { role: "user", content: userContext }
         ],
-        temperature: 1,
+        tools: [stepTool],
+        tool_choice: { type: "function", function: { name: "create_cinema_step" } },
+        temperature: 0.8,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 650,
+        max_tokens: 1500,
         timeoutMs: 25000
       });
 
