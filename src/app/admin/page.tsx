@@ -113,6 +113,11 @@ export default function AdminDashboardPage() {
   const [bulkEditStatus, setBulkEditStatus] = useState('');
   const [bulkEditTagline, setBulkEditTagline] = useState('');
 
+  // Viewing movie scenes modal state
+  const [viewingMovieScenes, setViewingMovieScenes] = useState<any | null>(null);
+  const [isLoadingMovieScenes, setIsLoadingMovieScenes] = useState(false);
+  const [sceneSearchQuery, setSceneSearchQuery] = useState('');
+
   // Stats state
   const [stats, setStats] = useState<{ visitsByDay: { date: string; count: number }[]; totalVisits: number; todayVisits: number; activeViewers: number } | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
@@ -931,6 +936,35 @@ export default function AdminDashboardPage() {
       }
     } catch {
       showFeedback('Network error deleting film');
+    }
+  };
+
+  // Open movie scenes modal and fetch full authoritative steps
+  const handleOpenMovieScenes = async (movie: any) => {
+    audioCues.playClick();
+    setSceneSearchQuery('');
+    setViewingMovieScenes(movie);
+
+    setIsLoadingMovieScenes(true);
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'get_movie_details',
+          movieId: movie.id
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.movie) {
+          setViewingMovieScenes(data.movie);
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching movie steps:', err);
+    } finally {
+      setIsLoadingMovieScenes(false);
     }
   };
 
@@ -2757,6 +2791,15 @@ export default function AdminDashboardPage() {
 
                           {/* Individual Actions */}
                           <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center">
+                            <button
+                              onClick={() => handleOpenMovieScenes(movie)}
+                              className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500 text-purple-300 hover:text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-purple-500/30 active:scale-95"
+                              title="View all scenes and narrative steps of this movie"
+                            >
+                              <Layers className="w-3 h-3" />
+                              <span>Scenes ({stepsCount})</span>
+                            </button>
+
                             {!isLive && (
                               <button
                                 onClick={() => handleSwitchMovie(movie.id, 1)}
@@ -3026,6 +3069,201 @@ export default function AdminDashboardPage() {
                         </button>
                       </div>
                     </form>
+                  </div>
+                </div>
+              )}
+              {/* Movie Scenes / Steps Inspection Modal */}
+              {viewingMovieScenes && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
+                  <div className="max-w-4xl w-full bg-neutral-950 border border-purple-500/40 rounded-3xl p-6 sm:p-8 space-y-6 shadow-[0_0_60px_rgba(168,85,247,0.25)] max-h-[90vh] flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4 flex-shrink-0">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                            <Layers className="w-5 h-5" />
+                          </span>
+                          <h3 className="text-base sm:text-lg font-black text-white font-mono truncate">
+                            {viewingMovieScenes.title}
+                          </h3>
+                          <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-[10px] font-bold">
+                            {viewingMovieScenes.genre || 'Sci-Fi'}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-neutral-300 font-mono text-[10px]">
+                            {viewingMovieScenes.steps?.length || viewingMovieScenes.totalSteps || 0} Scenes
+                          </span>
+                          {cinemaState?.movie?.id === viewingMovieScenes.id && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono text-[10px] font-bold animate-pulse">
+                              🔴 ON AIR NOW
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-neutral-400 line-clamp-2 max-w-2xl font-mono pt-1">
+                          {viewingMovieScenes.tagline || viewingMovieScenes.initialPlot || 'No plot provided.'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {cinemaState?.movie?.id !== viewingMovieScenes.id && (
+                          <button
+                            onClick={() => {
+                              handleSwitchMovie(viewingMovieScenes.id, 1);
+                              setViewingMovieScenes(null);
+                            }}
+                            disabled={isSwitchingMovie}
+                            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] active:scale-95"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-black" />
+                            <span>Put on Air</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setViewingMovieScenes(null)}
+                          className="p-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+                          title="Close scenes modal"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter & Search Bar */}
+                    <div className="flex items-center justify-between gap-3 flex-shrink-0">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={sceneSearchQuery}
+                          onChange={e => setSceneSearchQuery(e.target.value)}
+                          placeholder="Search scenes by step #, title, or dialogue..."
+                          className="w-full pl-10 pr-4 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-purple-400 focus:outline-none placeholder:text-neutral-600"
+                        />
+                      </div>
+                      {isLoadingMovieScenes && (
+                        <div className="flex items-center gap-2 text-xs font-mono text-purple-400 animate-pulse flex-shrink-0">
+                          <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                          <span>Loading scenes from Supabase...</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Scenes Grid */}
+                    <div className="overflow-y-auto custom-scrollbar flex-1 pr-1 space-y-3">
+                      {(() => {
+                        const rawSteps = viewingMovieScenes.steps || [];
+                        const filteredSteps = rawSteps.filter((s: any) => {
+                          if (!sceneSearchQuery.trim()) return true;
+                          const q = sceneSearchQuery.toLowerCase();
+                          const matchNum = `step ${s.stepNumber} #${s.stepNumber} ${s.stepNumber}`.includes(q);
+                          const matchTitle = (s.title || '').toLowerCase().includes(q);
+                          const matchSyn = (s.synopsis || '').toLowerCase().includes(q);
+                          const matchDiag = (s.dialogueSnippet || '').toLowerCase().includes(q);
+                          return matchNum || matchTitle || matchSyn || matchDiag;
+                        });
+
+                        if (filteredSteps.length === 0) {
+                          return (
+                            <div className="text-center py-12 text-neutral-500 font-mono text-xs space-y-2">
+                              <Film className="w-8 h-8 text-neutral-600 mx-auto" />
+                              <p>
+                                {isLoadingMovieScenes 
+                                  ? 'Fetching scenes from database...' 
+                                  : 'No scenes found matching the filter.'}
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {filteredSteps.map((step: any) => {
+                              const isLiveOnAir = cinemaState?.movie?.id === viewingMovieScenes.id && cinemaState?.movie?.currentStep === step.stepNumber;
+                              return (
+                                <div
+                                  key={step.stepNumber}
+                                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
+                                    isLiveOnAir
+                                      ? 'bg-amber-950/30 border-amber-500/60 shadow-[0_0_20px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/50'
+                                      : 'bg-black/60 border-white/10 hover:border-white/20'
+                                  }`}
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center space-x-2">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-black ${
+                                          isLiveOnAir ? 'bg-amber-500 text-black' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                        }`}>
+                                          STEP #{step.stepNumber}
+                                        </span>
+                                        {isLiveOnAir && (
+                                          <span className="text-[10px] font-mono font-bold text-amber-400 flex items-center gap-1 animate-pulse">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                            STREAMING
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] font-mono text-neutral-500">
+                                        {step.duration || 15}s
+                                      </span>
+                                    </div>
+
+                                    <h5 className="text-xs font-bold text-white font-mono leading-snug">
+                                      {step.title}
+                                    </h5>
+
+                                    <p className="text-[11px] text-neutral-400 line-clamp-3 leading-relaxed">
+                                      {step.synopsis}
+                                    </p>
+
+                                    {step.dialogueSnippet && (
+                                      <div className="p-2 rounded-lg bg-white/5 border border-white/5 text-[11px] text-neutral-300 italic font-mono">
+                                        &ldquo;{step.dialogueSnippet}&rdquo;
+                                      </div>
+                                    )}
+
+                                    {step.selectedOption && (
+                                      <div className="text-[10px] font-mono text-cyan-300">
+                                        Audience Choice: Option {step.selectedOption}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+                                    {step.videoUrl && (
+                                      <a
+                                        href={step.videoUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[10px] font-mono text-neutral-400 hover:text-white flex items-center gap-1 transition-colors"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                        <span>Video MP4</span>
+                                      </a>
+                                    )}
+
+                                    <button
+                                      onClick={() => {
+                                        handleSwitchMovie(viewingMovieScenes.id, step.stepNumber);
+                                        setViewingMovieScenes(null);
+                                      }}
+                                      disabled={isSwitchingMovie || isJumpingStep}
+                                      className={`px-3 py-1.5 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all ml-auto ${
+                                        isLiveOnAir
+                                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                          : 'bg-white/10 hover:bg-amber-500 hover:text-black text-white'
+                                      }`}
+                                    >
+                                      <PlayCircle className="w-3 h-3" />
+                                      <span>{isLiveOnAir ? 'On Air' : 'Broadcast Step'}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
               )}

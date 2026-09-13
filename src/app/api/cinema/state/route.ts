@@ -5,6 +5,7 @@ export const maxDuration = 60;
 import { 
   loadActiveMovieFromDb, 
   loadAllMoviesFromDb,
+  loadMovieByIdFromDb,
   loadLiveCinemaStateFromDb, 
   loadUserVoteForStep, 
   loadUserBlockbusterVote,
@@ -558,6 +559,21 @@ export async function POST(request: Request) {
         success: result.success,
         updatedCount: result.updatedCount,
         state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'get_movie_details') {
+      const { movieId } = body;
+      if (!movieId) {
+        return NextResponse.json({ error: 'movieId is required' }, { status: 400 });
+      }
+      const targetMovie = await loadMovieByIdFromDb(movieId);
+      if (!targetMovie) {
+        return NextResponse.json({ error: 'Movie not found' }, { status: 404 });
+      }
+      return NextResponse.json({
+        success: true,
+        movie: targetMovie
       });
     }
 

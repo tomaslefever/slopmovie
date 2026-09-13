@@ -550,7 +550,8 @@ async function loadStepsForMovies(
       .from('movie_steps')
       .select('movie_id, step_number, title, synopsis, duration, video_url, video_url2, thumbnail_url, options, selected_option, was_random_pick, created_at')
       .in('movie_id', movieIds)
-      .order('step_number', { ascending: true });
+      .order('step_number', { ascending: true })
+      .limit(10000);
 
     if (error) return stepsByMovie;
 
