@@ -413,15 +413,36 @@ export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | n
   if (!supabase) return null;
 
   try {
-    let query = supabase.from('movies').select('id, title, genre, tagline, initial_plot, master_arc_thread, status, current_step, total_steps, total_votes_cast, final_summary, final_synopsis, created_at, completed_at, bible');
+    let movies: any[] | null = null;
     if (movieId) {
-      query = query.eq('id', movieId);
+      const { data, error } = await supabase
+        .from('movies')
+        .select('id, title, genre, tagline, initial_plot, master_arc_thread, status, current_step, total_steps, total_votes_cast, final_summary, final_synopsis, created_at, completed_at, bible')
+        .eq('id', movieId)
+        .limit(1);
+      if (!error && data) movies = data;
     } else {
-      query = query.in('status', ['streaming', 'paused']).order('created_at', { ascending: false });
-    }
-    const { data: movies, error } = await query.limit(1);
+      // Prioritize active streaming movie first (the single authoritative live broadcast)
+      const { data: streamingData, error: streamErr } = await supabase
+        .from('movies')
+        .select('id, title, genre, tagline, initial_plot, master_arc_thread, status, current_step, total_steps, total_votes_cast, final_summary, final_synopsis, created_at, completed_at, bible')
+        .eq('status', 'streaming')
+        .limit(1);
 
-    if (error || !movies || movies.length === 0) return null;
+      if (!streamErr && streamingData && streamingData.length > 0) {
+        movies = streamingData;
+      } else {
+        const { data: fallbackData } = await supabase
+          .from('movies')
+          .select('id, title, genre, tagline, initial_plot, master_arc_thread, status, current_step, total_steps, total_votes_cast, final_summary, final_synopsis, created_at, completed_at, bible')
+          .in('status', ['streaming', 'paused'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (fallbackData) movies = fallbackData;
+      }
+    }
+
+    if (!movies || movies.length === 0) return null;
 
     const m = movies[0];
     const { data: steps } = await supabase

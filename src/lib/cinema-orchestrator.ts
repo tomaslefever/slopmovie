@@ -980,36 +980,62 @@ class CinemaOrchestrator {
     }
 
     if (this.phase === 'PLAYING') {
-      // 15 seconds clip has ended.
-      const currentStepNum = this.movie.currentStep;
+      const currentStepNum = this.movie.currentStep || 1;
+      const totalSteps = this.movie.totalSteps || TOTAL_STEPS;
 
-      // FIRST-SHOT UNINTERRUPTED PLAYBACK:
-      // Steps 1, 2, and 3 transition directly into the next scene without voting breaks,
-      // delivering exactly 1 minute (4 x 15s) of continuous cinematic storytelling.
-      // The first interactive audience voting only opens after Step 4 completes.
-      if (currentStepNum < 4 && this.movie.steps.some(s => s.stepNumber === currentStepNum + 1)) {
+      // 1. Check if the movie reached the end (50 steps)
+      if (currentStepNum >= totalSteps) {
+        this.movie.status = 'completed';
+        this.movie.completedAt = new Date().toISOString();
+
+        if (!this.movie.finalSummary) {
+          try {
+            this.addSystemMessage(`📜 Film complete! DeepSeek synthesizing 50-step narrative retrospective and master synopsis...`);
+            const finalReport = await generateMovieFinalSummaryWithDeepSeek(this.movie);
+            this.movie.finalSummary = finalReport.finalSummary;
+            this.movie.finalSynopsis = finalReport.finalSynopsis;
+          } catch (err) {
+            console.error("Error generating final summary:", err);
+          }
+        }
+
+        await persistMovie(this.movie);
+        if (!this.completedMovies.some(m => m.id === this.movie!.id)) {
+          this.completedMovies.push({ ...this.movie });
+        }
+
+        this.addSystemMessage(`🌟 MASTERPIECE COMPLETED! Definitive synopsis created. The full movie is now saved to the Cinema Gallery.`);
+        broadcastCinemaEvent('movie_completed', {
+          movie: this.movie
+        });
+
+        this.addSystemMessage(`🎟️ MASTERPIECE COMPLETE: Opening the NEXT BLOCKBUSTER audience vote...`);
+        try {
+          await this.prepareBlockbusterVoting();
+        } catch (err) {
+          console.error('[Cinema] Blockbuster voting preparation failed, auto-rotating:', err);
+          this.startNextBlockbusterMovie().catch((e) => console.error('[Cinema] Fallback rotation failed:', e));
+        }
+        return;
+      }
+
+      // 2. CONTINUOUS PLAYBACK WITHOUT VOTING OR REGENERATION:
+      // If the next step already exists in movie.steps, advance immediately to it without pausing to vote.
+      const nextStepExists = this.movie.steps.some(s => s.stepNumber === currentStepNum + 1);
+      if (nextStepExists) {
         const nextStepNum = currentStepNum + 1;
         this.movie.currentStep = nextStepNum;
         const nextStepObj = this.movie.steps.find(s => s.stepNumber === nextStepNum) || this.movie.steps[nextStepNum - 1];
         const duration = nextStepObj?.duration || 15;
 
         this.setPhase('PLAYING', duration);
-        if (nextStepNum === 2) {
-          this.addSystemMessage(`🎬 Scene 2/4: Establishing the protagonist & signature mission...`);
-        } else if (nextStepNum === 3) {
-          this.addSystemMessage(`🎬 Scene 3/4: A looming threat emerges... tensions rise!`);
-        } else if (nextStepNum === 4) {
-          this.addSystemMessage(`⚠️ SCENE 4/4: THE FIRST CONFLICT! The crisis explodes — the audience will decide the resolution!`);
-        } else {
-          this.addSystemMessage(`🎬 First-shot sequence continuing: Scene ${nextStepNum}/4 ("${nextStepObj?.title || 'Continuing'}")`);
-        }
+        this.addSystemMessage(`🎬 Continuing story: Scene ${nextStepNum}/${totalSteps} ("${nextStepObj?.title || 'Next Scene'}")`);
 
-        // Broadcast new_step so EVERY client (including late joiners) switches to the
-        // next prologue scene authoritatively — 4 x 15s = 1 minute uninterrupted.
+        // Broadcast new_step so all connected clients switch immediately to the next scene
         broadcastCinemaEvent('new_step', {
           step: nextStepObj,
           currentStep: nextStepNum,
-          totalSteps: this.movie.totalSteps || this.movie.steps.length,
+          totalSteps: totalSteps,
           phaseDuration: duration,
           phaseStartedAt: this.phaseStartedAt,
           phaseEndsAt: this.phaseEndsAt
@@ -1025,20 +1051,14 @@ class CinemaOrchestrator {
         return;
       }
 
-      // Ads are now seamlessly embedded in Block 2 (Mid-roll) within the scene itself.
-      // Scene completion transitions directly to audience voting!
+      // 3. DECISION FRONTIER REACHED:
+      // The next step does NOT exist yet. Open 10-second interactive audience voting!
       this.pendingPreGeneratedAd = null;
-
-      // Enter 10-second VOTING phase!
       this.setPhase('VOTING', 10);
       this.votesA = 0;
       this.votesB = 0;
       this.userVotes.clear();
-      if (currentStepNum === 4) {
-        this.addSystemMessage(`⚔️ FIRST AUDIENCE DECISION: The first conflict has arrived! Cast your vote now to decide the story's direction!`);
-      } else {
-        this.addSystemMessage(`⏳ TIME TO VOTE! You have 10 seconds to choose the next scene branch.`);
-      }
+      this.addSystemMessage(`⏳ TIME TO VOTE! You have 10 seconds to choose the next scene branch.`);
 
       broadcastCinemaEvent('phase_change', {
         phase: 'VOTING',
@@ -1052,7 +1072,6 @@ class CinemaOrchestrator {
     } 
     else if (this.phase === 'VOTING') {
       // 10-second voting has concluded -> Resolve winner
-      this.setPhase('GENERATING', 35); // 35s buffer for dual video synthesis, DeepSeek LLM generation and secret ballot reveal transitions
       this.blockbusterCandidates = [];
       this.blockbusterUserVotes.clear();
       this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
@@ -1083,18 +1102,6 @@ class CinemaOrchestrator {
       const winningOption = currentStep.options.find(o => o.id === chosenOption)
         || currentStep.options[0]
         || { id: chosenOption, title: `Option ${chosenOption}`, text: `Option ${chosenOption}`, votes: 0 };
-
-      // Broadcast phase change to GENERATING with the selected option
-      broadcastCinemaEvent('phase_change', {
-        phase: 'GENERATING',
-        timeRemaining: 0,
-        selectedOption: chosenOption,
-        wasRandomPick,
-        winningOption,
-        votesA: this.votesA,
-        votesB: this.votesB
-      });
-      await this.broadcastStateSnapshot(workerId);
 
       if (wasRandomPick) {
         this.addSystemMessage(`🎲 [TIE / RANDOM] Fate chose at random: OPTION ${chosenOption} ("${winningOption.title}")`);
@@ -1138,6 +1145,82 @@ class CinemaOrchestrator {
         }
         return;
       }
+
+      // REPLAY MODE: Instant clip selection and direct PLAYING transition (zero GENERATING loader)
+      if (this.isGenerationPaused) {
+        const nextStepNum = currentStep.stepNumber + 1;
+        const twoVideos = await this.pickTwoArchivedOrMockVideos(nextStepNum);
+        const resolvedOptions = this.getProceduralOptionsForStep(nextStepNum);
+
+        const nextStep: MovieStep = {
+          stepNumber: nextStepNum,
+          title: winningOption.title || `Scene ${nextStepNum}`,
+          synopsis: winningOption.synopsis || `${winningOption.title}: ${winningOption.text}`,
+          dialogueSnippet: winningOption.dialogueSnippet,
+          subtitles: [],
+          voiceDirection: winningOption.voiceDirection || currentStep.voiceDirection,
+          visualPrompt: winningOption.visualPrompt || "",
+          cameraMotionPrompt: winningOption.cameraMotionPrompt || "",
+          visualPrompt2: winningOption.visualPrompt2 || "",
+          cameraMotionPrompt2: winningOption.cameraMotionPrompt2 || "",
+          videoUrl: twoVideos.shot1.videoUrl,
+          thumbnailUrl: twoVideos.shot1.thumbnailUrl,
+          videoUrl2: twoVideos.shot2.videoUrl,
+          duration: 30,
+          votingWindowSeconds: 10,
+          options: resolvedOptions,
+          activeCharacters: currentStep.activeCharacters,
+          activeProps: currentStep.activeProps,
+          environment: currentStep.environment,
+          createdAt: new Date().toISOString()
+        };
+
+        this.movie.steps.push(nextStep);
+        this.movie.currentStep = nextStep.stepNumber;
+
+        await persistMovie(this.movie);
+        await persistMovieStep(this.movie.id, nextStep);
+
+        this.votesA = 0;
+        this.votesB = 0;
+        this.userVotes.clear();
+        this.setPhase('PLAYING', 30);
+
+        this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Option ${chosenOption} ("${winningOption.title}") chosen. Continuing with Scene #${nextStepNum} directly.`);
+
+        broadcastCinemaEvent('new_step', {
+          step: nextStep,
+          currentStep: nextStep.stepNumber,
+          totalSteps: this.movie.totalSteps || TOTAL_STEPS,
+          phaseDuration: 30,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
+        });
+
+        broadcastCinemaEvent('phase_change', {
+          phase: 'PLAYING',
+          timeRemaining: 30,
+          phaseDuration: 30,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
+        });
+
+        await this.broadcastStateSnapshot(workerId);
+        return;
+      }
+
+      // REAL AI GENERATION MODE: Set GENERATING buffer (35s) for Fal.ai + DeepSeek
+      this.setPhase('GENERATING', 35);
+      broadcastCinemaEvent('phase_change', {
+        phase: 'GENERATING',
+        timeRemaining: 0,
+        selectedOption: chosenOption,
+        wasRandomPick,
+        winningOption,
+        votesA: this.votesA,
+        votesB: this.votesB
+      });
+      await this.broadcastStateSnapshot(workerId);
 
       // Rule: take the last 30 comments, pick ONE at random, and let it influence
       // exactly ONE of the two next options (the other follows the normal route).
@@ -2507,6 +2590,7 @@ class CinemaOrchestrator {
     }
 
     this.movie.currentStep = stepNumber;
+    this.isPaused = false;
     const duration = targetStep.duration || 15;
     this.setPhase('PLAYING', duration);
     this.votesA = 0;
@@ -2517,8 +2601,10 @@ class CinemaOrchestrator {
     this.blockbusterCandidates = [];
     this.blockbusterUserVotes.clear();
     this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
+    this.blockbusterWinner = null;
 
-    persistMovie(this.movie);
+    await persistMovie(this.movie);
+    await this.persistCurrentStateToSupabase();
 
     this.addSystemMessage(`⏮️ Director triggered manual replay of Step ${stepNumber}: "${targetStep.title}".`);
 
@@ -2568,7 +2654,7 @@ class CinemaOrchestrator {
       if (!this.completedMovies.some(m => m.id === this.movie!.id)) {
         this.completedMovies.unshift(this.movie);
       }
-      persistMovie(this.movie);
+      await persistMovie(this.movie);
     }
 
     // Sanitize all steps of targetMovie so videos play immediately without errors
@@ -2585,6 +2671,7 @@ class CinemaOrchestrator {
     targetMovie.currentStep = chosenStepNum;
     targetMovie.status = 'streaming';
     this.movie = targetMovie;
+    this.isPaused = false;
 
     const currentStepObj = targetMovie.steps.find(s => s.stepNumber === chosenStepNum) || targetMovie.steps[0];
     const duration = currentStepObj.duration || 15;
@@ -2597,8 +2684,10 @@ class CinemaOrchestrator {
     this.blockbusterCandidates = [];
     this.blockbusterUserVotes.clear();
     this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
+    this.blockbusterWinner = null;
 
-    persistMovie(this.movie);
+    await persistMovie(this.movie);
+    await this.persistCurrentStateToSupabase();
 
     this.addSystemMessage(`🎬 [DIRECTOR SWITCH] Active film switched to "${this.movie.title}" (Step ${chosenStepNum}).`);
 

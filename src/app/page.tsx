@@ -482,18 +482,27 @@ export default function CinemaStreamingPage() {
         setBlockbusterUserVoted(null);
         setBlockbusterWinner(null);
         if (payload.payload?.movie) {
+          const newMovie = payload.payload.movie;
+          const currentStepNum = newMovie.currentStep || 1;
+          const step = newMovie.steps?.find((s: any) => s.stepNumber === currentStepNum) || newMovie.steps?.[0];
+          const duration = step?.duration || 15;
           setCinemaState((prev) => {
             if (!prev) return prev;
             return {
               ...prev,
-              movie: payload.payload.movie,
-              activeStep: payload.payload.movie.steps[0],
+              movie: newMovie,
+              activeStep: step || prev.activeStep,
               phase: 'PLAYING',
-              timeRemaining: 15,
-              phaseEndsAt: Date.now() + 15000,
+              timeRemaining: duration,
+              phaseDuration: duration,
+              phaseEndsAt: Date.now() + (duration * 1000),
               votesA: 0,
               votesB: 0,
-              hasUserVoted: null
+              isPaused: false,
+              isLive: true,
+              hasUserVoted: null,
+              blockbusterCandidates: [],
+              blockbusterWinner: null
             };
           });
         }
