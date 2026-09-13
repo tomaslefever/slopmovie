@@ -70,11 +70,11 @@ export function getAvailableProviders(): ProviderEndpoint[] {
       : NVIDIA_BASE_URL;
 
     const customModel = process.env.DEEPSEEK_MODEL;
-    const models = customModel && !customModel.includes('deepseek-v4')
-      ? [customModel, "nvidia/ising-calibration-1.5-31b", "nvidia/nemotron-3-super-120b-a12b"]
+    const models = customModel && !customModel.includes('deepseek-v4') && !customModel.includes('ising')
+      ? [customModel, "nvidia/nemotron-3-super-120b-a12b", "nvidia/ising-calibration-1.5-31b"]
       : [
-          "nvidia/ising-calibration-1.5-31b",
           "nvidia/nemotron-3-super-120b-a12b",
+          "nvidia/ising-calibration-1.5-31b",
           "meta/llama-3.2-11b-vision-instruct"
         ];
 
@@ -107,13 +107,13 @@ export function getLlmEndpoint(): string {
 
 export function getLlmModel(): string {
   const custom = process.env.DEEPSEEK_MODEL;
-  if (custom && !custom.includes('deepseek-v4')) {
+  if (custom && !custom.includes('deepseek-v4') && !custom.includes('ising')) {
     return custom;
   }
   if (process.env.OPENROUTER_API_KEY) {
     return "nvidia/nemotron-3-super-120b-a12b:free";
   }
-  return "nvidia/ising-calibration-1.5-31b";
+  return "nvidia/nemotron-3-super-120b-a12b";
 }
 
 export function cleanAndParseJson<T = any>(raw: string): T {
