@@ -261,6 +261,10 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
 
         if (!rawContent || typeof rawContent !== 'string') continue;
 
+        console.log(`\n================== [LLM Response: ${params.label} (${provider.name}/${model})] ==================`);
+        console.log(rawContent);
+        console.log(`========================================================================================\n`);
+
         const parsed = cleanAndParseJson<T>(rawContent);
         if (parsed) return parsed;
       } catch (err: any) {
