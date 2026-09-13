@@ -750,7 +750,7 @@ export default function CinemaStreamingPage() {
   const isBlockbusterActive = Boolean(
     cinemaState && (
       isMovieVotingPhase(cinemaState.phase) ||
-      (cinemaState.phase === 'GENERATING' && (Boolean(blockbusterWinner) || Boolean(cinemaState.blockbusterWinner) || (cinemaState.blockbusterCandidates && cinemaState.blockbusterCandidates.length > 0)))
+      (cinemaState.phase === 'GENERATING' && Boolean(blockbusterWinner || cinemaState.blockbusterWinner) && (cinemaState.activeStep?.stepNumber || 0) >= (cinemaState.movie?.totalSteps || 50))
     )
   );
 
