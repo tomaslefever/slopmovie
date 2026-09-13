@@ -1276,6 +1276,7 @@ export interface LiveCinemaStateRecord {
   isLive: boolean;
   isPaused: boolean;
   isGenerationPaused: boolean;
+  isMovieGenerationPaused?: boolean;
   videoModel?: string | null;
   videoResolution?: string | null;
   blockbusterCandidates?: BlockbusterCandidate[];
@@ -1343,6 +1344,7 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
       is_live: payload.isLive,
       is_paused: payload.isPaused,
       is_generation_paused: payload.isGenerationPaused,
+      is_movie_generation_paused: payload.isMovieGenerationPaused ?? false,
       video_model: payload.videoModel || null,
       video_resolution: payload.videoResolution || null,
       blockbuster_candidates: payload.blockbusterCandidates || [],
@@ -1387,6 +1389,7 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
     const updatedBible = {
       ...currentBible,
       isGenerationPaused: payload.isGenerationPaused,
+      isMovieGenerationPaused: payload.isMovieGenerationPaused,
       liveState: {
         phase: payload.phase,
         timeRemaining: payload.timeRemaining,
@@ -1397,6 +1400,7 @@ export async function persistLiveCinemaState(payload: LiveCinemaStatePayload): P
         isLive: payload.isLive,
         isPaused: payload.isPaused,
         isGenerationPaused: payload.isGenerationPaused,
+        isMovieGenerationPaused: payload.isMovieGenerationPaused ?? false,
         videoModel: payload.videoModel ?? null,
         videoResolution: payload.videoResolution ?? null,
         blockbusterCandidates: payload.blockbusterCandidates ?? [],
@@ -1476,6 +1480,7 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
           isLive: data.is_live,
           isPaused: data.is_paused,
           isGenerationPaused: data.is_generation_paused,
+          isMovieGenerationPaused: data.is_movie_generation_paused ?? false,
           videoModel: data.video_model ?? null,
           videoResolution: data.video_resolution ?? null,
           blockbusterCandidates: data.blockbuster_candidates || [],
@@ -1533,6 +1538,7 @@ async function loadBibleLiveState(
     if (!error && data?.bible?.liveState) {
       return {
         ...(data.bible.liveState as LiveCinemaStateRecord),
+        isMovieGenerationPaused: Boolean(data.bible.liveState.isMovieGenerationPaused || data.bible.isMovieGenerationPaused),
         movieId: data.id
       };
     }

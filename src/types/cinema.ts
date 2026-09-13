@@ -213,6 +213,7 @@ export interface CinemaState {
   isLive: boolean;
   isPaused?: boolean;
   isGenerationPaused?: boolean;
+  isMovieGenerationPaused?: boolean;
   videoModel?: string;
   videoResolution?: string | null;
   blockbusterCandidates?: BlockbusterCandidate[];

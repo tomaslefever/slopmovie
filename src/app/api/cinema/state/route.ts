@@ -102,19 +102,28 @@ export async function GET(request: Request) {
     }
   }
 
-  // Ensure active movie steps have valid playback URLs. When generation is
-  // paused, missing URLs pick a random archived generated video from ANY movie
-  // so a scene never degrades to a static image.
+  // Ensure active movie steps have valid playback URLs.
+  // Missing or empty URLs pick a random video from the archive pool so a scene never stalls or degrades.
   if (activeMovie) {
-    const generationPaused = liveState?.isGenerationPaused === true || cinemaEngine.isGenerationPaused;
-    const archivedFallback = generationPaused ? await cinemaEngine.pickRandomArchivedVideo() : null;
+    const pool = await cinemaEngine.buildArchivedGeneratedVideoPool();
     activeMovie.steps = activeMovie.steps.map((s, idx) => {
       const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
-      const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
+      const needsReplacement = !s.videoUrl || typeof s.videoUrl !== 'string' || s.videoUrl.trim() === '' || s.videoUrl.startsWith('/videos/');
+      let fallbackUrl = mock.url;
+      let fallbackThumb = mock.poster;
+      if (pool.length > 0) {
+        const randPick = pool[Math.floor(Math.random() * pool.length)];
+        fallbackUrl = randPick.videoUrl;
+        fallbackThumb = randPick.thumbnailUrl || fallbackThumb;
+      } else {
+        const randMock = CINEMATIC_MOCK_VIDEOS[Math.floor(Math.random() * CINEMATIC_MOCK_VIDEOS.length)];
+        fallbackUrl = randMock.url;
+        fallbackThumb = randMock.poster;
+      }
       return {
         ...s,
-        videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
-        thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster
+        videoUrl: needsReplacement ? fallbackUrl : s.videoUrl,
+        thumbnailUrl: s.thumbnailUrl || (needsReplacement ? fallbackThumb : mock.poster)
       };
     });
   }
@@ -233,6 +242,7 @@ export async function GET(request: Request) {
     isLive: liveState?.isLive !== false,
     isPaused: liveState?.isPaused ?? false,
     isGenerationPaused: liveState?.isGenerationPaused ?? false,
+    isMovieGenerationPaused: liveState?.isMovieGenerationPaused ?? cinemaEngine.isMovieGenerationPaused ?? false,
     videoModel: cinemaEngine.videoModel,
     videoResolution: cinemaEngine.videoResolution,
     blockbusterCandidates: cinemaEngine.blockbusterCandidates,
@@ -450,6 +460,33 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success,
         isGenerationPaused: cinemaEngine.isGenerationPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'toggle_pause_movie_generation') {
+      const success = cinemaEngine.togglePauseMovieGeneration();
+      return NextResponse.json({
+        success,
+        isMovieGenerationPaused: cinemaEngine.isMovieGenerationPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'pause_movie_generation') {
+      const success = cinemaEngine.pauseMovieGeneration();
+      return NextResponse.json({
+        success,
+        isMovieGenerationPaused: cinemaEngine.isMovieGenerationPaused,
+        state: cinemaEngine.getState()
+      });
+    }
+
+    if (action === 'resume_movie_generation') {
+      const success = cinemaEngine.resumeMovieGeneration();
+      return NextResponse.json({
+        success,
+        isMovieGenerationPaused: cinemaEngine.isMovieGenerationPaused,
         state: cinemaEngine.getState()
       });
     }

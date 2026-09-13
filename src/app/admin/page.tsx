@@ -334,6 +334,12 @@ export default function AdminDashboardPage() {
           .on('broadcast', { event: 'generation_resumed' }, () => {
             setCinemaState((prev: any) => prev ? { ...prev, isGenerationPaused: false } : prev);
           })
+          .on('broadcast', { event: 'movie_generation_paused' }, () => {
+            setCinemaState((prev: any) => prev ? { ...prev, isMovieGenerationPaused: true } : prev);
+          })
+          .on('broadcast', { event: 'movie_generation_resumed' }, () => {
+            setCinemaState((prev: any) => prev ? { ...prev, isMovieGenerationPaused: false } : prev);
+          })
           .on('broadcast', { event: 'cinema_paused' }, () => {
             setCinemaState((prev: any) => prev ? { ...prev, isPaused: true } : prev);
           })
@@ -346,7 +352,8 @@ export default function AdminDashboardPage() {
                 ...prev,
                 ...payload.payload,
                 isPaused: payload.payload.isPaused !== undefined ? payload.payload.isPaused : prev?.isPaused,
-                isGenerationPaused: payload.payload.isGenerationPaused !== undefined ? payload.payload.isGenerationPaused : prev?.isGenerationPaused
+                isGenerationPaused: payload.payload.isGenerationPaused !== undefined ? payload.payload.isGenerationPaused : prev?.isGenerationPaused,
+                isMovieGenerationPaused: payload.payload.isMovieGenerationPaused !== undefined ? payload.payload.isMovieGenerationPaused : prev?.isMovieGenerationPaused
               }));
               if (payload.payload.videoModel) {
                 setVideoModel(payload.payload.videoModel);
@@ -698,6 +705,36 @@ export default function AdminDashboardPage() {
       showFeedback('Network error toggling generation pause');
     } finally {
       setIsTogglingGenPause(false);
+    }
+  };
+
+  // Toggle Pause / Resume specifically for AI new movie generation (4 existing movies in Blockbuster voting)
+  const [isTogglingMovieGenPause, setIsTogglingMovieGenPause] = useState(false);
+
+  const handleTogglePauseMovieGeneration = async () => {
+    audioCues.playClick();
+    setIsTogglingMovieGenPause(true);
+    try {
+      const res = await fetch('/api/cinema/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_pause_movie_generation' })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCinemaState((prev: any) => prev ? { ...prev, isMovieGenerationPaused: data.isMovieGenerationPaused } : prev);
+        showFeedback(data.isMovieGenerationPaused 
+          ? '🎬 Generación de Nuevas Películas PAUSADA: La selección mostrará 4 películas existentes' 
+          : '✨ Generación de Nuevas Películas ACTIVADA: DeepSeek sintetizará nuevas historias');
+        fetchData();
+      } else {
+        showFeedback('Error al cambiar pausa de generación de películas');
+      }
+    } catch {
+      showFeedback('Error de red al cambiar pausa de películas');
+    } finally {
+      setIsTogglingMovieGenPause(false);
     }
   };
 
@@ -1307,6 +1344,30 @@ export default function AdminDashboardPage() {
               <>
                 <Shuffle className="w-3.5 h-3.5 text-purple-300" />
                 <span>PAUSE AI (REPLAY)</span>
+              </>
+            )}
+          </button>
+
+          {/* Pause / Resume AI New Movie Generation specifically */}
+          <button
+            onClick={handleTogglePauseMovieGeneration}
+            disabled={isTogglingMovieGenPause}
+            className={`px-3 py-1.5 rounded-lg border font-mono font-bold flex items-center space-x-1.5 transition-all shadow-md ${
+              cinemaState?.isMovieGenerationPaused
+                ? 'bg-amber-500 hover:bg-amber-400 text-black border-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)] animate-pulse'
+                : 'bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 border-amber-500/30'
+            }`}
+            title={cinemaState?.isMovieGenerationPaused ? "Reanudar generación de nuevas películas por IA" : "Pausar generación de nuevas películas (el selector mostrará 4 películas existentes de la librería)"}
+          >
+            {cinemaState?.isMovieGenerationPaused ? (
+              <>
+                <Play className="w-3.5 h-3.5 fill-black" />
+                <span>RESUME NEW MOVIES</span>
+              </>
+            ) : (
+              <>
+                <Film className="w-3.5 h-3.5 text-amber-300" />
+                <span>PAUSE NEW MOVIES</span>
               </>
             )}
           </button>
@@ -2001,6 +2062,53 @@ export default function AdminDashboardPage() {
                   <>
                     <Shuffle className="w-4 h-4 text-black" />
                     <span>Pause AI & Replay Archive</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* AI New Movie Generation vs Existing Archive Selection Card */}
+            <div className={`p-6 rounded-2xl border transition-all ${
+              cinemaState?.isMovieGenerationPaused 
+                ? 'bg-amber-950/30 border-amber-500/40 shadow-[0_0_30px_rgba(245,158,11,0.15)]' 
+                : 'bg-neutral-950/80 border-white/10'
+            } flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${
+                    cinemaState?.isMovieGenerationPaused 
+                      ? 'bg-amber-400 animate-pulse' 
+                      : 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]'
+                  }`} />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
+                    Generación de Nuevas Películas: {cinemaState?.isMovieGenerationPaused ? 'PAUSADA (4 PELÍCULAS EXISTENTES)' : 'ACTIVA (DEEPSEEK REAL-TIME)'}
+                  </h3>
+                </div>
+                <p className="text-xs text-neutral-400 max-w-xl">
+                  {cinemaState?.isMovieGenerationPaused 
+                    ? 'La generación de nuevas películas está pausada. Al votar por la próxima película, el selector mostrará 4 opciones existentes de la librería y cambiará directamente a la ganadora sin generar.'
+                    : 'DeepSeek genera 4 nuevas premisas únicas y sintetiza una película completa de estreno cuando la audiencia elige su favorita.'}
+                </p>
+              </div>
+
+              <button
+                onClick={handleTogglePauseMovieGeneration}
+                disabled={isTogglingMovieGenPause}
+                className={`w-full sm:w-auto px-6 py-3 rounded-xl font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center space-x-2 transition-all shadow-xl hover:scale-[1.02] active:scale-[0.98] ${
+                  cinemaState?.isMovieGenerationPaused
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black shadow-[0_0_25px_rgba(245,158,11,0.4)]'
+                    : 'bg-amber-500 hover:bg-amber-400 text-black shadow-[0_0_20px_rgba(245,158,11,0.3)]'
+                }`}
+              >
+                {cinemaState?.isMovieGenerationPaused ? (
+                  <>
+                    <Play className="w-4 h-4 fill-black" />
+                    <span>Reanudar Nuevas Películas</span>
+                  </>
+                ) : (
+                  <>
+                    <Film className="w-4 h-4 text-black" />
+                    <span>Pausar Generación Películas</span>
                   </>
                 )}
               </button>

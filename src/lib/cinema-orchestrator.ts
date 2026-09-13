@@ -121,6 +121,7 @@ class CinemaOrchestrator {
   public isRunning: boolean = false;
   public isPaused: boolean = false;
   public isGenerationPaused: boolean = false;
+  public isMovieGenerationPaused: boolean = false;
   public videoModel: VideoModelId = DEFAULT_VIDEO_MODEL;
   public videoResolution: VideoResolution | null = null;
   private timerInterval: NodeJS.Timeout | null = null;
@@ -185,6 +186,12 @@ class CinemaOrchestrator {
         (globalThis as any).__isCinemaGenerationPaused = true;
       }
     }
+    if (process.env.PAUSE_MOVIE_GENERATION === 'true') {
+      this.isMovieGenerationPaused = true;
+      if (typeof globalThis !== 'undefined') {
+        (globalThis as any).__isCinemaMovieGenerationPaused = true;
+      }
+    }
 
     this.chatMessages.push({
       id: "sys_init",
@@ -245,7 +252,7 @@ class CinemaOrchestrator {
    */
   private archivedGeneratedPoolPromise: Promise<{ videoUrl: string; thumbnailUrl?: string }[]> | null = null;
 
-  private async buildArchivedGeneratedVideoPool(): Promise<{ videoUrl: string; thumbnailUrl?: string }[]> {
+  public async buildArchivedGeneratedVideoPool(): Promise<{ videoUrl: string; thumbnailUrl?: string }[]> {
     const movies: Movie[] = [];
     if (this.movie) movies.push(this.movie);
     for (const m of this.completedMovies) movies.push(m);
@@ -372,20 +379,30 @@ class CinemaOrchestrator {
       try {
         const savedMovie = await loadActiveMovieFromDb();
         if (savedMovie && savedMovie.steps.length > 0) {
-          // Sanitize step video URLs so none are missing or 404. When generation
-          // is paused, prefer a random archived generated video over the mocks so
-          // a scene with a missing URL never degrades to a static image.
-          const archivedFallback = this.isGenerationPaused ? await this.pickRandomArchivedVideo() : null;
+          // Sanitize step video URLs so none are missing, empty or 404.
+          // Pick a random archived video from ANY movie so a scene never fails or stays frozen.
+          const pool = await this.buildArchivedGeneratedVideoPool();
           savedMovie.steps = savedMovie.steps.map((s, idx) => {
             const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
             const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
-            const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
-            const needsReplacement2 = !s.videoUrl2 || s.videoUrl2.startsWith('/videos/');
+            const needsReplacement = !s.videoUrl || typeof s.videoUrl !== 'string' || s.videoUrl.trim() === '' || s.videoUrl.startsWith('/videos/');
+            const needsReplacement2 = !s.videoUrl2 || typeof s.videoUrl2 !== 'string' || s.videoUrl2.trim() === '' || s.videoUrl2.startsWith('/videos/');
             const isPrologue = s.stepNumber <= 4;
+            let fallbackUrl = mock.url;
+            let fallbackThumb = mock.poster;
+            if (pool.length > 0) {
+              const randPick = pool[Math.floor(Math.random() * pool.length)];
+              fallbackUrl = randPick.videoUrl;
+              fallbackThumb = randPick.thumbnailUrl || fallbackThumb;
+            } else {
+              const randMock = CINEMATIC_MOCK_VIDEOS[Math.floor(Math.random() * CINEMATIC_MOCK_VIDEOS.length)];
+              fallbackUrl = randMock.url;
+              fallbackThumb = randMock.poster;
+            }
             return {
               ...s,
-              videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
-              thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster,
+              videoUrl: needsReplacement ? fallbackUrl : s.videoUrl,
+              thumbnailUrl: s.thumbnailUrl || (needsReplacement ? fallbackThumb : mock.poster),
               videoUrl2: isPrologue ? undefined : (needsReplacement2 ? mock2.url : s.videoUrl2),
               duration: s.hasMidRollAd ? 45 : (isPrologue ? 15 : (s.duration || 30))
             };
@@ -409,6 +426,7 @@ class CinemaOrchestrator {
             if (liveState.activeAd) this.activeAd = liveState.activeAd;
             if (liveState.isPaused !== undefined) this.isPaused = liveState.isPaused;
             if (liveState.isGenerationPaused !== undefined) this.isGenerationPaused = liveState.isGenerationPaused;
+            if (liveState.isMovieGenerationPaused !== undefined) this.isMovieGenerationPaused = liveState.isMovieGenerationPaused;
           }
 
           const dbChats = await loadRecentChatMessagesFromDb(savedMovie.id);
@@ -426,6 +444,12 @@ class CinemaOrchestrator {
             this.isGenerationPaused = true;
             if (typeof globalThis !== 'undefined') {
               (globalThis as any).__isCinemaGenerationPaused = true;
+            }
+          }
+          if ((savedMovie.bible as any)?.isMovieGenerationPaused || process.env.PAUSE_MOVIE_GENERATION === 'true') {
+            this.isMovieGenerationPaused = true;
+            if (typeof globalThis !== 'undefined') {
+              (globalThis as any).__isCinemaMovieGenerationPaused = true;
             }
           }
 
@@ -592,19 +616,30 @@ class CinemaOrchestrator {
     try {
       const savedMovie = await loadActiveMovieFromDb();
       if (savedMovie && savedMovie.steps.length > 0) {
-        // Sanitize missing step URLs; prefer archived generated videos when
-        // generation is paused so a scene never shows a static image.
-        const archivedFallback = this.isGenerationPaused ? await this.pickRandomArchivedVideo() : null;
+        // Sanitize missing step URLs; pick a random archived generated video from
+        // the pool so a scene with missing clip plays immediately without errors.
+        const pool = await this.buildArchivedGeneratedVideoPool();
         savedMovie.steps = savedMovie.steps.map((s, idx) => {
           const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
           const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
-          const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
-          const needsReplacement2 = !s.videoUrl2 || s.videoUrl2.startsWith('/videos/');
+          const needsReplacement = !s.videoUrl || typeof s.videoUrl !== 'string' || s.videoUrl.trim() === '' || s.videoUrl.startsWith('/videos/');
+          const needsReplacement2 = !s.videoUrl2 || typeof s.videoUrl2 !== 'string' || s.videoUrl2.trim() === '' || s.videoUrl2.startsWith('/videos/');
           const isPrologue = s.stepNumber <= 4;
+          let fallbackUrl = mock.url;
+          let fallbackThumb = mock.poster;
+          if (pool.length > 0) {
+            const randPick = pool[Math.floor(Math.random() * pool.length)];
+            fallbackUrl = randPick.videoUrl;
+            fallbackThumb = randPick.thumbnailUrl || fallbackThumb;
+          } else {
+            const randMock = CINEMATIC_MOCK_VIDEOS[Math.floor(Math.random() * CINEMATIC_MOCK_VIDEOS.length)];
+            fallbackUrl = randMock.url;
+            fallbackThumb = randMock.poster;
+          }
           return {
             ...s,
-            videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
-            thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster,
+            videoUrl: needsReplacement ? fallbackUrl : s.videoUrl,
+            thumbnailUrl: s.thumbnailUrl || (needsReplacement ? fallbackThumb : mock.poster),
             videoUrl2: isPrologue ? undefined : (needsReplacement2 ? mock2.url : s.videoUrl2),
             duration: s.hasMidRollAd ? 45 : (isPrologue ? 15 : (s.duration || 30))
           };
@@ -641,6 +676,7 @@ class CinemaOrchestrator {
         this.totalAudience = liveState.totalAudience || 142;
         this.isPaused = liveState.isPaused ?? false;
         this.isGenerationPaused = liveState.isGenerationPaused ?? false;
+        this.isMovieGenerationPaused = liveState.isMovieGenerationPaused ?? false;
         if (liveState.adsConfig) this.adsConfig = liveState.adsConfig;
         if (liveState.activeAd) this.activeAd = liveState.activeAd;
         const syncedModel = resolveVideoModel(liveState.videoModel);
@@ -871,11 +907,6 @@ class CinemaOrchestrator {
       const savedCandidates = this.blockbusterCandidates.length > 0 ? [...this.blockbusterCandidates] : [];
       const savedCounts = { ...this.blockbusterVoteCounts };
 
-      // Keep winner and candidates in memory during GENERATING so the reveal and zoom-out/zoom-in animation play smoothly
-      this.blockbusterWinner = winner;
-      this.blockbusterCandidates = savedCandidates;
-      this.setPhase('GENERATING', 90);
-
       const winnerPayload = {
         id: winner.id,
         title: winner.title,
@@ -883,6 +914,39 @@ class CinemaOrchestrator {
         genre: winner.genre,
         premise: winner.premise
       };
+
+      // Check if movie generation is paused OR if candidate premise references an existing movie ID
+      const isArchiveWinner = this.isMovieGenerationPaused || (winner.premise && (winner.premise.startsWith('mov_') || (!winner.premise.includes(' ') && winner.premise.length > 5)));
+      if (isArchiveWinner) {
+        this.blockbusterWinner = winner;
+        this.blockbusterCandidates = savedCandidates;
+        this.addSystemMessage(`🏆 NEXT FILM: "${winner.title}" won the audience vote! Switching directly to library movie (zero AI generation).`);
+        
+        broadcastCinemaEvent('blockbuster_vote_ended', {
+          winner: winnerPayload,
+          counts: savedCounts,
+          candidates: savedCandidates
+        });
+
+        const targetMovieId = winner.premise;
+        let switched = false;
+        if (targetMovieId) {
+          switched = await this.switchToMovie(targetMovieId, 1);
+        }
+        if (!switched) {
+          const all = await this.loadAllAvailableMovies();
+          const match = all.find(m => m.id === targetMovieId || m.title.toLowerCase() === winner.title.toLowerCase()) || all[0];
+          if (match) {
+            await this.switchToMovie(match.id, 1);
+          }
+        }
+        return;
+      }
+
+      // REAL AI GENERATION MODE: Set GENERATING buffer (90s)
+      this.blockbusterWinner = winner;
+      this.blockbusterCandidates = savedCandidates;
+      this.setPhase('GENERATING', 90);
 
       broadcastCinemaEvent('blockbuster_vote_ended', {
         winner: winnerPayload,
@@ -1658,12 +1722,43 @@ class CinemaOrchestrator {
    */
   public async prepareBlockbusterVoting(): Promise<BlockbusterCandidate[]> {
     let candidates: BlockbusterCandidate[] = [];
-    try {
-      const dbMovies = await loadAllMoviesFromDb().catch(() => []);
-      const existingTitles = dbMovies.map(m => m.title).filter(Boolean);
-      candidates = await generateBlockbusterCandidatesWithDeepSeek(existingTitles);
-    } catch (err) {
-      console.error('[Cinema] Error generating blockbuster candidates:', err);
+
+    if (this.isMovieGenerationPaused) {
+      try {
+        const allAvailable = await this.loadAllAvailableMovies();
+        const eligible = allAvailable.filter(m => m.steps && m.steps.length > 0);
+        const pool = eligible.length >= 4 ? eligible : allAvailable;
+        const shuffled = [...pool].sort(() => 0.5 - Math.random());
+        const picked = shuffled.slice(0, 4);
+        const letters: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
+        candidates = picked.map((m, i) => ({
+          id: letters[i],
+          title: m.title,
+          genre: m.genre,
+          logline: m.tagline || (m.initialPlot ? m.initialPlot.slice(0, 140) + '...' : m.genre),
+          premise: m.id
+        }));
+      } catch (err) {
+        console.error('[Cinema] Error loading existing movies for blockbuster voting:', err);
+      }
+    }
+
+    if (candidates.length < 4) {
+      try {
+        const dbMovies = await loadAllMoviesFromDb().catch(() => []);
+        const existingTitles = dbMovies.map(m => m.title).filter(Boolean);
+        const aiCandidates = await generateBlockbusterCandidatesWithDeepSeek(existingTitles);
+        if (candidates.length === 0) {
+          candidates = aiCandidates;
+        } else {
+          const remainingLetters = (['A', 'B', 'C', 'D'] as const).slice(candidates.length);
+          for (let i = 0; i < remainingLetters.length && i < aiCandidates.length; i++) {
+            candidates.push({ ...aiCandidates[i], id: remainingLetters[i] });
+          }
+        }
+      } catch (err) {
+        console.error('[Cinema] Error generating blockbuster candidates:', err);
+      }
     }
 
     this.blockbusterCandidates = candidates;
@@ -2370,6 +2465,7 @@ class CinemaOrchestrator {
       isLive: !this.isPaused,
       isPaused: this.isPaused,
       isGenerationPaused: this.isGenerationPaused,
+      isMovieGenerationPaused: this.isMovieGenerationPaused,
       videoModel: this.videoModel,
       videoResolution: this.videoResolution,
       blockbusterCandidates: this.blockbusterCandidates,
@@ -2491,6 +2587,57 @@ class CinemaOrchestrator {
   }
 
   /**
+   * Pause AI generation of brand-new movies specifically.
+   * When active, movie voting displays 4 existing library movies as candidates
+   * and directly switches to the winner without calling DeepSeek or entering GENERATING phase.
+   */
+  public pauseMovieGeneration(): boolean {
+    if (this.isMovieGenerationPaused) return false;
+    this.isMovieGenerationPaused = true;
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).__isCinemaMovieGenerationPaused = true;
+    }
+    if (this.movie) {
+      (this.movie.bible as any).isMovieGenerationPaused = true;
+      persistMovie(this.movie);
+    }
+    this.addSystemMessage('⏸️ AI NEW MOVIE generation PAUSED. Movie selection will present 4 existing library films.');
+    broadcastCinemaEvent('movie_generation_paused', {
+      isMovieGenerationPaused: true
+    });
+    this.broadcastStateSnapshot();
+    return true;
+  }
+
+  /**
+   * Resume AI generation of brand-new movies with DeepSeek and fal.ai.
+   */
+  public resumeMovieGeneration(): boolean {
+    if (!this.isMovieGenerationPaused) return false;
+    this.isMovieGenerationPaused = false;
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as any).__isCinemaMovieGenerationPaused = false;
+    }
+    if (this.movie) {
+      (this.movie.bible as any).isMovieGenerationPaused = false;
+      persistMovie(this.movie);
+    }
+    this.addSystemMessage('▶️ AI NEW MOVIE generation RESUMED. Movie selection will synthesize fresh AI film premises.');
+    broadcastCinemaEvent('movie_generation_resumed', {
+      isMovieGenerationPaused: false
+    });
+    this.broadcastStateSnapshot();
+    return true;
+  }
+
+  /**
+   * Toggle AI new movie generation pause status.
+   */
+  public togglePauseMovieGeneration(): boolean {
+    return this.isMovieGenerationPaused ? this.resumeMovieGeneration() : this.pauseMovieGeneration();
+  }
+
+  /**
    * Silently adopt a persisted video model read from the database (no broadcast/persist).
    */
   public adoptVideoModel(model: string | null | undefined): void {
@@ -2583,10 +2730,17 @@ class CinemaOrchestrator {
     if (!targetStep) return false;
 
     // Sanitize videoUrl if missing or broken
-    if (!targetStep.videoUrl || targetStep.videoUrl.startsWith('/videos/')) {
+    if (!targetStep.videoUrl || typeof targetStep.videoUrl !== 'string' || targetStep.videoUrl.trim() === '' || targetStep.videoUrl.startsWith('/videos/')) {
+      const pool = await this.buildArchivedGeneratedVideoPool();
       const mockIndex = Math.abs(targetStep.stepNumber - 1) % CINEMATIC_MOCK_VIDEOS.length;
-      targetStep.videoUrl = CINEMATIC_MOCK_VIDEOS[mockIndex].url;
-      targetStep.thumbnailUrl = targetStep.thumbnailUrl || CINEMATIC_MOCK_VIDEOS[mockIndex].poster;
+      if (pool.length > 0) {
+        const randPick = pool[Math.floor(Math.random() * pool.length)];
+        targetStep.videoUrl = randPick.videoUrl;
+        targetStep.thumbnailUrl = targetStep.thumbnailUrl || randPick.thumbnailUrl || CINEMATIC_MOCK_VIDEOS[mockIndex].poster;
+      } else {
+        targetStep.videoUrl = CINEMATIC_MOCK_VIDEOS[mockIndex].url;
+        targetStep.thumbnailUrl = targetStep.thumbnailUrl || CINEMATIC_MOCK_VIDEOS[mockIndex].poster;
+      }
     }
 
     this.movie.currentStep = stepNumber;
@@ -2658,12 +2812,25 @@ class CinemaOrchestrator {
     }
 
     // Sanitize all steps of targetMovie so videos play immediately without errors
+    const pool = await this.buildArchivedGeneratedVideoPool();
     targetMovie.steps = targetMovie.steps.map((s, idx) => {
       const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
+      const needsReplacement = !s.videoUrl || typeof s.videoUrl !== 'string' || s.videoUrl.trim() === '' || s.videoUrl.startsWith('/videos/');
+      let fallbackUrl = mock.url;
+      let fallbackThumb = mock.poster;
+      if (pool.length > 0) {
+        const randPick = pool[Math.floor(Math.random() * pool.length)];
+        fallbackUrl = randPick.videoUrl;
+        fallbackThumb = randPick.thumbnailUrl || fallbackThumb;
+      } else {
+        const randMock = CINEMATIC_MOCK_VIDEOS[Math.floor(Math.random() * CINEMATIC_MOCK_VIDEOS.length)];
+        fallbackUrl = randMock.url;
+        fallbackThumb = randMock.poster;
+      }
       return {
         ...s,
-        videoUrl: (!s.videoUrl || s.videoUrl.startsWith('/videos/')) ? mock.url : s.videoUrl,
-        thumbnailUrl: s.thumbnailUrl || mock.poster
+        videoUrl: needsReplacement ? fallbackUrl : s.videoUrl,
+        thumbnailUrl: s.thumbnailUrl || (needsReplacement ? fallbackThumb : mock.poster)
       };
     });
 
@@ -2898,6 +3065,7 @@ class CinemaOrchestrator {
         isLive: !this.isPaused,
         isPaused: this.isPaused,
         isGenerationPaused: this.isGenerationPaused,
+        isMovieGenerationPaused: this.isMovieGenerationPaused,
         videoModel: this.videoModel,
         videoResolution: this.videoResolution,
         blockbusterCandidates: this.blockbusterCandidates,
@@ -2932,6 +3100,7 @@ class CinemaOrchestrator {
           isLive: !this.isPaused,
           isPaused: this.isPaused,
           isGenerationPaused: this.isGenerationPaused,
+          isMovieGenerationPaused: this.isMovieGenerationPaused,
           videoModel: this.videoModel,
           videoResolution: this.videoResolution,
           blockbusterCandidates: this.blockbusterCandidates,
@@ -2978,6 +3147,7 @@ class CinemaOrchestrator {
       isLive: state.isLive,
       isPaused: state.isPaused,
       isGenerationPaused: state.isGenerationPaused,
+      isMovieGenerationPaused: state.isMovieGenerationPaused,
       videoModel: state.videoModel,
       videoResolution: state.videoResolution,
       blockbusterCandidates: state.blockbusterCandidates,
