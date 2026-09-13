@@ -878,10 +878,38 @@ class CinemaOrchestrator {
       return;
     }
 
-    if (!this.movie) return;
+    if (!this.movie || !this.movie.steps || this.movie.steps.length === 0) {
+      console.warn('[Cinema] handlePhaseTransition: movie or steps missing, reloading from DB...');
+      try {
+        const dbMovie = await loadActiveMovieFromDb();
+        if (dbMovie && dbMovie.steps && dbMovie.steps.length > 0) {
+          this.movie = dbMovie;
+        }
+      } catch (err) {
+        console.warn('[Cinema] Failed to reload movie from DB in handlePhaseTransition:', err);
+      }
+    }
+
+    if (!this.movie || !this.movie.steps || this.movie.steps.length === 0) {
+      console.warn('[Cinema] handlePhaseTransition: no movie or steps available, skipping transition.');
+      return;
+    }
 
     const currentStep = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
       || this.movie.steps[this.movie.steps.length - 1];
+
+    if (!currentStep) {
+      console.warn('[Cinema] handlePhaseTransition: currentStep is undefined, skipping transition.');
+      return;
+    }
+
+    // Ensure options array exists and has at least 2 valid options
+    if (!Array.isArray(currentStep.options) || currentStep.options.length < 2) {
+      currentStep.options = [
+        ensureOptionPrompts(currentStep.options?.[0] || { id: 'A', title: 'Advance the Offensive', text: 'Push forward through the perimeter.', dramaticHook: 'Immediate confrontation.', expectedConsequence: 'Escalation of stakes.', votes: 0 }, 'A', { characterName: this.movie.bible?.characters?.[0]?.name, envName: this.movie.bible?.environments?.[0]?.name, cinematicStyle: this.movie.bible?.cinematicStyle }),
+        ensureOptionPrompts(currentStep.options?.[1] || { id: 'B', title: 'Regroup and Adapt', text: 'Seek tactical high ground and fortify.', dramaticHook: 'Calculated repositioning.', expectedConsequence: 'Preserves initiative.', votes: 0 }, 'B', { characterName: this.movie.bible?.characters?.[0]?.name, envName: this.movie.bible?.environments?.[0]?.name, cinematicStyle: this.movie.bible?.cinematicStyle })
+      ];
+    }
 
     if (this.phase === 'COMMERCIAL_BREAK') {
       // 15s Commercial break has completed -> Transition to next phase (typically VOTING)
@@ -1012,14 +1040,16 @@ class CinemaOrchestrator {
       // Record selected option in step history
       currentStep.selectedOption = chosenOption;
       currentStep.wasRandomPick = wasRandomPick;
-      currentStep.options[0].votes = this.votesA;
-      currentStep.options[1].votes = this.votesB;
+      if (currentStep.options[0]) currentStep.options[0].votes = this.votesA;
+      if (currentStep.options[1]) currentStep.options[1].votes = this.votesB;
       this.movie.totalVotesCast += (this.votesA + this.votesB);
 
       // Persist completed step decisions to Supabase
       await persistMovieStep(this.movie.id, currentStep);
 
-      const winningOption = currentStep.options.find(o => o.id === chosenOption)!;
+      const winningOption = currentStep.options.find(o => o.id === chosenOption)
+        || currentStep.options[0]
+        || { id: chosenOption, title: `Option ${chosenOption}`, text: `Option ${chosenOption}`, votes: 0 };
 
       // Broadcast phase change to GENERATING with the selected option
       broadcastCinemaEvent('phase_change', {
