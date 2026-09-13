@@ -436,8 +436,8 @@ export async function generateDualShotVideoWithFal({
   model,
   resolution
 }: DualShotVideoParams): Promise<DualShotVideoResult> {
-  const p2 = prompt2 || `${prompt1}. Continuing narrative action and direct consequence. Dynamic camera framing.`;
-  const cm2 = cameraMotion2 || "Smooth cinematic dolly forward with shallow depth of field, 24fps motion blur";
+  const p2 = prompt2 || `Direct continuous second-half follow-through of the previous 15s action: ${prompt1}. Seamless narrative climax and reaction, identical characters, wardrobe, props and lighting, unbroken cinematic continuity.`;
+  const cm2 = cameraMotion2 || "Smooth cinematic camera tracking continuing the motion trajectory, shallow depth of field, 24fps motion blur";
 
   // Dispatch both shots in parallel to Fal.ai cluster
   const [shot1Res, shot2Res] = await Promise.all([
@@ -454,7 +454,7 @@ export async function generateDualShotVideoWithFal({
     generateVideoWithFal({
       prompt: p2,
       cameraMotion: cm2,
-      stepNumber: stepNumber + 100, // ensures distinct mock if simulation mode
+      stepNumber: stepNumber + 1, // ensures distinct consecutive sequential clip if simulation mode
       previousVideoUrl,
       propReferenceImages,
       voiceDirection,

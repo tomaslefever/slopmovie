@@ -171,8 +171,8 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       videoA.loop = false;
       const targetMuted = isOptionVoting ? true : (isFirstAd ? false : isMutedRef.current);
       videoA.muted = targetMuted;
-      videoA.play().catch(() => {
-        if (!targetMuted) {
+      videoA.play().catch((err) => {
+        if (err?.name === 'NotAllowedError' && !targetMuted) {
           videoA.muted = true;
           videoA.play().catch(() => {});
         }
@@ -215,8 +215,8 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
           targetVideo.currentTime = 0;
           const targetMuted = isNextAd ? false : isMutedRef.current;
           targetVideo.muted = targetMuted;
-          targetVideo.play().catch(() => {
-            if (!targetMuted) {
+          targetVideo.play().catch((err) => {
+            if (err?.name === 'NotAllowedError' && !targetMuted) {
               targetVideo.muted = true;
               targetVideo.play().catch(() => {});
             }
@@ -314,11 +314,13 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       }
     } else if (phase === 'PLAYING') {
       activeVideo.loop = false;
-      activeVideo.muted = isAdSegment ? false : isMuted;
+      activeVideo.muted = isAdSegment ? false : isMutedRef.current;
       if (activeVideo.paused && !isPaused) {
-        activeVideo.play().catch(() => {
-          activeVideo.muted = true;
-          activeVideo.play().catch(() => {});
+        activeVideo.play().catch((err) => {
+          if (err?.name === 'NotAllowedError' && !isMutedRef.current) {
+            activeVideo.muted = true;
+            activeVideo.play().catch(() => {});
+          }
         });
       }
     }
@@ -398,6 +400,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         onError={() => handleVideoError('A')}
         onEnded={() => handleSlotEnded('A')}
         onPlaying={() => {
+          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && videoRefA.current) {
+            videoRefA.current.muted = false;
+          }
           if (activeSlot === 'A') onPlaybackStarted?.();
         }}
         className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-200 ${
@@ -418,6 +423,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         onError={() => handleVideoError('B')}
         onEnded={() => handleSlotEnded('B')}
         onPlaying={() => {
+          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && videoRefB.current) {
+            videoRefB.current.muted = false;
+          }
           if (activeSlot === 'B') onPlaybackStarted?.();
         }}
         className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-200 ${

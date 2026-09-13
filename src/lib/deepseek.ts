@@ -1875,13 +1875,13 @@ export function ensureOptionPrompts(
 
   const visualPrompt2 = (opt.visualPrompt2 && typeof opt.visualPrompt2 === 'string' && opt.visualPrompt2.trim().length > 20)
     ? opt.visualPrompt2.trim()
-    : `${visualPrompt}. Direct narrative climax and consequence: dramatic close-up and dynamic character interaction, heightened tension, 24fps motion blur, ${style}`;
+    : `Seamless continuous second-half continuation of Shot 1 in ${envName}: ${charName} (${visualTraits}, ${clothing}) immediately follows through on ${title.toLowerCase()} with ${propName} (${propVisual}). Direct dramatic consequence and climax, matching spatial perspective, unbroken continuous lighting, dynamic character reaction, 24fps motion blur, ${style}`;
 
   const cameraMotionPrompt2 = (opt.cameraMotionPrompt2 && typeof opt.cameraMotionPrompt2 === 'string' && opt.cameraMotionPrompt2.trim().length > 15)
     ? opt.cameraMotionPrompt2.trim()
     : id === 'A'
-    ? "Rapid dolly tracking wrap-around arc ending in an intense choker close-up, sharp anamorphic focus pull, 24fps motion blur"
-    : "Slow deliberate zoom-in closing the distance, razor-sharp rack focus onto the character's eyes, 24fps cinematic motion blur";
+    ? "Continuous dynamic tracking wrap-around arc following the motion momentum into an intense close-up, sharp anamorphic focus pull, 24fps motion blur"
+    : "Slow deliberate push-in closing the distance, matching previous camera vector, razor-sharp rack focus onto the character's eyes, 24fps cinematic motion blur";
 
   const synopsis = opt.synopsis || `${charName} executes "${title}": ${text}`;
   const dialogueSnippet = opt.dialogueSnippet || `${charName}: '${title} is our only way through.'`;
