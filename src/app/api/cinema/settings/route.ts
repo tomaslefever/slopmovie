@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { cinemaEngine } from '@/lib/cinema-orchestrator';
 import { VIDEO_MODEL_OPTIONS, VIDEO_RESOLUTIONS } from '@/lib/fal-video';
+import { getLlmModel } from '@/lib/deepseek';
 
 export async function GET() {
   const apiKey = process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY;
   const hasDeepseek = Boolean(apiKey && apiKey.trim().length > 0);
   const hasFal = Boolean(process.env.FAL_KEY && process.env.FAL_KEY.trim().length > 0);
-  const modelName = process.env.DEEPSEEK_MODEL || 'deepseek-ai/deepseek-v4-pro-0813';
+  const modelName = getLlmModel();
 
   return NextResponse.json({
     hasDeepseek,

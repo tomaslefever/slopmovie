@@ -23,7 +23,14 @@ function trackDeepseekUsage(label: string, usage?: { prompt_tokens?: number; com
 
 // ── NVIDIA NIM / LLM Configuration ──────────────────────────────────────────
 const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
-const DEFAULT_MODEL = "deepseek-ai/deepseek-v4-pro-0813";
+const DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b";
+
+export const CANDIDATE_MODELS = [
+  "nvidia/nemotron-3-super-120b-a12b",
+  "nvidia/ising-calibration-1.5-31b",
+  "meta/llama-3.2-11b-vision-instruct",
+  "deepseek-ai/deepseek-v4-flash-0731"
+];
 
 export function getLlmApiKey(): string | undefined {
   const key = process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY;
@@ -67,58 +74,69 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
   if (!apiKey) return null;
 
   const endpoint = getLlmEndpoint();
-  const model = getLlmModel();
-  const timeoutMs = params.timeoutMs ?? 30000;
+  const primaryModel = getLlmModel();
+  const timeoutMs = params.timeoutMs ?? 12000;
 
-  try {
-    const isNvidia = endpoint.includes('nvidia.com');
-    const requestBody: Record<string, any> = {
-      model,
-      messages: params.messages,
-      temperature: params.temperature ?? 1,
-      top_p: params.top_p ?? 0.95,
-      max_tokens: params.max_tokens ?? 2500,
-      stream: false
-    };
+  // Build model try-list: primary first, followed by remaining candidates
+  const modelsToTry = [
+    primaryModel,
+    ...CANDIDATE_MODELS.filter(m => m !== primaryModel)
+  ];
 
-    if (params.seed !== undefined || isNvidia) {
-      requestBody.seed = params.seed ?? Math.floor(Math.random() * 2147483647);
+  for (const model of modelsToTry) {
+    try {
+      const isNvidia = endpoint.includes('nvidia.com');
+      const requestBody: Record<string, any> = {
+        model,
+        messages: params.messages,
+        temperature: params.temperature ?? 0.8,
+        top_p: params.top_p ?? 0.95,
+        max_tokens: params.max_tokens ?? 2500,
+        stream: false
+      };
+
+      if (params.seed !== undefined || isNvidia) {
+        requestBody.seed = params.seed ?? Math.floor(Math.random() * 2147483647);
+      }
+      if (isNvidia) {
+        requestBody.chat_template_kwargs = { thinking: false };
+      }
+      if (params.response_format) {
+        requestBody.response_format = params.response_format;
+      } else {
+        requestBody.response_format = { type: "json_object" };
+      }
+
+      const response = await fetch(endpoint, {
+        signal: AbortSignal.timeout(timeoutMs),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.warn(`[NVIDIA LLM ${params.label}] Model '${model}' HTTP ${response.status}: ${errorText.slice(0, 100)} - trying next candidate...`);
+        continue;
+      }
+
+      const data = await response.json();
+      trackDeepseekUsage(`${params.label} [${model}]`, data.usage);
+      const content = data.choices?.[0]?.message?.content;
+      if (!content || typeof content !== 'string') continue;
+
+      const parsed = cleanAndParseJson<T>(content);
+      if (parsed) return parsed;
+    } catch (err: any) {
+      console.warn(`[NVIDIA LLM ${params.label}] Model '${model}' error/timeout: ${err?.message || err} - trying fallback...`);
     }
-    if (isNvidia) {
-      requestBody.chat_template_kwargs = { thinking: false };
-    }
-    if (params.response_format) {
-      requestBody.response_format = params.response_format;
-    } else {
-      requestBody.response_format = { type: "json_object" };
-    }
-
-    const response = await fetch(endpoint, {
-      signal: AbortSignal.timeout(timeoutMs),
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.warn(`[NVIDIA LLM ${params.label}] HTTP ${response.status}: ${errorText}`);
-      return null;
-    }
-
-    const data = await response.json();
-    trackDeepseekUsage(params.label, data.usage);
-    const content = data.choices?.[0]?.message?.content;
-    if (!content || typeof content !== 'string') return null;
-
-    return cleanAndParseJson<T>(content);
-  } catch (err) {
-    console.warn(`[NVIDIA LLM ${params.label}] Request or parsing error:`, err);
-    return null;
   }
+
+  console.error(`[NVIDIA LLM ${params.label}] All model candidates failed.`);
+  return null;
 }
 
 export interface GeneratedStoryBible {
