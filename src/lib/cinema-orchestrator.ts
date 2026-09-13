@@ -1,5 +1,5 @@
-import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate, TOTAL_STEPS } from '@/types/cinema';
-import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek, generateImmersiveAdPromptWithDeepSeek, ensureOptionPrompts } from './deepseek';
+import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate, TOTAL_STEPS, DecisionOption } from '@/types/cinema';
+import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek, generateImmersiveAdPromptWithDeepSeek, ensureOptionPrompts, PROCEDURAL_DILEMMAS } from './deepseek';
 import type { CommentInfluence } from './deepseek';
 import { generateVideoWithFal, generateDualShotVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel, isRealGeneratedVideoUrl } from './fal-video';
 import type { VideoModelId, VideoResolution } from './fal-video';
@@ -818,6 +818,40 @@ class CinemaOrchestrator {
     }
   }
 
+  /**
+   * Generates rich, contextual options tailored to the active film's bible and step number
+   * using PROCEDURAL_DILEMMAS instead of generic static strings.
+   */
+  public getProceduralOptionsForStep(nextStepNum: number): [DecisionOption, DecisionOption] {
+    const dilemmaIndex = Math.abs((nextStepNum - 1) % PROCEDURAL_DILEMMAS.length);
+    const dilemma = PROCEDURAL_DILEMMAS[dilemmaIndex];
+    const charName = this.movie?.bible?.characters?.[0]?.name || "The Protagonist";
+    const charVisual = this.movie?.bible?.characters?.[0]?.visualTraits || "focused expression, tactical gear";
+    const propName = this.movie?.bible?.props?.[0]?.name || "the signature artifact";
+    const propVisual = this.movie?.bible?.props?.[0]?.visualAppearance || "detailed physical appearance";
+    const envName = this.movie?.bible?.environments?.[0]?.name || "the mission perimeter";
+    const style = this.movie?.bible?.cinematicStyle || "35mm anamorphic, 24fps";
+
+    return [
+      ensureOptionPrompts({
+        id: 'A',
+        title: dilemma.optA.title,
+        text: `${charName} executes "${dilemma.optA.title.toLowerCase()}" utilizing ${propName} in ${envName}.`,
+        dramaticHook: dilemma.optA.hook,
+        expectedConsequence: dilemma.optA.consequence,
+        votes: 0
+      }, 'A', { characterName: charName, visualTraits: charVisual, propName, propVisual, envName, cinematicStyle: style }),
+      ensureOptionPrompts({
+        id: 'B',
+        title: dilemma.optB.title,
+        text: `${charName} deploys "${dilemma.optB.title.toLowerCase()}" adapting to changing conditions in ${envName}.`,
+        dramaticHook: dilemma.optB.hook,
+        expectedConsequence: dilemma.optB.consequence,
+        votes: 0
+      }, 'B', { characterName: charName, visualTraits: charVisual, propName, propVisual, envName, cinematicStyle: style })
+    ];
+  }
+
   private async handlePhaseTransition(workerId?: string) {
     if (!this.movie && this.phase !== 'BLOCKBUSTER_VOTING') return;
 
@@ -907,10 +941,7 @@ class CinemaOrchestrator {
 
     // Ensure options array exists and has at least 2 valid options
     if (!Array.isArray(currentStep.options) || currentStep.options.length < 2) {
-      currentStep.options = [
-        ensureOptionPrompts(currentStep.options?.[0] || { id: 'A', title: 'Advance the Offensive', text: 'Push forward through the perimeter.', dramaticHook: 'Immediate confrontation.', expectedConsequence: 'Escalation of stakes.', votes: 0 }, 'A', { characterName: this.movie.bible?.characters?.[0]?.name, envName: this.movie.bible?.environments?.[0]?.name, cinematicStyle: this.movie.bible?.cinematicStyle }),
-        ensureOptionPrompts(currentStep.options?.[1] || { id: 'B', title: 'Regroup and Adapt', text: 'Seek tactical high ground and fortify.', dramaticHook: 'Calculated repositioning.', expectedConsequence: 'Preserves initiative.', votes: 0 }, 'B', { characterName: this.movie.bible?.characters?.[0]?.name, envName: this.movie.bible?.environments?.[0]?.name, cinematicStyle: this.movie.bible?.cinematicStyle })
-      ];
+      currentStep.options = this.getProceduralOptionsForStep(currentStep.stepNumber);
     }
 
     if (this.phase === 'COMMERCIAL_BREAK') {
@@ -1216,7 +1247,7 @@ class CinemaOrchestrator {
 
         // 3. RUN DEEPSEEK IN PARALLEL IN BACKGROUND: Flesh out dialogue, new characters/props,
         // and pre-generate the NEXT pair of options (with their dual visualPrompts)
-        // Guarded with an independent 15s timeout so a slow LLM never aborts video synthesis
+        // Guarded with an independent 35s timeout so the LLM has adequate time to synthesize while video renders
         const deepseekPromise: Promise<MovieStep | null> = Promise.race([
           generateNextStepWithDeepSeek(
             this.movie,
@@ -1224,7 +1255,7 @@ class CinemaOrchestrator {
             currentStep,
             commentInfluence ?? undefined
           ),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000))
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 35000))
         ]).catch((err) => {
           console.warn("[Cinema] DeepSeek next-step generation error during background execution:", err);
           return null;
@@ -1278,6 +1309,10 @@ class CinemaOrchestrator {
         const stepDuration = hasAd ? 45 : 30;
 
         // Construct nextStep merging the dual video renders and next pre-computed options
+        const resolvedOptions = (Array.isArray(nextStepRaw?.options) && nextStepRaw.options.length >= 2)
+          ? nextStepRaw.options
+          : this.getProceduralOptionsForStep(nextStepNum);
+
         nextStep = {
           stepNumber: nextStepNum,
           title: guaranteedWinningOption.title || nextStepRaw?.title || `Scene ${nextStepNum}`,
@@ -1298,10 +1333,7 @@ class CinemaOrchestrator {
           propReferenceImages: activePropImages,
           duration: stepDuration,
           votingWindowSeconds: 10,
-          options: nextStepRaw?.options || [
-            ensureOptionPrompts({ id: 'A', title: 'Advance the Offensive', text: 'Push forward into the breach.', dramaticHook: 'High risk frontal assault.', expectedConsequence: 'Immediate combat escalation.', votes: 0 }, 'A', { characterName: this.movie.bible.characters[0]?.name, envName: this.movie.bible.environments[0]?.name, cinematicStyle: this.movie.bible.cinematicStyle }),
-            ensureOptionPrompts({ id: 'B', title: 'Regroup and Adapt', text: 'Fall back into the defensive perimeter.', dramaticHook: 'Strategic redeployment.', expectedConsequence: 'Preserves resources at cost of tempo.', votes: 0 }, 'B', { characterName: this.movie.bible.characters[0]?.name, envName: this.movie.bible.environments[0]?.name, cinematicStyle: this.movie.bible.cinematicStyle })
-          ],
+          options: resolvedOptions,
           activeCharacters: nextStepRaw?.activeCharacters || currentStep.activeCharacters,
           activeProps: nextStepRaw?.activeProps || currentStep.activeProps,
           newCharacter: nextStepRaw?.newCharacter,
@@ -1361,10 +1393,7 @@ class CinemaOrchestrator {
           videoUrl2: mock2.url,
           duration: 30,
           votingWindowSeconds: 10,
-          options: [
-            ensureOptionPrompts({ id: 'A', title: 'Advance the Offensive', text: 'Push forward into the breach.', dramaticHook: 'Assault', expectedConsequence: 'Combat', votes: 0 }, 'A', { characterName: this.movie.bible.characters[0]?.name, envName: this.movie.bible.environments[0]?.name, cinematicStyle: this.movie.bible.cinematicStyle }),
-            ensureOptionPrompts({ id: 'B', title: 'Regroup and Adapt', text: 'Fall back into the defensive perimeter.', dramaticHook: 'Defense', expectedConsequence: 'Tactical delay', votes: 0 }, 'B', { characterName: this.movie.bible.characters[0]?.name, envName: this.movie.bible.environments[0]?.name, cinematicStyle: this.movie.bible.cinematicStyle })
-          ],
+          options: this.getProceduralOptionsForStep(nextStepNum),
           activeCharacters: currentStep.activeCharacters,
           activeProps: currentStep.activeProps,
           environment: currentStep.environment,
