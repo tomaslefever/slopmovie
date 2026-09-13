@@ -785,7 +785,7 @@ export default function CinemaStreamingPage() {
                 activeStep={cinemaState.activeStep}
                 phase={cinemaState.phase}
                 totalSteps={cinemaState.movie.totalSteps}
-                activeAd={cinemaState.activeAd}
+                activeAd={cinemaState.movie.currentStep > 4 ? cinemaState.activeAd : null}
                 isPaused={cinemaState.isPaused}
                 isGenerationPaused={cinemaState.isGenerationPaused}
                 subtitlesEnabled={subtitlesEnabled}
@@ -794,9 +794,11 @@ export default function CinemaStreamingPage() {
                 onChangeSubtitleLanguage={handleChangeSubtitleLanguage}
                 fullscreenContainerRef={stageContainerRef}
                 inSceneAd={
-                  cinemaState.activeAd?.type === 'in_scene_overlay'
-                    ? cinemaState.activeAd
-                    : (cinemaState.movie.currentStep % 2 === 0 ? FALLBACK_IN_SCENE_AD : null)
+                  cinemaState.movie.currentStep > 4
+                    ? (cinemaState.activeAd?.type === 'in_scene_overlay'
+                        ? cinemaState.activeAd
+                        : (cinemaState.movie.currentStep % 2 === 0 ? FALLBACK_IN_SCENE_AD : null))
+                    : null
                 }
                 onPlaybackEnded={handleScenePlaybackEnded}
                 onOpenBuyAds={() => setIsBuyAdsModalOpen(true)}

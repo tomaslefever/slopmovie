@@ -531,7 +531,7 @@ class CinemaOrchestrator {
           videoUrl: stepVideoUrl,
           thumbnailUrl: stepThumbnailUrl,
           videoUrl2: stepVideoUrl2,
-          duration: 30,
+          duration: 15,
           propReferenceImages: stepPropImages
         };
       })
@@ -1132,10 +1132,10 @@ class CinemaOrchestrator {
       const cameraPrompt2ToUse = guaranteedWinningOption.cameraMotionPrompt2 || "Cinematic tracking shot, closer framing, high intensity, 24fps";
       const voiceDirectionToUse = guaranteedWinningOption.voiceDirection || currentStep.voiceDirection || this.movie.bible.characters[0]?.voicePrompt;
 
-      // Check if a mid-roll commercial ad should be embedded in Block 2 of this scene
+      // Check if a mid-roll commercial ad should be embedded in Block 2 of this scene (never in the first 4 opening scenes)
       const isAdStep = Boolean(
         this.adsConfig.autoAdsEnabled &&
-        nextStepNum > 1 &&
+        nextStepNum > 4 &&
         nextStepNum % this.adsConfig.adIntervalSteps === 0 &&
         nextStepNum !== this.adsConfig.lastAdStep &&
         nextStepNum < TOTAL_STEPS - 2
@@ -1858,7 +1858,7 @@ class CinemaOrchestrator {
   private async preGenerateUpcomingAd(stepNumber: number, referenceVideoUrl: string): Promise<void> {
     if (!this.adsConfig.autoAdsEnabled) return;
     if (this.isGenerationPaused) return;
-    if (stepNumber <= 0) return;
+    if (stepNumber <= 4) return; // Never in the first 4 opening prologue scenes
     if (stepNumber % this.adsConfig.adIntervalSteps !== 0) return;
     if (stepNumber === this.adsConfig.lastAdStep) return;
     if (stepNumber >= TOTAL_STEPS - 3) return; // Never break during the denouement/finale: scene 50 must end the film
