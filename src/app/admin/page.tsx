@@ -42,14 +42,14 @@ import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
 
 const VIDEO_MODEL_CHOICES = [
-  { id: 'minimax/h3-max-turbo/text-to-video', label: 'MiniMax H3-Max Turbo — Text-to-Video (económico)' },
-  { id: 'minimax/h3-max/text-to-video', label: 'MiniMax H3-Max — Text-to-Video (costoso)' },
-  { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (el más caro)' },
-  { id: 'minimax/h3-max/image-to-video', label: 'MiniMax H3-Max — Image-to-Video (keyframe Flux)' }
+  { id: 'minimax/h3-max-turbo/text-to-video', label: 'MiniMax H3-Max Turbo — Text-to-Video (Cost-Effective)' },
+  { id: 'minimax/h3-max/text-to-video', label: 'MiniMax H3-Max — Text-to-Video (High Fidelity)' },
+  { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (Consistency Engine)' },
+  { id: 'minimax/h3-max/image-to-video', label: 'MiniMax H3-Max — Image-to-Video (Flux Keyframe)' }
 ];
 
 const VIDEO_RESOLUTION_CHOICES = [
-  { id: '', label: 'Auto (por defecto del modelo)' },
+  { id: '', label: 'Auto (Model Default)' },
   { id: '480P', label: '480P' },
   { id: '768P', label: '768P' },
   { id: '1080P', label: '1080P' }
@@ -179,12 +179,12 @@ export default function AdminDashboardPage() {
           prev.map(m => (m.id === msg.id ? { ...m, status: newStatus } : m))
         );
         setSelectedMessage(prev => (prev?.id === msg.id ? { ...prev, status: newStatus } : prev));
-        showFeedback(newStatus === 'read' ? '✉️ Marcado como leído' : '📬 Marcado como no leído');
+        showFeedback(newStatus === 'read' ? '✉️ Marked as read' : '📬 Marked as unread');
       } else {
-        showFeedback('Error al actualizar estado del mensaje');
+        showFeedback('Error updating message status');
       }
     } catch {
-      showFeedback('Error de red al actualizar mensaje');
+      showFeedback('Network error updating message');
     } finally {
       setIsUpdatingMessage(false);
     }
@@ -192,7 +192,7 @@ export default function AdminDashboardPage() {
 
   const handleDeleteContactMessage = async (id: string, name?: string) => {
     audioCues.playClick();
-    if (!confirm(`🗑️ ¿Eliminar definitivamente el mensaje de "${name || 'este remitente'}"?`)) return;
+    if (!confirm(`🗑️ Permanently delete message from "${name || 'this sender'}"?`)) return;
 
     setIsUpdatingMessage(true);
     try {
@@ -209,12 +209,12 @@ export default function AdminDashboardPage() {
           }
           return next;
         });
-        showFeedback('🗑️ Mensaje eliminado correctamente');
+        showFeedback('🗑️ Message deleted successfully');
       } else {
-        showFeedback('Error al eliminar mensaje');
+        showFeedback('Error deleting message');
       }
     } catch {
-      showFeedback('Error de red al eliminar mensaje');
+      showFeedback('Network error deleting message');
     } finally {
       setIsUpdatingMessage(false);
     }
@@ -616,7 +616,7 @@ export default function AdminDashboardPage() {
     audioCues.playClick();
     setIsPreparingBlockbusterVote(true);
     try {
-      showFeedback('✨ Generando posibles películas con IA...');
+      showFeedback('✨ Generating candidate films with AI...');
       const res = await fetch('/api/cinema/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -628,13 +628,13 @@ export default function AdminDashboardPage() {
         if (data.state) {
           setCinemaState((prev: any) => ({ ...prev, ...data.state }));
         }
-        showFeedback('🎟️ ¡Películas generadas! Estado cambiado a Selección de Película (60s)');
+        showFeedback('🎟️ Candidate films generated! Switched to Movie Selection phase (60s)');
         fetchData();
       } else {
-        showFeedback('Error al iniciar la selección de película');
+        showFeedback('Error starting movie selection');
       }
     } catch {
-      showFeedback('Error de red al iniciar la selección de película');
+      showFeedback('Network error starting movie selection');
     } finally {
       setIsPreparingBlockbusterVote(false);
     }
@@ -707,10 +707,10 @@ export default function AdminDashboardPage() {
     audioCues.playClick();
     // Credit guards for the expensive models
     if (draftVideoModel === 'minimax/h3-max/reference-to-video') {
-      if (!confirm('💸 Reference-to-Video es el modelo MÁS CARO (usa el clip previo + props como referencias). ¿Continuar?')) return;
+      if (!confirm('💸 Reference-to-Video is the MOST EXPENSIVE model (uses previous clip + props as references). Continue?')) return;
     }
     if (draftVideoModel === 'minimax/h3-max/text-to-video') {
-      if (!confirm('⚠️ H3-Max estándar es notablemente más costoso que Turbo. ¿Continuar?')) return;
+      if (!confirm('⚠️ Standard H3-Max is significantly more expensive than Turbo. Continue?')) return;
     }
 
     setIsSavingModelConfig(true);
@@ -736,16 +736,16 @@ export default function AdminDashboardPage() {
           setVideoResolution(draftVideoResolution);
           modelDirtyRef.current = false;
           setIsModelDirty(false);
-          showFeedback(`💾 Configuración guardada y persistida: ${draftVideoModel}${draftVideoResolution ? ` · ${draftVideoResolution}` : ''}`);
+          showFeedback(`💾 Configuration saved & applied: ${draftVideoModel}${draftVideoResolution ? ` · ${draftVideoResolution}` : ''}`);
           fetchData();
         } else {
-          showFeedback('Configuración de modelo no válida');
+          showFeedback('Invalid model configuration');
         }
       } else {
-        showFeedback('Error al guardar la configuración de modelo');
+        showFeedback('Error saving model configuration');
       }
     } catch {
-      showFeedback('Error de red al guardar la configuración');
+      showFeedback('Network error saving configuration');
     } finally {
       setIsSavingModelConfig(false);
     }
@@ -755,10 +755,10 @@ export default function AdminDashboardPage() {
   // server-side and switches the frontend to the 60s movie-selection phase.
   const handlePrepareBlockbusterVote = async () => {
     audioCues.playClick();
-    if (!confirm('🎟️ ¿Abrir la votación de la PRÓXIMA película? La audiencia tendrá 60 segundos para elegir entre 4 candidatas. Al terminar, la ganadora se generará y transmitirá.')) return;
+    if (!confirm('🎟️ Open NEXT BLOCKBUSTER audience vote? Audience will have 60 seconds to vote between 4 candidates. The winner will be generated and streamed immediately.')) return;
 
     setIsPreparingBlockbusterVote(true);
-    showFeedback('🎟️ Generando las 4 candidatas de blockbuster...');
+    showFeedback('🎟️ Generating 4 blockbuster candidates...');
     try {
       const res = await fetch('/api/cinema/state', {
         method: 'POST',
@@ -769,16 +769,16 @@ export default function AdminDashboardPage() {
         const data = await res.json();
         if (data.success) {
           setCinemaState((prev: any) => prev ? { ...prev, ...data.state } : prev);
-          showFeedback(`🎟️ Votación de próxima película ABIERTA: ${data.candidates?.length || 0} candidatas · 60 segundos.`);
+          showFeedback(`🎟️ Next Movie Vote OPEN: ${data.candidates?.length || 0} candidates · 60 seconds.`);
           fetchData();
         } else {
-          showFeedback('No se pudo abrir la votación');
+          showFeedback('Could not open movie vote');
         }
       } else {
-        showFeedback('Error al abrir la votación de blockbuster');
+        showFeedback('Error opening blockbuster vote');
       }
     } catch {
-      showFeedback('Error de red al abrir la votación');
+      showFeedback('Network error opening vote');
     } finally {
       setIsPreparingBlockbusterVote(false);
     }
@@ -787,7 +787,7 @@ export default function AdminDashboardPage() {
   // Create a brand new movie and stream it immediately
   const handleCreateMovie = async (premise?: string) => {
     audioCues.playClick();
-    if (!confirm('🎬 ¿Generar una película nueva ahora y transmitirla en vivo? La película actual se archivará.')) return;
+    if (!confirm('🎬 Generate a new film now and stream it live? The current film will be archived.')) return;
     setIsCreatingMovie(true);
     try {
       const res = await fetch('/api/cinema/state', {
@@ -800,13 +800,13 @@ export default function AdminDashboardPage() {
         setCinemaState((prev: any) => prev ? { ...prev, movie: data.movie, ...data.state } : prev);
         setSelectedMovieId(data.movie?.id || '');
         setIsEditingMovie(false);
-        showFeedback('🎬 Nueva película generada y transmitiendo en vivo.');
+        showFeedback('🎬 New film generated and streaming live.');
         fetchData();
       } else {
-        showFeedback('Error al crear la nueva película');
+        showFeedback('Error creating new film');
       }
     } catch {
-      showFeedback('Error de red al crear la película');
+      showFeedback('Network error creating film');
     } finally {
       setIsCreatingMovie(false);
     }
@@ -854,16 +854,16 @@ export default function AdminDashboardPage() {
         if (data.success) {
           setIsEditingMovie(false);
           setEditingTargetMovie(null);
-          showFeedback('✏️ Película actualizada correctamente.');
+          showFeedback('✏️ Film updated successfully.');
           fetchData();
         } else {
-          showFeedback('No se pudo actualizar la película');
+          showFeedback('Could not update film');
         }
       } else {
-        showFeedback('Error al actualizar la película');
+        showFeedback('Error updating film');
       }
     } catch {
-      showFeedback('Error de red al actualizar la película');
+      showFeedback('Network error updating film');
     } finally {
       setIsSavingMovie(false);
     }
@@ -874,7 +874,7 @@ export default function AdminDashboardPage() {
     audioCues.playClick();
     if (!cinemaState?.movie) return;
     const targetMovieId = cinemaState.movie.id;
-    if (!confirm(`🗑️ ¿Eliminar definitivamente "${cinemaState.movie.title}"? Sus escenas, votos y chat se borrarán.`)) return;
+    if (!confirm(`🗑️ Permanently delete "${cinemaState.movie.title}"? Its scenes, votes, and chat history will be deleted.`)) return;
 
     setIsDeletingMovie(true);
     try {
@@ -890,16 +890,16 @@ export default function AdminDashboardPage() {
           setCinemaState((prev: any) => prev ? { ...prev, movie: data.movie || prev.movie, ...data.state } : prev);
           if (data.movie?.id) setSelectedMovieId(data.movie.id);
           setIsEditingMovie(false);
-          showFeedback(data.movie ? '🗑️ Película eliminada. Nueva película generada.' : '🗑️ Película eliminada de la biblioteca.');
+          showFeedback(data.movie ? '🗑️ Film deleted. New film generated.' : '🗑️ Film deleted from library.');
           await fetchData();
         } else {
-          showFeedback('No se pudo eliminar la película');
+          showFeedback('Could not delete film');
         }
       } else {
-        showFeedback('Error al eliminar la película');
+        showFeedback('Error deleting film');
       }
     } catch {
-      showFeedback('Error de red al eliminar la película');
+      showFeedback('Network error deleting film');
     } finally {
       setIsDeletingMovie(false);
     }
@@ -908,7 +908,7 @@ export default function AdminDashboardPage() {
   // Delete a specific movie by ID
   const handleDeleteSpecificMovie = async (movieId: string, title?: string) => {
     audioCues.playClick();
-    if (!confirm(`🗑️ ¿Eliminar definitivamente "${title || movieId}"? Sus escenas, votos y chat se borrarán.`)) return;
+    if (!confirm(`🗑️ Permanently delete "${title || movieId}"? Its scenes, votes, and chat will be deleted.`)) return;
 
     try {
       const res = await fetch('/api/cinema/state', {
@@ -921,16 +921,16 @@ export default function AdminDashboardPage() {
         if (data.success) {
           setAllMovies(prev => prev.filter(m => m.id !== movieId));
           setSelectedMovieIds(prev => prev.filter(id => id !== movieId));
-          showFeedback('🗑️ Película eliminada correctamente.');
+          showFeedback('🗑️ Film deleted successfully.');
           await fetchData();
         } else {
-          showFeedback('No se pudo eliminar la película');
+          showFeedback('Could not delete film');
         }
       } else {
-        showFeedback('Error al eliminar la película');
+        showFeedback('Error deleting film');
       }
     } catch {
-      showFeedback('Error de red al eliminar la película');
+      showFeedback('Network error deleting film');
     }
   };
 
@@ -982,16 +982,16 @@ export default function AdminDashboardPage() {
           setAllMovies(prev => prev.filter(m => !idsToDelete.includes(m.id)));
           setSelectedMovieIds([]);
           setShowBulkDeleteModal(false);
-          showFeedback(`🗑️ ${data.deletedCount || idsToDelete.length} película(s) eliminada(s) en masa.`);
+          showFeedback(`🗑️ ${data.deletedCount || idsToDelete.length} movie(s) deleted in bulk.`);
           await fetchData();
         } else {
-          showFeedback('No se pudieron eliminar las películas en masa.');
+          showFeedback('Could not bulk delete movies.');
         }
       } else {
-        showFeedback('Error en el servidor al eliminar en masa.');
+        showFeedback('Server error on bulk delete.');
       }
     } catch {
-      showFeedback('Error de red al ejecutar eliminación en masa.');
+      showFeedback('Network error executing bulk delete.');
     } finally {
       setIsBulkDeleting(false);
     }
@@ -1008,7 +1008,7 @@ export default function AdminDashboardPage() {
     if (bulkEditTagline.trim()) fields.tagline = bulkEditTagline.trim();
 
     if (Object.keys(fields).length === 0) {
-      showFeedback('Debes especificar al menos un campo para editar en masa.');
+      showFeedback('Please specify at least one field to bulk edit.');
       return;
     }
 
@@ -1029,7 +1029,7 @@ export default function AdminDashboardPage() {
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          showFeedback(`✏️ ${data.updatedCount || selectedMovieIds.length} película(s) actualizadas en masa.`);
+          showFeedback(`✏️ ${data.updatedCount || selectedMovieIds.length} movie(s) updated in bulk.`);
           setSelectedMovieIds([]);
           setShowBulkEditModal(false);
           setBulkEditGenre('');
@@ -1037,13 +1037,13 @@ export default function AdminDashboardPage() {
           setBulkEditTagline('');
           fetchData();
         } else {
-          showFeedback('No se pudieron actualizar las películas en masa.');
+          showFeedback('Could not bulk update movies.');
         }
       } else {
-        showFeedback('Error en el servidor al actualizar en masa.');
+        showFeedback('Server error on bulk edit.');
       }
     } catch {
-      showFeedback('Error de red al ejecutar edición en masa.');
+      showFeedback('Network error executing bulk edit.');
     } finally {
       setIsBulkEditing(false);
     }
@@ -1070,13 +1070,13 @@ export default function AdminDashboardPage() {
           movie: prev.movie ? { ...prev.movie, currentStep: data.currentStep } : prev.movie,
           ...data.state
         } : prev);
-        showFeedback(`⏮️ Saltando al Step ${stepNum} para replay instantáneo.`);
+        showFeedback(`⏮️ Jumping to Step ${stepNum} for instant replay.`);
         fetchData();
       } else {
-        showFeedback('Error al saltar de step');
+        showFeedback('Error jumping to step');
       }
     } catch {
-      showFeedback('Error de red al cambiar de step');
+      showFeedback('Network error changing step');
     } finally {
       setIsJumpingStep(false);
     }
@@ -1107,13 +1107,13 @@ export default function AdminDashboardPage() {
         } : prev);
         setSelectedMovieId(movieId);
         setSelectedStepNumber(stepNum);
-        showFeedback(`🎬 Transmitiendo película "${data.movie?.title || movieId}" (Step ${stepNum}) en vivo.`);
+        showFeedback(`🎬 Broadcasting film "${data.movie?.title || movieId}" (Step ${stepNum}) live.`);
         fetchData();
       } else {
-        showFeedback('Error al cambiar de película');
+        showFeedback('Error switching movie');
       }
     } catch {
-      showFeedback('Error de red al cambiar de película');
+      showFeedback('Network error switching movie');
     } finally {
       setIsSwitchingMovie(false);
     }
@@ -1286,22 +1286,22 @@ export default function AdminDashboardPage() {
                 ? 'bg-purple-600 text-white border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.4)] animate-pulse'
                 : 'bg-gradient-to-r from-purple-600/30 to-fuchsia-600/20 hover:from-purple-600/50 hover:to-fuchsia-600/40 text-purple-200 border-purple-400/40 shadow-[0_0_10px_rgba(168,85,247,0.2)]'
             } disabled:opacity-60`}
-            title="Generar candidatas y cambiar estado a Selección de Película (60s)"
+            title="Generate candidates and switch state to Movie Selection (60s)"
           >
             {isPreparingBlockbusterVote ? (
               <>
                 <Sparkles className="w-3.5 h-3.5 text-purple-300 animate-spin" />
-                <span>GENERANDO PELÍCULAS...</span>
+                <span>GENERATING FILMS...</span>
               </>
             ) : cinemaState?.phase === 'BLOCKBUSTER_VOTING' ? (
               <>
                 <Radio className="w-3.5 h-3.5 text-white animate-pulse" />
-                <span>VOTANDO PELÍCULA ({cinemaState?.timeRemaining || 0}s)</span>
+                <span>VOTING FILM ({cinemaState?.timeRemaining || 0}s)</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-                <span>SELECCIONAR PELÍCULA</span>
+                <span>SELECT MOVIE</span>
               </>
             )}
           </button>
@@ -1364,7 +1364,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Clapperboard className="w-4 h-4" />
-            <span>Listado de Películas ({allMovies.length})</span>
+            <span>Movie Catalog ({allMovies.length})</span>
           </button>
 
           <button
@@ -1376,7 +1376,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span>Estadísticas</span>
+            <span>Statistics</span>
           </button>
 
           <button
@@ -1388,7 +1388,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Inbox className="w-4 h-4" />
-            <span>Buzón / Mensajes</span>
+            <span>Inbox / Messages</span>
             {unreadMessagesCount > 0 ? (
               <span className={`px-1.5 py-0.5 text-[10px] font-black rounded-full leading-none ${
                 activeTab === 'messages' ? 'bg-black text-cyan-400' : 'bg-cyan-400 text-black shadow-[0_0_8px_rgba(34,211,238,0.8)] animate-pulse'
@@ -1724,23 +1724,23 @@ export default function AdminDashboardPage() {
                   }`} />
                   <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
                     <Radio className="w-4 h-4 text-purple-400" />
-                    Estado de Emisión: {
+                    Broadcast Status: {
                       isMovieVotingPhase(cinemaState?.phase)
-                        ? `VOTACIÓN DE PRÓXIMA PELÍCULA (${cinemaState?.timeRemaining || 0}s)`
+                        ? `NEXT MOVIE AUDIENCE VOTE (${cinemaState?.timeRemaining || 0}s)`
                         : isOptionVotingPhase(cinemaState?.phase)
-                          ? `VOTACIÓN DE OPCIÓN DE ESCENA (${cinemaState?.timeRemaining || 0}s)`
+                          ? `SCENE OPTION VOTE (${cinemaState?.timeRemaining || 0}s)`
                           : cinemaState?.phase === 'GENERATING'
-                            ? 'SINTETIZANDO CON IA (GENERATING)'
-                            : 'TRANSMISIÓN NARRATIVA NORMAL'
+                            ? 'SYNTHESIZING WITH AI (GENERATING)'
+                            : 'NORMAL NARRATIVE BROADCAST'
                     }
                   </h3>
                 </div>
                 <p className="text-xs text-neutral-400 max-w-xl">
                   {isMovieVotingPhase(cinemaState?.phase)
-                    ? `La audiencia está votando la próxima película (${cinemaState?.timeRemaining || 0}s restantes de 1 minuto). Al finalizar, la ganadora comenzará su producción inmediatamente.`
+                    ? `The audience is voting on the next film (${cinemaState?.timeRemaining || 0}s remaining of 1 minute). When voting ends, production of the winning film begins immediately.`
                     : isOptionVotingPhase(cinemaState?.phase)
-                      ? `La audiencia está votando la siguiente rama narrativa de la escena actual (Opciones A/B, ${cinemaState?.timeRemaining || 0}s restantes).`
-                      : 'Presiona el botón para comenzar a generar las 4 posibles películas con IA. Al completarse el proceso, el frontend pasará a la votación de película con 1 minuto.'}
+                      ? `The audience is voting on the next narrative branch of the current scene (Options A/B, ${cinemaState?.timeRemaining || 0}s remaining).`
+                      : 'Click the button to start generating 4 candidate films with AI. Once ready, the live stream will switch to a 60-second audience vote.'}
                 </p>
               </div>
 
@@ -1756,17 +1756,17 @@ export default function AdminDashboardPage() {
                 {isPreparingBlockbusterVote ? (
                   <>
                     <Sparkles className="w-4 h-4 animate-spin text-white" />
-                    <span>Generando películas con IA...</span>
+                    <span>Generating films with AI...</span>
                   </>
                 ) : isMovieVotingPhase(cinemaState?.phase) ? (
                   <>
                     <Radio className="w-4 h-4 animate-pulse text-black" />
-                    <span>Votando Película ({cinemaState?.timeRemaining || 0}s)</span>
+                    <span>Voting Film ({cinemaState?.timeRemaining || 0}s)</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 text-white" />
-                    <span>Iniciar Votación de Película</span>
+                    <span>Start Movie Vote</span>
                   </>
                 )}
               </button>
@@ -1779,19 +1779,19 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center space-x-2">
                     <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
                     <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-200">
-                      Conteo en Vivo · Votación de Opción de Escena (Paso {cinemaState.activeStep.stepNumber}, {cinemaState.timeRemaining || 0}s restantes)
+                      Live Vote Count · Scene Branch Voting (Step {cinemaState.activeStep.stepNumber}, {cinemaState.timeRemaining || 0}s remaining)
                     </h4>
                   </div>
                   <span className="text-[10px] font-mono font-bold text-neutral-300 bg-cyan-500/20 px-2.5 py-1 rounded-full border border-cyan-400/30">
-                    Total: {(cinemaState.votesA || 0) + (cinemaState.votesB || 0)} votos
+                    Total: {(cinemaState.votesA || 0) + (cinemaState.votesB || 0)} votes
                   </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Option A */}
                   <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-950/40 space-y-2">
                     <div className="flex justify-between items-center text-xs font-mono">
-                      <span className="font-bold text-cyan-300">OPCIÓN A: {cinemaState.activeStep.options[0]?.title}</span>
-                      <span className="font-bold text-white">{cinemaState.votesA || 0} votos</span>
+                      <span className="font-bold text-cyan-300">OPTION A: {cinemaState.activeStep.options[0]?.title}</span>
+                      <span className="font-bold text-white">{cinemaState.votesA || 0} votes</span>
                     </div>
                     <div className="h-2 rounded-full bg-black/60 overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-300" style={{ width: `${((cinemaState.votesA || 0) + (cinemaState.votesB || 0)) > 0 ? Math.round(((cinemaState.votesA || 0) / ((cinemaState.votesA || 0) + (cinemaState.votesB || 0))) * 100) : 50}%` }} />
@@ -1800,8 +1800,8 @@ export default function AdminDashboardPage() {
                   {/* Option B */}
                   <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/40 space-y-2">
                     <div className="flex justify-between items-center text-xs font-mono">
-                      <span className="font-bold text-amber-300">OPCIÓN B: {cinemaState.activeStep.options[1]?.title}</span>
-                      <span className="font-bold text-white">{cinemaState.votesB || 0} votos</span>
+                      <span className="font-bold text-amber-300">OPTION B: {cinemaState.activeStep.options[1]?.title}</span>
+                      <span className="font-bold text-white">{cinemaState.votesB || 0} votes</span>
                     </div>
                     <div className="h-2 rounded-full bg-black/60 overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-300" style={{ width: `${((cinemaState.votesA || 0) + (cinemaState.votesB || 0)) > 0 ? Math.round(((cinemaState.votesB || 0) / ((cinemaState.votesA || 0) + (cinemaState.votesB || 0))) * 100) : 50}%` }} />
@@ -1818,11 +1818,11 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center space-x-2">
                     <Radio className="w-4 h-4 text-purple-400 animate-pulse" />
                     <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-purple-200">
-                      Conteo de Votos en Vivo · 4 Películas Candidatas ({cinemaState.timeRemaining || 0}s restantes)
+                      Live Candidate Vote Counts · 4 Blockbuster Films ({cinemaState.timeRemaining || 0}s remaining)
                     </h4>
                   </div>
                   <span className="text-[10px] font-mono font-bold text-neutral-300 bg-purple-500/20 px-2.5 py-1 rounded-full border border-purple-400/30">
-                    Total: {(Number(cinemaState.blockbusterVoteCounts?.A) || 0) + (Number(cinemaState.blockbusterVoteCounts?.B) || 0) + (Number(cinemaState.blockbusterVoteCounts?.C) || 0) + (Number(cinemaState.blockbusterVoteCounts?.D) || 0)} votos
+                    Total: {(Number(cinemaState.blockbusterVoteCounts?.A) || 0) + (Number(cinemaState.blockbusterVoteCounts?.B) || 0) + (Number(cinemaState.blockbusterVoteCounts?.C) || 0) + (Number(cinemaState.blockbusterVoteCounts?.D) || 0)} votes
                   </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1851,7 +1851,7 @@ export default function AdminDashboardPage() {
                             <div className="flex items-center gap-1.5">
                               {isLead && (
                                 <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300">
-                                  👑 LIDER
+                                  👑 LEADER
                                 </span>
                               )}
                               <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-neutral-300">
@@ -1864,7 +1864,7 @@ export default function AdminDashboardPage() {
                         </div>
                         <div className="space-y-1.5 pt-2 border-t border-white/10">
                           <div className="flex justify-between text-[11px] font-mono text-neutral-300">
-                            <span className="font-bold">{votes} {votes === 1 ? 'voto' : 'votos'}</span>
+                            <span className="font-bold">{votes} {votes === 1 ? 'vote' : 'votes'}</span>
                             <span className="font-bold text-purple-300">{pct}%</span>
                           </div>
                           <div className="h-2 rounded-full bg-black/60 overflow-hidden">
@@ -1982,12 +1982,12 @@ export default function AdminDashboardPage() {
                   </h3>
                   {isModelDirty && (
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[9px] font-mono font-bold uppercase animate-pulse">
-                      Cambios sin guardar
+                      Unsaved Changes
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-neutral-400 max-w-xl">
-                  Selecciona el modelo de fal.ai y la resolución, y presiona <strong className="text-white">Guardar Configuración</strong> para persistirlos. Turbo es el modelo económico; Reference-to-Video es el más caro.
+                  Select the fal.ai video model and resolution, then click <strong className="text-white">Save Configuration</strong> to persist. Turbo is the cost-effective model; Reference-to-Video is highest tier.
                 </p>
               </div>
 
@@ -1995,7 +1995,7 @@ export default function AdminDashboardPage() {
                 <div className="flex flex-col gap-1 w-full sm:w-72">
                   <label className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    Modelo (borrador):
+                    Model (Draft):
                   </label>
                   <select
                     value={draftVideoModel}
@@ -2008,19 +2008,19 @@ export default function AdminDashboardPage() {
                   </select>
                   <span className="text-[10px] font-mono text-neutral-500">
                     {draftVideoModel === 'minimax/h3-max-turbo/text-to-video'
-                      ? 'Turbo: text-to-video rápido y económico. Sin referencias. 480P 16:9 por defecto.'
+                      ? 'Turbo: fast and cost-effective text-to-video. No reference images. 480P 16:9 default.'
                       : draftVideoModel === 'minimax/h3-max/text-to-video'
-                        ? 'Estándar: text-to-video de mayor costo. Sin referencias. 768P por defecto.'
+                        ? 'Standard: higher-cost text-to-video. No reference images. 768P default.'
                         : draftVideoModel === 'minimax/h3-max/image-to-video'
-                          ? 'Image-to-Video: Flux genera un keyframe de la escena y el video lo anima.'
-                          : 'Reference-to-Video (el más caro): usa el clip previo y las imágenes de props como referencias.'}
+                          ? 'Image-to-Video: Flux generates an initial keyframe, then MiniMax animates the video.'
+                          : 'Reference-to-Video: Uses previous scene clip and prop assets as visual consistency references.'}
                   </span>
                 </div>
 
                 <div className="flex flex-col gap-1 w-full sm:w-56">
                   <label className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold flex items-center gap-1">
                     <Sliders className="w-3 h-3" />
-                    Resolución (borrador):
+                    Resolution (Draft):
                   </label>
                   <select
                     value={draftVideoResolution}
@@ -2033,8 +2033,8 @@ export default function AdminDashboardPage() {
                   </select>
                   <span className="text-[10px] font-mono text-neutral-500">
                     {draftVideoResolution
-                      ? `Forzada a ${draftVideoResolution} para el modelo activo.`
-                      : 'Usa la resolución por defecto del modelo (Turbo: 480P · resto: 768P).'}
+                      ? `Forced to ${draftVideoResolution} for the active model.`
+                      : 'Uses model default resolution (Turbo: 480P · others: 768P).'}
                   </span>
                 </div>
 
@@ -2047,14 +2047,14 @@ export default function AdminDashboardPage() {
                         ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-[0_0_15px_rgba(16,185,129,0.35)] active:scale-95'
                         : 'bg-neutral-900 text-neutral-500 border border-white/10 cursor-not-allowed'
                     }`}
-                    title="Guardar modelo y resolución en la base de datos"
+                    title="Save model and resolution configuration to database"
                   >
                     <Check className="w-3.5 h-3.5" />
-                    {isSavingModelConfig ? 'Guardando...' : 'Guardar Configuración'}
+                    {isSavingModelConfig ? 'Saving...' : 'Save Configuration'}
                   </button>
                   {!isModelDirty && (
                     <span className="text-[9px] font-mono text-emerald-400/80 text-center">
-                      ✓ Persistido: {videoModel}{videoResolution ? ` · ${videoResolution}` : ''}
+                      ✓ Persisted: {videoModel}{videoResolution ? ` · ${videoResolution}` : ''}
                     </span>
                   )}
                 </div>
@@ -2069,11 +2069,11 @@ export default function AdminDashboardPage() {
                     <div className="flex items-center space-x-2">
                       <Film className="w-5 h-5 text-amber-400 flex-shrink-0" />
                       <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono truncate">
-                        Control de Emisión: Selector de Película & Escena (Solo Director)
+                        Broadcast Control: Movie & Scene Selector (Director Only)
                       </h3>
                     </div>
                     <p className="text-xs text-neutral-400 mt-1 max-w-xl">
-                      Selecciona la película que se transmitirá en vivo a toda la audiencia y la escena exacta para poner al aire de inmediato.
+                      Select the film and exact scene to broadcast live to the global audience immediately.
                     </p>
                   </div>
 
@@ -2083,7 +2083,7 @@ export default function AdminDashboardPage() {
                     <div className="flex flex-col gap-1 w-full sm:w-64 md:w-80">
                       <label className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                        Película en Emisión:
+                        Film on Air:
                       </label>
                       <select
                         value={cinemaState.movie.id}
@@ -2108,7 +2108,7 @@ export default function AdminDashboardPage() {
                             const count = m.steps?.length || m.totalSteps || 0;
                             return (
                               <option key={m.id} value={m.id}>
-                                {isLive ? '🔴 [EN EMISIÓN] ' : ''}{m.title} ({m.genre}) - {count} sc.
+                                {isLive ? '🔴 [ON AIR] ' : ''}{m.title} ({m.genre}) - {count} sc.
                               </option>
                             );
                           });
@@ -2120,7 +2120,7 @@ export default function AdminDashboardPage() {
                     <div className="flex flex-col gap-1 w-full sm:w-44 md:w-52">
                       <label className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                        Escena (Step) al Aire:
+                        Scene (Step) on Air:
                       </label>
                       <select
                         value={cinemaState.movie.currentStep || 1}
@@ -2147,13 +2147,13 @@ export default function AdminDashboardPage() {
                     {/* Replay Current Step CTA */}
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-mono uppercase tracking-wider text-transparent select-none hidden sm:block">
-                        Acción
+                        Action
                       </label>
                       <button
                         onClick={() => handleJumpToStep(cinemaState.movie.currentStep || 1)}
                         disabled={isJumpingStep || isSwitchingMovie}
                         className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.25)] flex-shrink-0 active:scale-95 h-[38px]"
-                        title="Reiniciar reproducción de la escena actual en vivo"
+                        title="Replay currently active scene live on stream"
                       >
                         <RotateCcw className="w-3.5 h-3.5 text-black" />
                         <span>Replay</span>
@@ -2163,51 +2163,51 @@ export default function AdminDashboardPage() {
                     {/* Movie Management Actions */}
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-mono uppercase tracking-wider text-transparent select-none hidden sm:block">
-                        Película
+                        Film
                       </label>
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={handlePrepareBlockbusterVote}
                           disabled={isPreparingBlockbusterVote}
                           className="px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-40 text-purple-300 border border-purple-500/30 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all flex-shrink-0 active:scale-95 h-[38px]"
-                          title="Abrir la votación de la próxima película (4 candidatas · 60s)"
+                          title="Open audience vote for next film (4 candidates · 60s)"
                         >
                           <Sparkles className="w-3.5 h-3.5" />
-                          <span>{isPreparingBlockbusterVote ? 'Generando...' : 'Votación'}</span>
+                          <span>{isPreparingBlockbusterVote ? 'Generating...' : 'Vote'}</span>
                         </button>
                         <button
                           onClick={() => handleCreateMovie()}
                           disabled={isCreatingMovie}
                           className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] flex-shrink-0 active:scale-95 h-[38px]"
-                          title="Generar una película nueva y transmitirla en vivo"
+                          title="Generate a brand new film and stream it live"
                         >
                           <Plus className="w-3.5 h-3.5 text-black" />
-                          <span>{isCreatingMovie ? 'Creando...' : 'Nueva'}</span>
+                          <span>{isCreatingMovie ? 'Creating...' : 'New'}</span>
                         </button>
                         <button
                           onClick={openEditMovie}
                           className="px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 disabled:opacity-40 text-cyan-300 border border-cyan-500/30 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all flex-shrink-0 active:scale-95 h-[38px]"
-                          title="Editar título, género, tagline y sinopsis de la película en emisión"
+                          title="Edit title, genre, tagline, and plot of active film"
                         >
                           <Pencil className="w-3.5 h-3.5" />
-                          <span>Editar</span>
+                          <span>Edit</span>
                         </button>
                         <button
                           onClick={handleDeleteMovie}
                           disabled={isDeletingMovie}
                           className="px-3 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 disabled:opacity-40 text-red-400 border border-red-500/20 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all flex-shrink-0 active:scale-95 h-[38px]"
-                          title="Eliminar definitivamente la película en emisión"
+                          title="Permanently delete the currently broadcasting film"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                          <span>{isDeletingMovie ? '...' : 'Eliminar'}</span>
+                          <span>{isDeletingMovie ? '...' : 'Delete'}</span>
                         </button>
                         <button
                           onClick={() => { audioCues.playClick(); setActiveTab('movies'); }}
                           className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all flex-shrink-0 active:scale-95 h-[38px]"
-                          title="Abrir el catálogo completo de películas y acciones en masa"
+                          title="Open full movie library and bulk actions"
                         >
                           <Clapperboard className="w-3.5 h-3.5" />
-                          <span>Catálogo ({allMovies.length})</span>
+                          <span>Catalog ({allMovies.length})</span>
                         </button>
                       </div>
                     </div>
@@ -2219,19 +2219,19 @@ export default function AdminDashboardPage() {
                   <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="text-[11px] font-mono font-bold uppercase tracking-widest text-cyan-300 flex items-center gap-2">
-                        <Pencil className="w-3.5 h-3.5" /> Editar Película en Emisión
+                        <Pencil className="w-3.5 h-3.5" /> Edit Film in Broadcast
                       </h4>
                       <button
                         onClick={() => setIsEditingMovie(false)}
                         className="p-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 transition-colors"
-                        title="Cerrar edición"
+                        title="Close edit form"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                     <form onSubmit={handleSaveMovieEdit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Título *</label>
+                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Title *</label>
                         <input
                           type="text"
                           required
@@ -2241,7 +2241,7 @@ export default function AdminDashboardPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Género</label>
+                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Genre</label>
                         <input
                           type="text"
                           value={editMovieGenre}
@@ -2259,7 +2259,7 @@ export default function AdminDashboardPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Sinopsis / Trama inicial</label>
+                        <label className="block text-[10px] font-mono text-neutral-400 uppercase mb-1">Synopsis / Initial Plot</label>
                         <input
                           type="text"
                           value={editMoviePlot}
@@ -2274,14 +2274,14 @@ export default function AdminDashboardPage() {
                           className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-black font-mono font-bold text-[11px] uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] active:scale-95"
                         >
                           <Check className="w-3.5 h-3.5 text-black" />
-                          <span>{isSavingMovie ? 'Guardando...' : 'Guardar Cambios'}</span>
+                          <span>{isSavingMovie ? 'Saving...' : 'Save Changes'}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setIsEditingMovie(false)}
                           className="px-5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-mono font-bold text-[11px] uppercase tracking-widest transition-colors"
                         >
-                          Cancelar
+                          Cancel
                         </button>
                       </div>
                     </form>
@@ -2300,17 +2300,17 @@ export default function AdminDashboardPage() {
                       </span>
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-mono font-bold text-emerald-400 animate-pulse">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        TRANSMITIENDO EN VIVO A LA AUDIENCIA
+                        BROADCASTING LIVE TO AUDIENCE
                       </span>
                     </div>
                     <p className="text-xs text-neutral-400 line-clamp-1">
-                      {cinemaState.movie.initialPlot || cinemaState.movie.tagline || 'Sinopsis de la obra cinematográfica interactiva en emisión.'}
+                      {cinemaState.movie.initialPlot || cinemaState.movie.tagline || 'Synopsis of the interactive film currently streaming.'}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2 flex-shrink-0 text-xs font-mono text-neutral-400">
-                    <span>Total Escenas: <strong className="text-white">{cinemaState.movie.steps?.length || cinemaState.movie.totalSteps || 0}</strong></span>
-                    <span>• Al aire: <strong className="text-amber-400">Step #{cinemaState.movie.currentStep}</strong></span>
+                    <span>Total Scenes: <strong className="text-white">{cinemaState.movie.steps?.length || cinemaState.movie.totalSteps || 0}</strong></span>
+                    <span>• On Air: <strong className="text-amber-400">Step #{cinemaState.movie.currentStep}</strong></span>
                   </div>
                 </div>
 
@@ -2318,10 +2318,10 @@ export default function AdminDashboardPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
                     <span className="uppercase tracking-wider">
-                      Escenas de la Película en Emisión ({cinemaState.movie.steps?.length || 0} Steps)
+                      Scenes of Film in Broadcast ({cinemaState.movie.steps?.length || 0} Steps)
                     </span>
                     <span className="text-neutral-500 text-[11px]">
-                      Haz clic en &quot;Transmitir este Step&quot; para saltar a cualquier escena en vivo
+                      Click &quot;Broadcast this Step&quot; to jump to any scene live
                     </span>
                   </div>
 
@@ -2348,7 +2348,7 @@ export default function AdminDashboardPage() {
                                 {isCurrentActive && (
                                   <span className="flex items-center gap-1 text-[10px] font-mono text-amber-400 font-bold animate-pulse">
                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                    EN TRANSMISIÓN EN VIVO
+                                    STREAMING LIVE ON AIR
                                   </span>
                                 )}
                               </div>
@@ -2368,9 +2368,9 @@ export default function AdminDashboardPage() {
                           <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
                             <div className="text-[10px] font-mono text-neutral-400 truncate max-w-[170px]">
                               {step.selectedOption ? (
-                                <span>Rama: Opción {step.selectedOption}</span>
+                                <span>Branch: Option {step.selectedOption}</span>
                               ) : (
-                                <span className="text-neutral-500">Escena inicial</span>
+                                <span className="text-neutral-500">Opening Scene</span>
                               )}
                             </div>
 
@@ -2384,7 +2384,7 @@ export default function AdminDashboardPage() {
                               }`}
                             >
                               <PlayCircle className="w-3.5 h-3.5" />
-                              <span>{isCurrentActive ? 'Al Aire Ahora' : 'Transmitir este Step'}</span>
+                              <span>{isCurrentActive ? 'On Air Now' : 'Broadcast this Step'}</span>
                             </button>
                           </div>
                         </div>
@@ -2469,11 +2469,11 @@ export default function AdminDashboardPage() {
                     <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.8)]" />
                     <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
                       <Clapperboard className="w-4 h-4 text-rose-400" />
-                      Listado de Películas & Acciones en Masa
+                      Movie Catalog & Bulk Actions
                     </h3>
                   </div>
                   <p className="text-xs text-neutral-400 max-w-2xl">
-                    Explora todo el catálogo de películas interactivas generadas y archivadas. Selecciona múltiples obras para ejecutar acciones en lote como eliminación definitiva o actualización de género y estado.
+                    Explore all generated and archived interactive films. Select multiple titles to run batch operations such as permanent deletion or updating genre and status.
                   </p>
                 </div>
 
@@ -2484,7 +2484,7 @@ export default function AdminDashboardPage() {
                     className="w-full md:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-400 hover:to-pink-400 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-[0_0_15px_rgba(244,63,94,0.3)] active:scale-95"
                   >
                     <Plus className="w-4 h-4 text-black" />
-                    <span>{isCreatingMovie ? 'Creando...' : 'Nueva Película'}</span>
+                    <span>{isCreatingMovie ? 'Creating...' : 'New Film'}</span>
                   </button>
                 </div>
               </div>
@@ -2492,20 +2492,20 @@ export default function AdminDashboardPage() {
               {/* Quick KPIs */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
                 <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
-                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Total Películas</span>
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Total Films</span>
                   <div className="text-2xl font-black text-white">{allMovies.length}</div>
                 </div>
                 <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
                   <span className="text-[10px] uppercase tracking-wider text-rose-400 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
-                    En Emisión
+                    On Air
                   </span>
-                  <div className="text-sm font-black text-white truncate" title={cinemaState?.movie?.title || 'Ninguna'}>
-                    {cinemaState?.movie?.title || 'Ninguna'}
+                  <div className="text-sm font-black text-white truncate" title={cinemaState?.movie?.title || 'None'}>
+                    {cinemaState?.movie?.title || 'None'}
                   </div>
                 </div>
                 <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
-                  <span className="text-[10px] uppercase tracking-wider text-purple-400">Concluidas</span>
+                  <span className="text-[10px] uppercase tracking-wider text-purple-400">Completed</span>
                   <div className="text-2xl font-black text-purple-300">
                     {allMovies.filter((m: any) => m.status === 'completed').length}
                   </div>
@@ -2515,7 +2515,7 @@ export default function AdminDashboardPage() {
                     ? 'bg-rose-950/30 border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.15)]' 
                     : 'bg-black/50 border-white/5'
                 }`}>
-                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Seleccionadas</span>
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400">Selected</span>
                   <div className={`text-2xl font-black ${selectedMovieIds.length > 0 ? 'text-rose-400' : 'text-neutral-500'}`}>
                     {selectedMovieIds.length}
                   </div>
@@ -2530,7 +2530,7 @@ export default function AdminDashboardPage() {
                     type="text"
                     value={movieSearchQuery}
                     onChange={e => setMovieSearchQuery(e.target.value)}
-                    placeholder="Buscar por título, género o sinopsis..."
+                    placeholder="Search by title, genre, or synopsis..."
                     className="w-full pl-10 pr-4 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-rose-400 focus:outline-none placeholder:text-neutral-600"
                   />
                   {movieSearchQuery && (
@@ -2551,7 +2551,7 @@ export default function AdminDashboardPage() {
                       onChange={e => setMovieGenreFilter(e.target.value)}
                       className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
                     >
-                      <option value="all" className="bg-neutral-900">Todos los géneros</option>
+                      <option value="all" className="bg-neutral-900">All Genres</option>
                       {availableGenres.map((g: any) => (
                         <option key={g} value={g} className="bg-neutral-900">{g}</option>
                       ))}
@@ -2564,11 +2564,11 @@ export default function AdminDashboardPage() {
                       onChange={e => setMovieStatusFilter(e.target.value)}
                       className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
                     >
-                      <option value="all" className="bg-neutral-900">Todos los estados</option>
-                      <option value="live" className="bg-neutral-900">🔴 En emisión</option>
-                      <option value="streaming" className="bg-neutral-900">🟢 En streaming</option>
-                      <option value="completed" className="bg-neutral-900">🟣 Concluidas</option>
-                      <option value="paused" className="bg-neutral-900">🟡 Pausadas</option>
+                      <option value="all" className="bg-neutral-900">All Statuses</option>
+                      <option value="live" className="bg-neutral-900">🔴 On Air</option>
+                      <option value="streaming" className="bg-neutral-900">🟢 Streaming</option>
+                      <option value="completed" className="bg-neutral-900">🟣 Completed</option>
+                      <option value="paused" className="bg-neutral-900">🟡 Paused</option>
                     </select>
                   </div>
 
@@ -2580,9 +2580,9 @@ export default function AdminDashboardPage() {
                         setMovieStatusFilter('all');
                       }}
                       className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-mono transition-colors"
-                      title="Restablecer filtros"
+                      title="Reset filters"
                     >
-                      Limpiar
+                      Reset
                     </button>
                   )}
                 </div>
@@ -2595,7 +2595,7 @@ export default function AdminDashboardPage() {
                     <button
                       onClick={() => toggleSelectAllVisible(visibleMovieIds)}
                       className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-                      title={isAllVisibleSelected ? "Deseleccionar visibles" : "Seleccionar todas las visibles"}
+                      title={isAllVisibleSelected ? "Deselect visible" : "Select all visible"}
                     >
                       {isAllVisibleSelected ? <CheckSquare className="w-4 h-4 text-rose-400" /> : <Square className="w-4 h-4 text-neutral-400" />}
                     </button>
@@ -2604,11 +2604,11 @@ export default function AdminDashboardPage() {
                         <span className="px-2 py-0.5 rounded-full bg-rose-500 text-black text-[11px] font-black">
                           {selectedMovieIds.length}
                         </span>
-                        película(s) seleccionada(s)
+                        film(s) selected
                       </span>
                       {hasActiveMovieSelected && (
                         <span className="text-[10px] font-mono text-amber-300 block">
-                          ⚠️ Incluye la película actualmente en emisión en vivo
+                          ⚠️ Includes currently broadcasting film
                         </span>
                       )}
                     </div>
@@ -2620,7 +2620,7 @@ export default function AdminDashboardPage() {
                       className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] active:scale-95"
                     >
                       <Pencil className="w-3.5 h-3.5 text-black" />
-                      <span>Editar en Masa</span>
+                      <span>Bulk Edit</span>
                     </button>
 
                     <button
@@ -2628,13 +2628,13 @@ export default function AdminDashboardPage() {
                       className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95"
                     >
                       <Trash2 className="w-3.5 h-3.5 text-white" />
-                      <span>Eliminar en Masa ({selectedMovieIds.length})</span>
+                      <span>Bulk Delete ({selectedMovieIds.length})</span>
                     </button>
 
                     <button
                       onClick={clearMovieSelection}
                       className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-mono text-xs transition-colors"
-                      title="Deseleccionar todas"
+                      title="Clear selection"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -2649,23 +2649,23 @@ export default function AdminDashboardPage() {
                     <button
                       onClick={() => toggleSelectAllVisible(visibleMovieIds)}
                       className="p-1 rounded-md bg-white/5 hover:bg-white/15 text-white transition-colors flex items-center gap-2"
-                      title={isAllVisibleSelected ? "Deseleccionar todas" : "Seleccionar todas"}
+                      title={isAllVisibleSelected ? "Deselect all" : "Select all"}
                     >
                       {isAllVisibleSelected ? <CheckSquare className="w-4 h-4 text-rose-400" /> : <Square className="w-4 h-4 text-neutral-400" />}
                       <span className="text-[11px] uppercase tracking-wider">
-                        {isAllVisibleSelected ? "Deseleccionar todas" : `Seleccionar todas (${filteredMovies.length})`}
+                        {isAllVisibleSelected ? "Deselect all" : `Select all (${filteredMovies.length})`}
                       </span>
                     </button>
                   </div>
                   <span className="text-[11px] text-neutral-500 hidden sm:inline-block">
-                    Mostrando {filteredMovies.length} de {allMovies.length} películas
+                    Showing {filteredMovies.length} of {allMovies.length} films
                   </span>
                 </div>
 
                 {filteredMovies.length === 0 ? (
                   <div className="text-center py-16 space-y-3 font-mono">
                     <Film className="w-10 h-10 text-neutral-600 mx-auto" />
-                    <p className="text-neutral-400 text-sm">No se encontraron películas con los filtros actuales.</p>
+                    <p className="text-neutral-400 text-sm">No films found matching current filters.</p>
                     <button
                       onClick={() => {
                         setMovieSearchQuery('');
@@ -2674,7 +2674,7 @@ export default function AdminDashboardPage() {
                       }}
                       className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-mono"
                     >
-                      Restablecer filtros
+                      Reset filters
                     </button>
                   </div>
                 ) : (
@@ -2720,7 +2720,7 @@ export default function AdminDashboardPage() {
                                 {isLive && (
                                   <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[10px] font-mono font-bold text-amber-400 animate-pulse">
                                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                    EN EMISIÓN
+                                    ON AIR
                                   </span>
                                 )}
 
@@ -2731,7 +2731,7 @@ export default function AdminDashboardPage() {
                                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                                     : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                                 }`}>
-                                  {isCompleted ? 'Concluida' : isPaused ? 'Pausada' : 'Streaming'}
+                                  {isCompleted ? 'Completed' : isPaused ? 'Paused' : 'Streaming'}
                                 </span>
 
                                 <span className="px-2 py-0.5 rounded bg-white/10 text-cyan-300 text-[10px] font-mono">
@@ -2739,17 +2739,17 @@ export default function AdminDashboardPage() {
                                 </span>
 
                                 <span className="text-[10px] font-mono text-neutral-500">
-                                  {stepsCount} escenas
+                                  {stepsCount} scenes
                                 </span>
                               </div>
 
                               <p className="text-xs text-neutral-400 line-clamp-1">
-                                {movie.tagline || movie.initialPlot || 'Película interactiva generada con IA.'}
+                                {movie.tagline || movie.initialPlot || 'Interactive AI generated film.'}
                               </p>
 
                               {movie.createdAt && (
                                 <span className="text-[10px] font-mono text-neutral-500 block">
-                                  Creada: {new Date(movie.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                  Created: {new Date(movie.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                 </span>
                               )}
                             </div>
@@ -2762,29 +2762,29 @@ export default function AdminDashboardPage() {
                                 onClick={() => handleSwitchMovie(movie.id, 1)}
                                 disabled={isSwitchingMovie}
                                 className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-amber-500/30 active:scale-95"
-                                title="Poner esta película al aire en vivo ahora"
+                                title="Broadcast this movie live on air now"
                               >
                                 <Play className="w-3 h-3" />
-                                <span>Poner al aire</span>
+                                <span>Put on Air</span>
                               </button>
                             )}
 
                             <button
                               onClick={() => openEditMovie(movie)}
                               className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-cyan-500/30 active:scale-95"
-                              title="Editar detalles de esta película"
+                              title="Edit details of this movie"
                             >
                               <Pencil className="w-3 h-3" />
-                              <span>Editar</span>
+                              <span>Edit</span>
                             </button>
 
                             <button
                               onClick={() => handleDeleteSpecificMovie(movie.id, movie.title)}
                               className="px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-red-500/20 active:scale-95"
-                              title="Eliminar esta película"
+                              title="Delete this movie"
                             >
-                              <Trash2 className="w-3 h-3" />
-                              <span>Eliminar</span>
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete</span>
                             </button>
                           </div>
                         </div>
@@ -2804,24 +2804,24 @@ export default function AdminDashboardPage() {
                       </div>
                       <div>
                         <h4 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
-                          Eliminar {selectedMovieIds.length} películas en masa
+                          Bulk Delete {selectedMovieIds.length} Films
                         </h4>
-                        <span className="text-[10px] text-rose-400/80 font-mono">Acción irreversible</span>
+                        <span className="text-[10px] text-rose-400/80 font-mono">Irreversible Action</span>
                       </div>
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Estás a punto de eliminar definitivamente <strong>{selectedMovieIds.length}</strong> películas del catálogo y de la base de datos, incluyendo todas sus escenas, votos y chat.
+                      You are about to permanently delete <strong>{selectedMovieIds.length}</strong> films from the catalog and database, including all scenes, votes, and chat history.
                     </p>
 
                     {hasActiveMovieSelected && (
                       <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs text-amber-200 font-mono space-y-1">
                         <span className="font-bold flex items-center gap-1.5 text-amber-300">
                           <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                          Película en emisión actual seleccionada
+                          Active film on air selected
                         </span>
                         <p className="text-[11px] text-neutral-300">
-                          &quot;{cinemaState?.movie?.title}&quot; está al aire ahora. Al eliminarla, el sistema generará automáticamente una nueva película de taquilla de inmediato.
+                          &quot;{cinemaState?.movie?.title}&quot; is currently streaming. Deleting it will trigger immediate generation of a fresh blockbuster premiere.
                         </p>
                       </div>
                     )}
@@ -2843,7 +2843,7 @@ export default function AdminDashboardPage() {
                         disabled={isBulkDeleting}
                         className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-mono text-xs uppercase tracking-wider transition-colors"
                       >
-                        Cancelar
+                        Cancel
                       </button>
                       <button
                         type="button"
@@ -2852,7 +2852,7 @@ export default function AdminDashboardPage() {
                         className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(244,63,94,0.4)] active:scale-95"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>{isBulkDeleting ? 'Eliminando...' : `Eliminar ${selectedMovieIds.length} películas`}</span>
+                        <span>{isBulkDeleting ? 'Deleting...' : `Delete ${selectedMovieIds.length} Films`}</span>
                       </button>
                     </div>
                   </div>
@@ -2869,49 +2869,49 @@ export default function AdminDashboardPage() {
                       </div>
                       <div>
                         <h4 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
-                          Edición en Masa ({selectedMovieIds.length} películas)
+                          Bulk Edit ({selectedMovieIds.length} Films)
                         </h4>
-                        <span className="text-[10px] text-cyan-400/80 font-mono">Aplica cambios en lote</span>
+                        <span className="text-[10px] text-cyan-400/80 font-mono">Batch Update Fields</span>
                       </div>
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Completa los campos que deseas actualizar en las <strong>{selectedMovieIds.length}</strong> películas seleccionadas. Los campos vacíos mantendrán su valor actual.
+                      Fill out the fields you want to update across all <strong>{selectedMovieIds.length}</strong> selected films. Empty fields will preserve their current values.
                     </p>
 
                     <form onSubmit={handleExecuteBulkEdit} className="space-y-3 font-mono">
                       <div>
-                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Nuevo Género</label>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">New Genre</label>
                         <input
                           type="text"
                           value={bulkEditGenre}
                           onChange={e => setBulkEditGenre(e.target.value)}
-                          placeholder="Ej: Cyberpunk / Neo-Noir Thriller"
+                          placeholder="e.g. Cyberpunk / Neo-Noir Thriller"
                           className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none placeholder:text-neutral-600"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Nuevo Estado</label>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">New Status</label>
                         <select
                           value={bulkEditStatus}
                           onChange={e => setBulkEditStatus(e.target.value)}
                           className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none cursor-pointer"
                         >
-                          <option value="">(No cambiar estado)</option>
-                          <option value="streaming">streaming (Activa)</option>
-                          <option value="completed">completed (Concluida)</option>
-                          <option value="paused">paused (Pausada)</option>
+                          <option value="">(Do not change status)</option>
+                          <option value="streaming">streaming (Active)</option>
+                          <option value="completed">completed (Completed)</option>
+                          <option value="paused">paused (Paused)</option>
                         </select>
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Nuevo Tagline (opcional)</label>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">New Tagline (optional)</label>
                         <input
                           type="text"
                           value={bulkEditTagline}
                           onChange={e => setBulkEditTagline(e.target.value)}
-                          placeholder="Tagline para todas las seleccionadas..."
+                          placeholder="Tagline for all selected films..."
                           className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs focus:border-cyan-400 focus:outline-none placeholder:text-neutral-600"
                         />
                       </div>
@@ -2923,7 +2923,7 @@ export default function AdminDashboardPage() {
                           disabled={isBulkEditing}
                           className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs uppercase tracking-wider transition-colors"
                         >
-                          Cancelar
+                          Cancel
                         </button>
                         <button
                           type="submit"
@@ -2931,7 +2931,7 @@ export default function AdminDashboardPage() {
                           className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-black font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>{isBulkEditing ? 'Actualizando...' : `Actualizar ${selectedMovieIds.length} películas`}</span>
+                          <span>{isBulkEditing ? 'Updating...' : `Update ${selectedMovieIds.length} Films`}</span>
                         </button>
                       </div>
                     </form>
@@ -2950,7 +2950,7 @@ export default function AdminDashboardPage() {
                         </div>
                         <div>
                           <h4 className="text-sm font-bold uppercase tracking-wider text-white font-mono">
-                            Editar Película
+                            Edit Film
                           </h4>
                           <span className="text-[10px] text-cyan-400/80 font-mono">
                             {editingTargetMovie ? editingTargetMovie.title : cinemaState?.movie?.title}
@@ -2967,7 +2967,7 @@ export default function AdminDashboardPage() {
 
                     <form onSubmit={handleSaveMovieEdit} className="space-y-3 font-mono">
                       <div>
-                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Título *</label>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Title *</label>
                         <input
                           type="text"
                           required
@@ -2978,7 +2978,7 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Género</label>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Genre</label>
                         <input
                           type="text"
                           value={editMovieGenre}
@@ -2998,7 +2998,7 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Sinopsis / Trama Inicial</label>
+                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Synopsis / Initial Plot</label>
                         <textarea
                           rows={3}
                           value={editMoviePlot}
@@ -3014,7 +3014,7 @@ export default function AdminDashboardPage() {
                           disabled={isSavingMovie}
                           className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs uppercase tracking-wider transition-colors"
                         >
-                          Cancelar
+                          Cancel
                         </button>
                         <button
                           type="submit"
@@ -3022,7 +3022,7 @@ export default function AdminDashboardPage() {
                           className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-black font-bold text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>{isSavingMovie ? 'Guardando...' : 'Guardar Cambios'}</span>
+                          <span>{isSavingMovie ? 'Saving...' : 'Save Changes'}</span>
                         </button>
                       </div>
                     </form>
@@ -3040,7 +3040,7 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="p-5 rounded-2xl bg-neutral-950/80 border border-purple-500/30 space-y-1">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-purple-300 flex items-center gap-1.5">
-                  <Eye className="w-3.5 h-3.5" /> Visitas hoy
+                  <Eye className="w-3.5 h-3.5" /> Visits Today
                 </span>
                 <span className="text-3xl font-black text-white font-mono">
                   {stats?.todayVisits ?? '—'}
@@ -3048,7 +3048,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="p-5 rounded-2xl bg-neutral-950/80 border border-purple-500/30 space-y-1">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-purple-300 flex items-center gap-1.5">
-                  <BarChart3 className="w-3.5 h-3.5" /> Visitas (14 días)
+                  <BarChart3 className="w-3.5 h-3.5" /> Visits (14 Days)
                 </span>
                 <span className="text-3xl font-black text-white font-mono">
                   {stats?.totalVisits ?? '—'}
@@ -3056,7 +3056,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="p-5 rounded-2xl bg-neutral-950/80 border border-emerald-500/30 space-y-1">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-300 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Espectadores activos
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Active Viewers
                 </span>
                 <span className="text-3xl font-black text-white font-mono">
                   {stats?.activeViewers ?? '—'}
@@ -3068,7 +3068,7 @@ export default function AdminDashboardPage() {
             <div className="p-6 rounded-2xl bg-neutral-950/80 border border-white/10 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-purple-300 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4" /> Visitas por día (últimos 14 días)
+                  <BarChart3 className="w-4 h-4" /> Visits by Day (Last 14 Days)
                 </h3>
                 <button
                   onClick={fetchStats}
@@ -3076,7 +3076,7 @@ export default function AdminDashboardPage() {
                   className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-40 text-purple-300 border border-purple-500/30 font-mono font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-colors"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  {isLoadingStats ? 'Cargando...' : 'Actualizar'}
+                  {isLoadingStats ? 'Loading...' : 'Refresh'}
                 </button>
               </div>
 
@@ -3084,16 +3084,16 @@ export default function AdminDashboardPage() {
                 <table className="w-full text-left text-xs font-mono">
                   <thead className="bg-black/60 text-neutral-400 uppercase tracking-wider text-[10px]">
                     <tr>
-                      <th className="px-4 py-3 border-b border-white/10">Fecha</th>
-                      <th className="px-4 py-3 border-b border-white/10 text-right">Visitantes únicos</th>
-                      <th className="px-4 py-3 border-b border-white/10 w-2/5 hidden sm:table-cell">Barra</th>
+                      <th className="px-4 py-3 border-b border-white/10">Date</th>
+                      <th className="px-4 py-3 border-b border-white/10 text-right">Unique Visitors</th>
+                      <th className="px-4 py-3 border-b border-white/10 w-2/5 hidden sm:table-cell">Chart Bar</th>
                     </tr>
                   </thead>
                   <tbody className="text-neutral-200">
                     {!stats || stats.visitsByDay.length === 0 ? (
                       <tr>
                         <td colSpan={3} className="px-4 py-8 text-center text-neutral-500">
-                          {isLoadingStats ? 'Cargando estadísticas...' : 'Sin visitas registradas todavía.'}
+                          {isLoadingStats ? 'Loading statistics...' : 'No visits recorded yet.'}
                         </td>
                       </tr>
                     ) : (
@@ -3121,13 +3121,13 @@ export default function AdminDashboardPage() {
               </div>
 
               <p className="text-[10px] font-mono text-neutral-500">
-                Cada visitante único cuenta una vez por día. Los espectadores activos se calculan con actividad de los últimos 5 minutos.
+                Each unique visitor is counted once per day. Active viewers reflect audience members active in the last 5 minutes.
               </p>
             </div>
           </div>
         )}
 
-        {/* TAB 5: CONTACT INBOX / MENSAJES */}
+        {/* TAB 5: CONTACT INBOX / MESSAGES */}
         {activeTab === 'messages' && (
           <div className="space-y-6">
             {/* Header & Stats Bar */}
@@ -3135,10 +3135,10 @@ export default function AdminDashboardPage() {
               <div className="space-y-1">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
                   <Inbox className="w-4 h-4 text-cyan-400" />
-                  Buzón de Mensajes & Contacto
+                  Contact Inbox & Messages
                 </h3>
                 <p className="text-xs text-neutral-400">
-                  Mensajes y solicitudes enviadas por la audiencia y patrocinadores desde el formulario web.
+                  Messages, sponsorship proposals, and feedback submitted by the audience and partners.
                 </p>
               </div>
 
@@ -3147,7 +3147,7 @@ export default function AdminDashboardPage() {
                   <span className="text-neutral-400">Total:</span>
                   <span className="font-bold text-white">{contactMessages.length}</span>
                   <span className="text-neutral-600">|</span>
-                  <span className="text-cyan-400">No leídos:</span>
+                  <span className="text-cyan-400">Unread:</span>
                   <span className="font-bold text-cyan-300">{unreadMessagesCount}</span>
                 </div>
 
@@ -3157,7 +3157,7 @@ export default function AdminDashboardPage() {
                   className="px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 disabled:opacity-40 text-cyan-300 border border-cyan-500/30 font-mono text-xs flex items-center gap-2 transition-colors"
                 >
                   <RotateCcw className={`w-3.5 h-3.5 ${isLoadingMessages ? 'animate-spin' : ''}`} />
-                  <span>{isLoadingMessages ? 'Cargando...' : 'Actualizar'}</span>
+                  <span>{isLoadingMessages ? 'Loading...' : 'Refresh'}</span>
                 </button>
               </div>
             </div>
@@ -3176,9 +3176,9 @@ export default function AdminDashboardPage() {
                         : 'text-neutral-400 hover:text-white'
                     }`}
                   >
-                    {tab === 'all' && `Todos (${contactMessages.length})`}
-                    {tab === 'unread' && `No leídos (${unreadMessagesCount})`}
-                    {tab === 'read' && `Leídos (${contactMessages.length - unreadMessagesCount})`}
+                    {tab === 'all' && `All (${contactMessages.length})`}
+                    {tab === 'unread' && `Unread (${unreadMessagesCount})`}
+                    {tab === 'read' && `Read (${contactMessages.length - unreadMessagesCount})`}
                   </button>
                 ))}
               </div>
@@ -3188,7 +3188,7 @@ export default function AdminDashboardPage() {
                 <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Buscar por nombre, correo, asunto o contenido..."
+                  placeholder="Search by name, email, subject, or content..."
                   value={messageSearchQuery}
                   onChange={e => setMessageSearchQuery(e.target.value)}
                   className="w-full bg-neutral-950/90 border border-white/10 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none focus:border-cyan-500/50"
@@ -3209,8 +3209,8 @@ export default function AdminDashboardPage() {
               {/* Left Column: Messages List (5 cols) */}
               <div className="lg:col-span-5 flex flex-col rounded-2xl bg-neutral-950/80 border border-white/10 overflow-hidden">
                 <div className="p-3 border-b border-white/10 bg-black/40 text-[11px] font-mono text-neutral-400 flex items-center justify-between">
-                  <span>MENSAJES ({filteredMessages.length})</span>
-                  <span className="text-[10px] text-neutral-500">Orden: Más recientes primero</span>
+                  <span>MESSAGES ({filteredMessages.length})</span>
+                  <span className="text-[10px] text-neutral-500">Order: Newest First</span>
                 </div>
 
                 <div className="flex-1 overflow-y-auto max-h-[600px] divide-y divide-white/5">
@@ -3219,10 +3219,10 @@ export default function AdminDashboardPage() {
                       <Inbox className="w-8 h-8 text-neutral-600 mx-auto" />
                       <p className="text-xs font-mono text-neutral-400">
                         {messageSearchQuery
-                          ? 'No se encontraron mensajes con ese criterio.'
+                          ? 'No messages found matching search criteria.'
                           : messageFilter === 'unread'
-                          ? 'No hay mensajes sin leer.'
-                          : 'Aún no hay mensajes recibidos.'}
+                          ? 'No unread messages.'
+                          : 'No messages received yet.'}
                       </p>
                     </div>
                   ) : (
@@ -3266,7 +3266,7 @@ export default function AdminDashboardPage() {
                           </div>
 
                           <div className="text-xs text-neutral-200 font-medium truncate mb-1">
-                            {msg.subject || 'Sin asunto'}
+                            {msg.subject || 'No subject'}
                           </div>
 
                           <div className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
@@ -3278,7 +3278,7 @@ export default function AdminDashboardPage() {
                             <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-bold ${
                               isUnread ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-white/5 text-neutral-400'
                             }`}>
-                              {isUnread ? 'No leído' : 'Leído'}
+                              {isUnread ? 'Unread' : 'Read'}
                             </span>
                           </div>
                         </div>
@@ -3297,14 +3297,14 @@ export default function AdminDashboardPage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2.5">
                           <h2 className="text-base font-bold text-white tracking-wide">
-                            {selectedMessage.subject || 'Sin Asunto'}
+                            {selectedMessage.subject || 'No Subject'}
                           </h2>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono uppercase font-bold ${
                             selectedMessage.status === 'unread'
                               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_8px_rgba(34,211,238,0.3)]'
                               : 'bg-neutral-800 text-neutral-400'
                           }`}>
-                            {selectedMessage.status === 'unread' ? 'No leído' : 'Leído'}
+                            {selectedMessage.status === 'unread' ? 'Unread' : 'Read'}
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-neutral-400">
@@ -3313,7 +3313,7 @@ export default function AdminDashboardPage() {
                           <a
                             href={`mailto:${selectedMessage.email}`}
                             className="text-cyan-400 hover:underline flex items-center gap-1"
-                            title="Enviar email"
+                            title="Send email"
                           >
                             {selectedMessage.email}
                             <ExternalLink className="w-3 h-3 inline" />
@@ -3337,7 +3337,7 @@ export default function AdminDashboardPage() {
                           }`}
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>{selectedMessage.status === 'unread' ? 'Marcar Leído' : 'Marcar No Leído'}</span>
+                          <span>{selectedMessage.status === 'unread' ? 'Mark Read' : 'Mark Unread'}</span>
                         </button>
 
                         <a
@@ -3347,14 +3347,14 @@ export default function AdminDashboardPage() {
                           className="px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-mono text-xs border border-white/10 flex items-center gap-1.5 transition-colors"
                         >
                           <Mail className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>Responder</span>
+                          <span>Reply</span>
                         </a>
 
                         <button
                           onClick={() => handleDeleteContactMessage(selectedMessage.id, selectedMessage.name)}
                           disabled={isUpdatingMessage}
                           className="p-2 rounded-xl bg-red-950/20 hover:bg-red-900/30 text-red-400 border border-red-500/20 transition-colors"
-                          title="Eliminar mensaje"
+                          title="Delete message"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -3365,7 +3365,7 @@ export default function AdminDashboardPage() {
                     <div className="flex-1 bg-black/40 border border-white/5 rounded-xl p-5 overflow-y-auto min-h-[160px]">
                       <div className="text-xs font-mono uppercase tracking-widest text-neutral-500 mb-3 flex items-center gap-1.5">
                         <MessageSquare className="w-3.5 h-3.5 text-neutral-400" />
-                        Mensaje
+                        Message
                       </div>
                       <div className="text-sm text-neutral-200 whitespace-pre-wrap leading-relaxed font-sans select-text">
                         {selectedMessage.message}
@@ -3375,15 +3375,15 @@ export default function AdminDashboardPage() {
                     {/* Metadata Card Footer */}
                     <div className="p-3 bg-neutral-900/40 rounded-xl border border-white/5 flex items-center justify-between text-[11px] font-mono text-neutral-500">
                       <span>ID: {selectedMessage.id}</span>
-                      <span>Canal: Formulario Web SlopMovie</span>
+                      <span>Channel: Kinetic Cinema Web Contact</span>
                     </div>
                   </div>
                 ) : (
                   <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3">
                     <Mail className="w-12 h-12 text-neutral-700" />
-                    <h4 className="text-sm font-mono font-bold text-neutral-400">Ningún mensaje seleccionado</h4>
+                    <h4 className="text-sm font-mono font-bold text-neutral-400">No message selected</h4>
                     <p className="text-xs text-neutral-500 max-w-sm">
-                      Haz clic en cualquiera de los mensajes de la lista para leer el contenido completo y responder.
+                      Select any message from the list on the left to read its full contents and reply.
                     </p>
                   </div>
                 )}

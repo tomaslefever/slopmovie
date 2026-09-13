@@ -1194,13 +1194,13 @@ class CinemaOrchestrator {
         const [videoRes, nextStepRaw, adVideoUrl] = await Promise.all([videoPromise, deepseekPromise, adPromise]);
 
         if (commentInfluence) {
-          this.addSystemMessage(`💡 La idea de @${commentInfluence.userName} moldea la Opción ${commentInfluence.optionId} de esta ronda (comentario marcado como usado).`);
+          this.addSystemMessage(`💡 Community idea from @${commentInfluence.userName} shaped Option ${commentInfluence.optionId} for this round (marked as used).`);
         }
 
         if (this.isGenerationPaused) {
-          this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generación pausada. Escena #${nextStepNum}: "${guaranteedWinningOption.title}" (30s) activa.`);
+          this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Generation paused. Scene #${nextStepNum}: "${guaranteedWinningOption.title}" (30s) live.`);
         } else if (isAdStep && adVideoUrl) {
-          this.addSystemMessage(`📺 [MID-ROLL SPONSOR] Anuncio integrado en Bloque 2 para "${adToPlay?.brandName}". Duración total escena: 45s.`);
+          this.addSystemMessage(`📺 [MID-ROLL SPONSOR] In-scene ad integrated into Block 2 for "${adToPlay?.brandName}". Total scene duration: 45s.`);
         }
 
         // Handle newly introduced characters & props from the LLM if any
@@ -1887,7 +1887,7 @@ class CinemaOrchestrator {
         adToPlay.isArchiveReplay = true;
         this.activeAd = { ...adToPlay };
 
-        this.addSystemMessage(`📺 [Archive Ad Replay] Reproduciendo versión anterior generada para "${adToPlay.brandName}" (cero créditos fal.ai).`);
+        this.addSystemMessage(`📺 [Archive Ad Replay] Playing previously generated version for "${adToPlay.brandName}" (zero fal.ai credits spent).`);
 
         broadcastCinemaEvent('ad_video_generated', {
           adId: adToPlay.id,
@@ -2448,7 +2448,7 @@ class CinemaOrchestrator {
 
     persistMovie(this.movie);
 
-    this.addSystemMessage(`🎬 [DIRECTOR SWITCH] Película cambiada a "${this.movie.title}" (Step ${chosenStepNum}).`);
+    this.addSystemMessage(`🎬 [DIRECTOR SWITCH] Active film switched to "${this.movie.title}" (Step ${chosenStepNum}).`);
 
     // Broadcast new movie and new step to all clients
     await broadcastCinemaEvent('new_movie_started', {

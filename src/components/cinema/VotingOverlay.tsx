@@ -175,7 +175,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                 {/* Category Badge: Scene Option Vote */}
                 <div className="mb-2.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-400/50 text-[10px] md:text-xs font-mono font-bold text-cyan-300 uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,240,255,0.3)]">
                   <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Votación de Opción de Escena • Opciones A / B</span>
+                  <span>Scene Branch Voting • Options A / B</span>
                 </div>
 
                 <div className="relative flex items-center justify-center mb-2 md:mb-3">
@@ -216,7 +216,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                 {stepNumber === 4 && (
                   <div className="mb-2 px-3 py-1 rounded-full bg-gradient-to-r from-red-600/30 via-amber-500/20 to-red-600/30 border border-red-500/50 text-[10px] md:text-xs font-mono font-bold text-red-300 uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.35)] animate-pulse">
                     <Flame className="w-3.5 h-3.5 text-red-400" />
-                    <span>Primer Conflicto • Decisión de la Audiencia</span>
+                    <span>First Conflict • Audience Decision</span>
                   </div>
                 )}
 
@@ -224,10 +224,10 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   <Timer className="w-3.5 h-3.5 md:w-4 md:h-4 text-cyan-400" />
                   <h2 className="text-lg md:text-2xl font-black uppercase tracking-widest text-white">
                     {isAuthoritativeWinnerReady
-                      ? "Decisión de Escena Revelada"
+                      ? "Scene Decision Revealed"
                       : (isTimeExpired
-                          ? "Tiempo Agotado • Calculando Rama..."
-                          : (stepNumber === 4 ? "Primer Conflicto: ¡Tú Decides la Escena!" : "Vota la Siguiente Rama de la Escena")
+                          ? "Time Expired • Calculating Branch..."
+                          : (stepNumber === 4 ? "First Conflict: You Decide the Scene!" : "Vote the Next Story Branch")
                         )
                     }
                   </h2>
@@ -235,12 +235,12 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                 </div>
                 <p className="hidden md:block text-xs text-neutral-400 mt-1 max-w-md">
                   {isAuthoritativeWinnerReady
-                    ? "Opción ganadora verificada · Sintetizando continuación narrativa..."
+                    ? "Winning option verified · Synthesizing narrative continuation..."
                     : (isTimeExpired
-                        ? "Cerrando urnas de escena. Calculando decisión con consenso Realtime..."
+                        ? "Closing scene polls. Computing consensus via Realtime..."
                         : (stepNumber === 4
-                            ? <>¡Ha estallado el conflicto! Elige cómo nuestro protagonista resuelve esta escena. Presiona <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> o <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd>.</>
-                            : <>Elige el rumbo de la siguiente escena. Presiona <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> o <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> para votar.</>
+                            ? <>The conflict has escalated! Choose how the protagonist resolves this scene. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd>.</>
+                            : <>Choose the direction of the next scene. Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">1</kbd> or <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-white font-mono">2</kbd> to vote.</>
                           )
                       )
                   }
@@ -456,24 +456,24 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                   <>
                     <Dices className="w-4 h-4 text-amber-400" />
                     <span className="text-xs font-mono font-bold tracking-widest uppercase text-amber-300">
-                      Empate / Selección al Azar • Opción de Escena
+                      Tie / Random Selection • Scene Option
                     </span>
                   </>
                 ) : (
                   <>
                     <Trophy className="w-4 h-4 text-amber-400" />
                     <span className="text-xs font-mono font-bold tracking-widest uppercase text-cyan-300">
-                      Decisión de Escena de la Audiencia
+                      Audience Scene Decision
                     </span>
                   </>
                 )}
               </div>
 
               <h2 className="text-2xl md:text-3xl font-black uppercase tracking-widest text-white mb-2 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">
-                Opción de Escena Seleccionada
+                Selected Scene Branch
               </h2>
               <p className="text-xs text-neutral-300 max-w-md font-mono mb-6">
-                La historia continuará por esta rama narrativa. La siguiente escena está siendo sintetizada.
+                The story will continue down this narrative branch. The next scene is currently being synthesized.
               </p>
 
               {/* The Hero Centered Card */}

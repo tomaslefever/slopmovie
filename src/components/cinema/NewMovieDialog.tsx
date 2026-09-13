@@ -44,10 +44,10 @@ export const NewMovieDialog: React.FC<NewMovieDialogProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-white uppercase tracking-wider">
-                Nueva Película Interactiva (50 Pasos)
+                New Interactive Film (50 Steps)
               </h3>
               <p className="text-xs text-neutral-400">
-                DeepSeek generará el argumento, la biblia de arte y el primer clip
+                DeepSeek will generate the storyline, art bible, and premiere scene
               </p>
             </div>
           </div>
@@ -64,13 +64,13 @@ export const NewMovieDialog: React.FC<NewMovieDialogProps> = ({
         {/* Premise Input */}
         <div className="space-y-2">
           <label className="text-xs font-mono text-neutral-300 uppercase tracking-wider block">
-            Premisa o Universo (Opcional):
+            Premise or Worldbuilding (Optional):
           </label>
           <textarea
             value={promptText}
             onChange={(e) => setPromptText(e.target.value)}
             disabled={isLoading}
-            placeholder="Ej: Un detective cibernético y una androide rebelde descubren una señal alienígena en una estación minera de Saturno..."
+            placeholder="e.g. A cybernetic detective and a rogue android discover an alien beacon on a Saturn mining outpost..."
             rows={3}
             className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-cyan-400 transition-colors"
           />
@@ -86,20 +86,20 @@ export const NewMovieDialog: React.FC<NewMovieDialogProps> = ({
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>DeepSeek Creando Argumento & Biblia...</span>
+                <span>DeepSeek Generating Story & Bible...</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
                 <span>
-                  {promptText.trim() ? "Generar con esta Premisa" : "Generar Historia Automática con DeepSeek"}
+                  {promptText.trim() ? "Generate with this Premise" : "Generate Automatic Story with DeepSeek"}
                 </span>
               </>
             )}
           </button>
 
           <p className="text-[11px] text-neutral-500 text-center font-mono">
-            La película constará de 50 clips de 15s con votaciones de 10s en vivo.
+            The film features 50 sequential 15s clips with live 10s branching votes.
           </p>
         </div>
       </div>

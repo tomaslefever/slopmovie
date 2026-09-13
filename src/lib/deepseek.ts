@@ -134,7 +134,7 @@ export interface GeneratedStoryBible {
 
 export const BLOCKBUSTER_GENRES = [
   {
-    genre: "Superhéroes / Comic Book Cinematic",
+    genre: "Superheroes / Comic Book Cinematic",
     theme: "Vigilantism, Hidden Identities, Moral Duty & World-Threatening Supervillains",
     style: "IMAX 65mm Superhero Spectacle, High-Octane Key Lighting, Heroic Low-Angle Framing, Vivid Primary Colors, Deep Anamorphic Flares"
   },
@@ -144,92 +144,92 @@ export const BLOCKBUSTER_GENRES = [
     style: "Luminous Cel-Shaded Art Direction, God Rays Piercing Clouds, Dynamic Action Speed Lines, High-Saturation Azure and Sunset Gradients"
   },
   {
-    genre: "Animación 3D Estilizada / Family Adventure",
+    genre: "Stylized 3D Animation / Family Adventure",
     theme: "Whimsical Inventions, Found Family, Heartfelt Courage & Pure Wonder",
     style: "Pixar & Spider-Verse Stylized 3D Animation, Tactile Textures, Subsurface Scattering, Warm Bounce Lighting, Expressive Character Physics"
   },
   {
-    genre: "Horror Clásico / Gothic Supernatural",
+    genre: "Classic Horror / Gothic Supernatural",
     theme: "Haunted Legacies, Demonic Invocations, Ancient Curses & Shadows in the Mist",
     style: "35mm Grainy Chiaroscuro, Cold 4500K Moonlight through Decaying Windows, Unsettling Negative Space, Flickering Candelabra"
   },
   {
-    genre: "Cine Noir Clásico / Hardboiled 1940s",
+    genre: "Classic Film Noir / Hardboiled 1940s",
     theme: "Cynical Private Eyes, Femme Fatales, Urban Corruption & Moral Ambiguity",
     style: "Kodak Double-X Black & White, Hard 8:1 Contrast Ratio, Venetian Blind Gobo Shadows, Rain-Slicked Pavements and Cigarette Smoke"
   },
   {
-    genre: "Drama Emocional / High-Stakes Human Struggle",
+    genre: "Emotional Drama / High-Stakes Human Struggle",
     theme: "Family Sacrifices, Unspoken Truths, Moral Dilemmas & Emotional Redemption",
     style: "Cooke S4 Organic Warmth, Intimate 50mm Medium Close-Ups, Natural Soft Window Light, Authentic Emotional Depth"
   },
   {
-    genre: "Policial / Gritty Crime Investigation",
+    genre: "Police Procedural / Gritty Crime Investigation",
     theme: "Homicide Detectives, Cold Cases, Forensic Clues & The Dark Heart of the City",
     style: "35mm Telephoto Compression, Muted Street Realism, Fluorescent Precinct Lighting, Handheld Steadicam Energy"
   },
   {
-    genre: "Comedia de Acción / Buddy Cop Adventure",
+    genre: "Action Comedy / Buddy Cop Adventure",
     theme: "Clashing Personalities, Outrageous Heists, Witty Banter & Escaping by a Hair",
     style: "High-Key Saturated Visuals, Wide Comedic Framing, Snappy Dynamic Camera Pans, Crisp Commercial Contrast"
   },
   {
-    genre: "Thriller Psicológico / Suspense & Mind Games",
+    genre: "Psychological Thriller / Suspense & Mind Games",
     theme: "Unreliable Narrators, Claustrophobic Paranoia, Fractured Memories & Hidden Motives",
     style: "David Fincher Precision, Desaturated Green-Amber Palette, Split-Diopter Focus, Symmetrical Framing and Ominous Slow Dolly Creep"
   },
   {
-    genre: "Fantasía Épica Medieval / Sword & Sorcery",
+    genre: "Epic Medieval Fantasy / Sword & Sorcery",
     theme: "Ancient Kingdoms, Royal Prophecies, Mythic Beasts & Legendary Blades",
     style: "70mm Ultra Panavision, Torchlit Stone Castles, Sweeping Misty Mountain Panoramas, Rich Velvet and Weathered Iron"
   },
   {
-    genre: "Western Clásico / Frontier Justice",
+    genre: "Classic Western / Frontier Justice",
     theme: "Rival Gunslingers, Dusty Saloons, Desert Standoffs & The Frontier Code",
     style: "Sergio Leone Techniscope 2.35:1 Widescreen, Blinding Desert Sunlight, Extreme Close-Up Eye Standoffs, Golden Hour Horizon"
   },
   {
-    genre: "Aventura Arqueológica Pulp / Lost Relic Hunter",
+    genre: "Pulp Archaeological Adventure / Lost Relic Hunter",
     theme: "Forbidden Tombs, Ancient Traps, Cryptic Maps & Ruthless Mercenary Rivals",
     style: "Warm Firelight & Amber Lanterns, Dusty Cavern God Rays, Weathered Leather Patina, 35mm Rich Kodachrome Earth Tones"
   },
   {
-    genre: "Espionaje Guerra Fría / Clandestine Agents",
+    genre: "Cold War Espionage / Clandestine Agents",
     theme: "Divided Cities, Encrypted Microfilm, Double Agents & Paranoia Behind the Curtain",
     style: "Grainy 16mm Surveillance Camera Aesthetic, Wet Cobblestone Alleys, Trench Coats under Sodium Lamps, Muted Slate Blues"
   },
   {
-    genre: "Samuráis & Chambara / Bushido Honor",
+    genre: "Samurai & Chambara / Bushido Honor",
     theme: "Wandering Ronin, Feudal Feuds, Sacred Katana Oaths & Sacrificial Duels",
     style: "Akira Kurosawa Compositions, Driving Rainstorms, Howling Pampas Winds, Razor-Sharp Katana Draw Cadence"
   },
   {
-    genre: "Romance de Época / Regency & Victorian Intrigue",
+    genre: "Period Romance / Regency & Victorian Intrigue",
     theme: "Forbidden Passions, Gilded Ballrooms, High Society Scandals & Written Letters",
     style: "Lush 35mm Celluloid, Soft Silk Diffusion, 2800K Glowing Candelabras, Opulent Silk and Velvet Costumes"
   },
   {
-    genre: "Bélico Histórico / Brotherhood in the Trenches",
+    genre: "Historical Warfare / Brotherhood in the Trenches",
     theme: "Frontline Bravery, Survival in the Trenches, Camaraderie & The Cost of War",
     style: "Desaturated Gritty Film Stock, Explosive Debris & Dirt Particle Scatter, Handheld Trench Run Tracking, Hard Direct Sunlight"
   },
   {
-    genre: "Misterio Whodunnit de Mansión / Manor Puzzle",
+    genre: "Manor Whodunnit Mystery / Estate Puzzle",
     theme: "Eccentric Sleuths, Secret Wills, Poisoned Teacups & Twelve Suspicious Heirs",
     style: "Ornate Victorian Interiors, Symmetrical Knives Out Framing, Deep Mahogany & Emerald Tones, Razor-Sharp Optical Clarity"
   },
   {
-    genre: "Piratas & Swashbuckling / High Seas Odyssey",
+    genre: "Pirates & Swashbuckling / High Seas Odyssey",
     theme: "Cursed Treasure Maps, Galleon Broadside Battles, Mutiny & The Lawless Ocean",
     style: "Technicolor 3-Strip Azure Seas, Sun-Drenched Wooden Decks, Billowing White Canvas, Salty Spray across the Lens"
   },
   {
-    genre: "Fantasía Mitológica / Odisea de Dioses y Héroes",
+    genre: "Mythological Fantasy / Odyssey of Gods & Heroes",
     theme: "Olympian Quests, Mythic Monsters, Divine Oracles & Legendary Heroism",
     style: "IMAX Colossal Scale, Radiant Golden Divine Auras, Crashing Marble Columns, Chiaroscuro Lightning Flares"
   },
   {
-    genre: "Catástrofe & Supervivencia Natural / Extreme Elements",
+    genre: "Disaster & Survival / Extreme Elements",
     theme: "Raging Volcanoes, Glacial Avalanches, Family Rescue & Defying Nature",
     style: "Immersive Wide 18mm Lens, Dynamic Shaking Camera Rigs, Blinding Atmospheric Ash and Snow, High Dynamic Range"
   }

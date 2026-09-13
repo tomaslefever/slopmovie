@@ -44,10 +44,10 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white tracking-wide uppercase">
-                Biblia de Arte, Voces & Consistencia Visual
+                Art Bible, Voices & Visual Consistency
               </h2>
               <p className="text-xs text-neutral-400 font-mono">
-                Tokens de personajes, prompts vocales y props asociados para MiniMax H3-Max (480p 16:9)
+                Character tokens, voice prompts, and associated props for AI cinematic generation
               </p>
             </div>
           </div>
@@ -58,7 +58,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
               className="px-3 py-1.5 rounded-lg bg-neutral-900 border border-white/10 text-xs font-mono text-neutral-300 hover:text-white flex items-center space-x-1.5 transition-colors"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? "Copiado" : "Copiar JSON"}</span>
+              <span>{copied ? "Copied" : "Copy JSON"}</span>
             </button>
             <button
               onClick={onClose}
@@ -80,7 +80,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
             }`}
           >
             <User className="w-4 h-4" />
-            <span>Personajes & Voces ({bible.characters.length})</span>
+            <span>Characters & Voices ({bible.characters.length})</span>
           </button>
 
           <button
@@ -92,7 +92,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
             }`}
           >
             <Box className="w-4 h-4" />
-            <span>Props de Personajes ({bible.props.length})</span>
+            <span>Character Props ({bible.props.length})</span>
           </button>
 
           <button
@@ -104,7 +104,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
             }`}
           >
             <Compass className="w-4 h-4" />
-            <span>Escenarios ({bible.environments.length})</span>
+            <span>Environments ({bible.environments.length})</span>
           </button>
 
           <button
@@ -116,7 +116,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            <span>Hilo Conductor (50 Pasos)</span>
+            <span>Master Arc (50 Steps)</span>
           </button>
         </div>
 
@@ -144,7 +144,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
                         </span>
                         {char.stepIntroduced && (
                           <span className="text-[10px] font-mono text-neutral-400">
-                            Paso #{char.stepIntroduced}
+                            Step #{char.stepIntroduced}
                           </span>
                         )}
                       </div>
@@ -153,18 +153,18 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
 
                   <div className="space-y-2 text-xs">
                     <div>
-                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Rasgos Visuales (Inmutables):</span>
+                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Visual Traits (Immutable):</span>
                       <p className="text-neutral-200">{char.visualTraits}</p>
                     </div>
                     <div>
-                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Vestimenta / Atuendo:</span>
+                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Clothing / Attire:</span>
                       <p className="text-neutral-200">{char.clothing}</p>
                     </div>
                     {/* Consistent Voice Prompt */}
                     <div className="p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-500/30 space-y-1">
                       <div className="flex items-center space-x-1.5 text-cyan-400 text-[10px] font-mono font-bold uppercase tracking-wider">
                         <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Prompt de Consistencia de Voz (Audio):</span>
+                        <span>Voice Consistency Prompt (Audio):</span>
                       </div>
                       <p className="text-neutral-200 text-[11px] italic leading-relaxed">
                         "{char.voicePrompt}"
@@ -184,11 +184,11 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
                 <div className="flex items-center space-x-2 text-neutral-300">
                   <ShieldCheck className="w-4 h-4 text-cyan-400" />
                   <span>
-                    Los props se integran automáticamente por el LLM junto a cada nuevo personaje para garantizar continuidad física.
+                    Props are dynamically integrated by the AI Director to preserve narrative and visual continuity.
                   </span>
                 </div>
                 <span className="text-neutral-400 bg-neutral-800 px-2.5 py-1 rounded text-[11px]">
-                  {bible.props.length} Props Registrados
+                  {bible.props.length} Registered Props
                 </span>
               </div>
 
@@ -207,7 +207,7 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
                             <h4 className="text-sm font-bold text-white">{prop.name}</h4>
                             {prop.ownerCharacterName && (
                               <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/20 block mt-0.5">
-                                Prop de: {prop.ownerCharacterName}
+                                Prop of: {prop.ownerCharacterName}
                               </span>
                             )}
                           </div>
@@ -224,11 +224,11 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
 
                       <div className="space-y-2 text-xs">
                         <div>
-                          <span className="text-neutral-400 font-mono block text-[10px] uppercase">Apariencia Visual en IA:</span>
+                          <span className="text-neutral-400 font-mono block text-[10px] uppercase">AI Visual Appearance:</span>
                           <p className="text-neutral-200">{prop.visualAppearance}</p>
                         </div>
                         <div>
-                          <span className="text-neutral-400 font-mono block text-[10px] uppercase">Significado Narrativo:</span>
+                          <span className="text-neutral-400 font-mono block text-[10px] uppercase">Narrative Significance:</span>
                           <p className="text-neutral-300">{prop.narrativeSignificance}</p>
                         </div>
                       </div>
@@ -237,11 +237,11 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
                     {prop.imageUrl && (
                       <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px] font-mono text-cyan-400">
                         <span className="flex items-center gap-1">
-                          <ImageIcon className="w-3.5 h-3.5" /> Referencia visual para MiniMax H3-Max
+                          <ImageIcon className="w-3.5 h-3.5" /> Visual reference for video generation
                         </span>
                         {prop.stepIntroduced && (
                           <span className="text-neutral-400 text-[10px]">
-                            Paso #{prop.stepIntroduced}
+                            Step #{prop.stepIntroduced}
                           </span>
                         )}
                       </div>
@@ -266,15 +266,15 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
                   </h4>
                   <div className="space-y-2 text-xs">
                     <div>
-                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Iluminación & Lente:</span>
+                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Lighting & Lens:</span>
                       <p className="text-neutral-200">{env.lighting}</p>
                     </div>
                     <div>
-                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Atmósfera:</span>
+                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Atmosphere:</span>
                       <p className="text-neutral-300">{env.atmosphere}</p>
                     </div>
                     <div>
-                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Paleta Cromática:</span>
+                      <span className="text-neutral-400 font-mono block text-[10px] uppercase">Color Palette:</span>
                       <code className="text-cyan-300 font-mono text-[11px]">{env.colorPalette}</code>
                     </div>
                   </div>
@@ -288,21 +288,21 @@ export const CharacterBibleModal: React.FC<CharacterBibleModalProps> = ({
             <div className="space-y-6 text-sm">
               <div className="p-4 rounded-xl bg-neutral-900/60 border border-white/5 space-y-2">
                 <span className="text-xs font-mono uppercase text-cyan-400 font-bold block">
-                  Argumento Inicial Creado por DeepSeek:
+                  Initial Premise (DeepSeek):
                 </span>
                 <p className="text-neutral-200 leading-relaxed">{initialPlot}</p>
               </div>
 
               <div className="p-4 rounded-xl bg-neutral-900/60 border border-white/5 space-y-2">
                 <span className="text-xs font-mono uppercase text-amber-400 font-bold block">
-                  Hilo Conductor de los 50 Pasos:
+                  50-Step Narrative Master Arc:
                 </span>
                 <p className="text-neutral-300 leading-relaxed">{masterArcThread}</p>
               </div>
 
               <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/20 text-xs text-neutral-300 font-mono space-y-1">
                 <span className="text-cyan-400 font-bold block uppercase">
-                  Estilo de Rodaje Cinematográfico (MiniMax H3-Max 480p 16:9):
+                  Cinematic Style Grammar:
                 </span>
                 <p>{bible.cinematicStyle}</p>
               </div>

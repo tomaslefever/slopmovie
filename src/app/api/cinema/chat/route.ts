@@ -65,12 +65,12 @@ export async function POST(request: Request) {
 
     // Handle new chat comment
     if (!text || text.trim().length === 0) {
-      return NextResponse.json({ error: 'El mensaje no puede estar vacío' }, { status: 400 });
+      return NextResponse.json({ error: 'Message cannot be empty' }, { status: 400 });
     }
 
     const trimmedUser = typeof userName === 'string' ? userName.trim() : '';
-    if (!trimmedUser || trimmedUser.length < 2 || trimmedUser.startsWith('Viewer_') || trimmedUser === 'Espectador') {
-      return NextResponse.json({ error: 'Para chatear es necesario usar un nickname' }, { status: 400 });
+    if (!trimmedUser || trimmedUser.length < 2 || trimmedUser.startsWith('Viewer_') || trimmedUser === 'Espectador' || trimmedUser === 'Spectator') {
+      return NextResponse.json({ error: 'A valid nickname is required to chat' }, { status: 400 });
     }
 
     const newMessage = {

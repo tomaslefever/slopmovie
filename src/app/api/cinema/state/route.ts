@@ -290,7 +290,7 @@ export async function POST(request: Request) {
 
     if (action === 'vote') {
       if (!optionId || !['A', 'B'].includes(optionId)) {
-        return NextResponse.json({ error: 'Opción de voto inválida' }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid vote option' }, { status: 400 });
       }
 
       const voteResult = cinemaEngine.castVote(userId || 'anonymous', optionId, userName);
@@ -304,7 +304,7 @@ export async function POST(request: Request) {
 
     if (action === 'blockbuster_vote') {
       if (!optionId || !['A', 'B', 'C', 'D'].includes(optionId)) {
-        return NextResponse.json({ error: 'Candidata de película inválida' }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid candidate option' }, { status: 400 });
       }
 
       // Sync cinemaEngine with Supabase live state if necessary (multi-process / serverless resilience)
@@ -456,7 +456,7 @@ export async function POST(request: Request) {
     if (action === 'jump_to_step' || action === 'set_current_step') {
       const stepNumber = Number(body.stepNumber);
       if (isNaN(stepNumber) || stepNumber < 1) {
-        return NextResponse.json({ error: 'Número de step inválido' }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid step number' }, { status: 400 });
       }
       const success = await cinemaEngine.jumpToStep(stepNumber);
       return NextResponse.json({
@@ -469,7 +469,7 @@ export async function POST(request: Request) {
     if (action === 'switch_movie') {
       const { movieId, stepNumber } = body;
       if (!movieId) {
-        return NextResponse.json({ error: 'movieId es requerido' }, { status: 400 });
+        return NextResponse.json({ error: 'movieId is required' }, { status: 400 });
       }
       const success = await cinemaEngine.switchToMovie(movieId, stepNumber ? Number(stepNumber) : 1);
       return NextResponse.json({
@@ -512,7 +512,7 @@ export async function POST(request: Request) {
     if (action === 'update_movie') {
       const { movieId, fields } = body;
       if (!movieId || !fields || typeof fields !== 'object') {
-        return NextResponse.json({ error: 'movieId y fields son requeridos' }, { status: 400 });
+        return NextResponse.json({ error: 'movieId and fields are required' }, { status: 400 });
       }
       const success = await cinemaEngine.updateMovieDetails(movieId, fields);
       return NextResponse.json({
@@ -524,7 +524,7 @@ export async function POST(request: Request) {
     if (action === 'delete_movie') {
       const { movieId } = body;
       if (!movieId) {
-        return NextResponse.json({ error: 'movieId es requerido' }, { status: 400 });
+        return NextResponse.json({ error: 'movieId is required' }, { status: 400 });
       }
       const result = await cinemaEngine.deleteMovie(movieId);
       return NextResponse.json({
@@ -537,7 +537,7 @@ export async function POST(request: Request) {
     if (action === 'bulk_delete_movies') {
       const { movieIds } = body;
       if (!Array.isArray(movieIds) || movieIds.length === 0) {
-        return NextResponse.json({ error: 'movieIds debe ser un array no vacío' }, { status: 400 });
+        return NextResponse.json({ error: 'movieIds must be a non-empty array' }, { status: 400 });
       }
       const result = await cinemaEngine.bulkDeleteMovies(movieIds);
       return NextResponse.json({
@@ -551,7 +551,7 @@ export async function POST(request: Request) {
     if (action === 'bulk_update_movies') {
       const { movieIds, fields } = body;
       if (!Array.isArray(movieIds) || movieIds.length === 0 || !fields || typeof fields !== 'object') {
-        return NextResponse.json({ error: 'movieIds (array) y fields (objeto) son requeridos' }, { status: 400 });
+        return NextResponse.json({ error: 'movieIds (array) and fields (object) are required' }, { status: 400 });
       }
       const result = await cinemaEngine.bulkUpdateMovies(movieIds, fields);
       return NextResponse.json({
@@ -561,8 +561,8 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ error: 'Acción desconocida' }, { status: 400 });
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Error en el servidor' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });
   }
 }

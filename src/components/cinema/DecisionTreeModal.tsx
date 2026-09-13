@@ -33,10 +33,10 @@ export const DecisionTreeModal: React.FC<DecisionTreeModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white tracking-wide uppercase">
-                Árbol de Decisiones & Referencias de Video
+                Decision Tree & Video References
               </h2>
               <p className="text-xs text-neutral-400 font-mono">
-                Ramas narrativas, referencias de video anterior y props enviados a MiniMax H3-Max (480p 16:9)
+                Narrative branches, previous video continuity references, and active props
               </p>
             </div>
           </div>
@@ -75,7 +75,7 @@ export const DecisionTreeModal: React.FC<DecisionTreeModalProps> = ({
                         {step.title}
                         {isCurrent && (
                           <span className="text-[10px] font-mono text-red-400 bg-red-950/60 border border-red-500/30 px-2 py-0.2 rounded-full uppercase tracking-wider">
-                            En Reproducción
+                            Now Playing
                           </span>
                         )}
                       </h4>
@@ -91,11 +91,11 @@ export const DecisionTreeModal: React.FC<DecisionTreeModalProps> = ({
                           : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                       }`}>
                         {step.wasRandomPick && <Dices className="w-3.5 h-3.5 text-amber-400" />}
-                        Ganó Opción {chosenOption} {step.wasRandomPick ? '(Azar)' : ''}
+                        Option {chosenOption} Won {step.wasRandomPick ? '(Random)' : ''}
                       </span>
                     ) : (
                       <span className="text-xs font-mono text-neutral-500 bg-neutral-800 px-2.5 py-1 rounded">
-                        Votando ahora...
+                        Voting now...
                       </span>
                     )}
 
@@ -119,21 +119,21 @@ export const DecisionTreeModal: React.FC<DecisionTreeModalProps> = ({
                       {step.referenceVideoUrl && (
                         <div className="flex items-center gap-1.5 bg-blue-950/40 border border-blue-500/30 text-blue-300 px-2.5 py-1 rounded-md">
                           <LinkIcon className="w-3 h-3 text-blue-400" />
-                          <span>Video anterior referenciado</span>
+                          <span>Prior scene referenced</span>
                         </div>
                       )}
 
                       {step.propReferenceImages && step.propReferenceImages.length > 0 && (
                         <div className="flex items-center gap-1.5 bg-amber-950/40 border border-amber-500/30 text-amber-300 px-2.5 py-1 rounded-md">
                           <Box className="w-3 h-3 text-amber-400" />
-                          <span>{step.propReferenceImages.length} props referenciados</span>
+                          <span>{step.propReferenceImages.length} props referenced</span>
                         </div>
                       )}
 
                       {step.voiceDirection && (
                         <div className="flex items-center gap-1.5 bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 px-2.5 py-1 rounded-md">
                           <Volume2 className="w-3 h-3 text-cyan-400" />
-                          <span>Consistencia de voz activa</span>
+                          <span>Voice consistency active</span>
                         </div>
                       )}
                     </div>
@@ -151,13 +151,13 @@ export const DecisionTreeModal: React.FC<DecisionTreeModalProps> = ({
                         >
                           <div className="flex items-center justify-between font-mono font-bold mb-1">
                             <span className={opt.id === 'A' ? 'text-cyan-400' : 'text-amber-400'}>
-                              Opción {opt.id}: {opt.title}
+                              Option {opt.id}: {opt.title}
                             </span>
-                            <span className="text-neutral-400">{opt.votes} votos</span>
+                            <span className="text-neutral-400">{opt.votes} {opt.votes === 1 ? 'vote' : 'votes'}</span>
                           </div>
                           <p className="text-neutral-300 mb-1">{opt.text}</p>
                           <span className="text-[10px] text-neutral-400 italic block">
-                            Efecto: {opt.expectedConsequence}
+                            Consequence: {opt.expectedConsequence}
                           </span>
                         </div>
                       ))}
@@ -167,7 +167,7 @@ export const DecisionTreeModal: React.FC<DecisionTreeModalProps> = ({
                     <div className="p-3.5 rounded-lg bg-black/40 border border-white/5 space-y-2.5 text-xs font-mono">
                       <div>
                         <span className="text-cyan-400 font-bold flex items-center gap-1">
-                          <Eye className="w-3.5 h-3.5" /> Prompt de Consistencia Visual (MiniMax H3-Max 480p 16:9):
+                          <Eye className="w-3.5 h-3.5" /> Visual Consistency Prompt:
                         </span>
                         <p className="text-neutral-300 text-[11px] mt-0.5">{step.visualPrompt}</p>
                       </div>
@@ -175,7 +175,7 @@ export const DecisionTreeModal: React.FC<DecisionTreeModalProps> = ({
                       {step.voiceDirection && (
                         <div>
                           <span className="text-emerald-400 font-bold flex items-center gap-1">
-                            <Volume2 className="w-3.5 h-3.5" /> Directiva de Voz & Audio:
+                            <Volume2 className="w-3.5 h-3.5" /> Voice & Audio Direction:
                           </span>
                           <p className="text-neutral-300 text-[11px] mt-0.5 italic">{step.voiceDirection}</p>
                         </div>
@@ -183,7 +183,7 @@ export const DecisionTreeModal: React.FC<DecisionTreeModalProps> = ({
 
                       <div>
                         <span className="text-amber-400 font-bold flex items-center gap-1">
-                          <Video className="w-3.5 h-3.5" /> Prompt de Movimiento de Cámara:
+                          <Video className="w-3.5 h-3.5" /> Camera Motion Prompt:
                         </span>
                         <p className="text-neutral-300 text-[11px] mt-0.5">{step.cameraMotionPrompt}</p>
                       </div>

@@ -58,15 +58,15 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
     e.preventDefault();
     const cleanNick = nicknameInput.trim().replace(/^@+/, '');
     if (!cleanNick || cleanNick.length < 2) {
-      setNicknameError('El nickname debe tener al menos 2 caracteres.');
+      setNicknameError('Nickname must have at least 2 characters.');
       return;
     }
     if (cleanNick.length > 24) {
-      setNicknameError('El nickname no puede superar los 24 caracteres.');
+      setNicknameError('Nickname cannot exceed 24 characters.');
       return;
     }
-    if (cleanNick.startsWith('Viewer_') || cleanNick.toLowerCase() === 'espectador') {
-      setNicknameError('Elige un apodo personalizado para identificarte.');
+    if (cleanNick.startsWith('Viewer_') || cleanNick.toLowerCase() === 'viewer') {
+      setNicknameError('Choose a custom nickname to identify yourself.');
       return;
     }
 
@@ -77,7 +77,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
       setIsEditingNickname(false);
       audioCues.playClick();
     } catch {
-      setNicknameError('Error guardando nickname. Intenta de nuevo.');
+      setNicknameError('Error saving nickname. Please try again.');
     } finally {
       setIsSavingNickname(false);
     }
@@ -87,7 +87,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
     e.preventDefault();
     if (!nickname) {
       setIsEditingNickname(true);
-      setNicknameError('Para chatear es necesario usar un nickname.');
+      setNicknameError('A nickname is required to chat.');
       return;
     }
     if (!inputText.trim()) return;
@@ -100,7 +100,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
   const sendQuickReaction = (emoji: string) => {
     if (!nickname) {
       setIsEditingNickname(true);
-      setNicknameError('Para reaccionar o chatear es necesario usar un nickname.');
+      setNicknameError('A nickname is required to react or chat.');
       return;
     }
     audioCues.playClick();
@@ -162,7 +162,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
           }`}
         >
           <MessageSquare className="w-3.5 h-3.5" />
-          <span>En Vivo</span>
+          <span>Live Chat</span>
         </button>
         <button
           onClick={() => {
@@ -176,7 +176,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
           }`}
         >
           <Trophy className="w-3.5 h-3.5 text-amber-400" />
-          <span>🔥 Más Votados</span>
+          <span>🔥 Top Voted</span>
           {topVotedMessages.length > 0 && (
             <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full font-mono font-bold">
               {topVotedMessages.length}
@@ -193,18 +193,18 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300/90 font-mono shadow-inner space-y-1">
               <div className="flex items-center space-x-1.5 font-bold uppercase tracking-wider text-amber-400 text-[11px]">
                 <Flame className="w-3.5 h-3.5 text-amber-400" />
-                <span>Influencia en el Guion AI</span>
+                <span>AI Screenplay Influence</span>
               </div>
               <p className="text-[11px] leading-relaxed text-neutral-300 font-sans">
-                El Director AI analiza los comentarios más votados e ideas de los últimos 30s para generar giros inesperados en las siguientes escenas.
+                The AI Director analyzes top-voted comments and audience ideas to inject dramatic plot twists into upcoming scenes.
               </p>
             </div>
 
             {topVotedMessages.length === 0 ? (
               <div className="text-center py-10 space-y-2 text-neutral-500">
                 <Trophy className="w-8 h-8 mx-auto opacity-30 text-amber-400" />
-                <p className="text-xs">No hay comentarios votados aún.</p>
-                <p className="text-[10px] text-neutral-600">¡Vota los mejores comentarios en el chat para impulsarlos!</p>
+                <p className="text-xs">No voted comments yet.</p>
+                <p className="text-[10px] text-neutral-600">Upvote the best comments in chat to boost them!</p>
               </div>
             ) : (
               topVotedMessages.map((msg, idx) => {
@@ -231,7 +231,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                         </span>
                         <span className="font-bold text-xs text-white">
                           @{msg.userName}
-                          {isOwnMessage && <span className="ml-1 text-[10px] text-cyan-400 font-normal">(Tú)</span>}
+                          {isOwnMessage && <span className="ml-1 text-[10px] text-cyan-400 font-normal">(You)</span>}
                         </span>
                       </div>
 
@@ -246,7 +246,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                             ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]'
                             : 'bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700'
                         }`}
-                        title={msg.hasUserVoted ? "Quitar voto" : "Votar este comentario"}
+                        title={msg.hasUserVoted ? "Remove vote" : "Upvote comment"}
                       >
                         <ThumbsUp className={`w-3 h-3 ${msg.hasUserVoted ? 'fill-black' : ''}`} />
                         <span>{msg.votesCount || 0}</span>
@@ -273,7 +273,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                       isOwnMessage ? 'text-cyan-300 font-mono' : 'text-neutral-300 group-hover:text-cyan-300'
                     }`}>
                       {msg.userName}
-                      {isOwnMessage && <span className="ml-1 text-[10px] text-cyan-400/70 font-sans font-normal">(Tú)</span>}
+                      {isOwnMessage && <span className="ml-1 text-[10px] text-cyan-400/70 font-sans font-normal">(You)</span>}
                     </span>
                     <span className="text-[10px] text-neutral-500 font-mono">
                       {msg.timestamp}
@@ -291,7 +291,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                         : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/60'
                     }`}
-                    title={msg.hasUserVoted ? "Quitar voto" : "Votar comentario"}
+                    title={msg.hasUserVoted ? "Remove vote" : "Upvote comment"}
                   >
                     <ThumbsUp className={`w-2.5 h-2.5 ${msg.hasUserVoted ? 'fill-amber-300' : ''}`} />
                     <span>{msg.votesCount || 0}</span>
@@ -318,7 +318,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-1.5 text-xs text-neutral-300 font-semibold">
                 <AtSign className="w-3.5 h-3.5 text-cyan-400" />
-                <span>{nickname ? 'Cambiar Nickname' : 'Elige tu Nickname para chatear'}</span>
+                <span>{nickname ? 'Change Nickname' : 'Choose a Nickname to chat'}</span>
               </div>
               {nickname && (
                 <button
@@ -330,7 +330,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                   }}
                   className="text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
                 >
-                  Cancelar
+                  Cancel
                 </button>
               )}
             </div>
@@ -346,7 +346,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                     setNicknameInput(e.target.value);
                     if (nicknameError) setNicknameError(null);
                   }}
-                  placeholder="tu_apodo..."
+                  placeholder="your_nickname..."
                   maxLength={24}
                   className="w-full bg-neutral-900/90 border border-white/10 rounded-xl pl-7 pr-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 transition-all font-sans"
                   autoFocus
@@ -358,7 +358,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                 className="px-3 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:hover:bg-cyan-500 text-black font-bold text-xs flex items-center space-x-1 transition-all active:scale-95 shadow-[0_0_12px_rgba(0,240,255,0.3)]"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>{isSavingNickname ? 'Guardando...' : 'Unirse'}</span>
+                <span>{isSavingNickname ? 'Saving...' : 'Join'}</span>
               </button>
             </div>
 
@@ -366,7 +366,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
               <p className="text-[11px] text-rose-400 font-mono">{nicknameError}</p>
             ) : (
               <p className="text-[10px] text-neutral-500 font-mono">
-                Para chatear y enviar reacciones es obligatorio usar un nickname.
+                A nickname is required to chat and send reactions.
               </p>
             )}
           </form>
@@ -380,7 +380,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                 key={emoji}
                 onClick={() => sendQuickReaction(emoji)}
                 className="text-base hover:scale-125 transition-transform active:scale-95"
-                title={`Enviar ${emoji}`}
+                title={`Send ${emoji}`}
               >
                 {emoji}
               </button>
@@ -391,7 +391,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
           <div className="p-3 border-t border-white/10 bg-black/40 space-y-2">
             <div className="flex items-center justify-between px-1 text-[11px] text-neutral-400 font-mono">
               <div className="flex items-center space-x-1.5 truncate">
-                <span className="text-neutral-500">Chateando como:</span>
+                <span className="text-neutral-500">Chatting as:</span>
                 <span className="text-cyan-400 font-bold truncate">@{nickname}</span>
               </div>
               <button
@@ -401,10 +401,10 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                   setIsEditingNickname(true);
                 }}
                 className="flex items-center space-x-1 text-[10px] text-neutral-500 hover:text-cyan-300 transition-colors ml-2 flex-shrink-0"
-                title="Cambiar nickname"
+                title="Change nickname"
               >
                 <Edit2 className="w-3 h-3" />
-                <span>cambiar</span>
+                <span>edit</span>
               </button>
             </div>
 
@@ -413,7 +413,7 @@ export const AudienceChat: React.FC<AudienceChatProps> = ({
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder={`Comenta como @${nickname}...`}
+                placeholder={`Comment as @${nickname}...`}
                 maxLength={280}
                 className="flex-1 bg-neutral-900/80 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-cyan-400/60 focus:ring-1 focus:ring-cyan-400/30 transition-all font-sans"
               />
