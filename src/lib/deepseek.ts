@@ -23,13 +23,12 @@ function trackDeepseekUsage(label: string, usage?: { prompt_tokens?: number; com
 
 // ── NVIDIA NIM / LLM Configuration ──────────────────────────────────────────
 const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
-const DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b";
+const DEFAULT_MODEL = "nvidia/ising-calibration-1.5-31b";
 
 export const CANDIDATE_MODELS = [
-  "nvidia/nemotron-3-super-120b-a12b",
   "nvidia/ising-calibration-1.5-31b",
-  "meta/llama-3.2-11b-vision-instruct",
-  "deepseek-ai/deepseek-v4-flash-0731"
+  "nvidia/nemotron-3-super-120b-a12b",
+  "meta/llama-3.2-11b-vision-instruct"
 ];
 
 export function getLlmApiKey(): string | undefined {
@@ -47,7 +46,12 @@ export function getLlmEndpoint(): string {
 }
 
 export function getLlmModel(): string {
-  return process.env.DEEPSEEK_MODEL || DEFAULT_MODEL;
+  const custom = process.env.DEEPSEEK_MODEL;
+  // If the environment contains the slow legacy deepseek-v4 model, bypass it and use the high-speed model
+  if (!custom || custom.includes('deepseek-v4') || custom.includes('deepseek-pro')) {
+    return DEFAULT_MODEL;
+  }
+  return custom;
 }
 
 export function cleanAndParseJson<T = any>(raw: string): T {
@@ -75,7 +79,7 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
 
   const endpoint = getLlmEndpoint();
   const primaryModel = getLlmModel();
-  const timeoutMs = params.timeoutMs ?? 12000;
+  const timeoutMs = params.timeoutMs ?? 25000;
 
   // Build model try-list: primary first, followed by remaining candidates
   const modelsToTry = [
@@ -91,7 +95,7 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
         messages: params.messages,
         temperature: params.temperature ?? 0.8,
         top_p: params.top_p ?? 0.95,
-        max_tokens: params.max_tokens ?? 2500,
+        max_tokens: params.max_tokens ?? 1000,
         stream: false
       };
 
@@ -3734,7 +3738,8 @@ MANDATORY RULES:
         ],
         temperature: 1.0,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 16384
+        max_tokens: 950,
+        timeoutMs: 25000
       });
 
       if (parsed) {
