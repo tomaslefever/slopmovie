@@ -65,6 +65,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   const videoRefB = useRef<HTMLVideoElement>(null);
 
   const [isMuted, setIsMuted] = useState(() => audioCues.getMuted());
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Reliable Video Source Resolution (Fallbacks guarantee a video ALWAYS plays)
@@ -133,14 +134,21 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   // Helper to safely play video handling browser autoplay and unmuting policies
   const safePlayVideo = React.useCallback(async (video: HTMLVideoElement | null, shouldMute: boolean) => {
     if (!video) return;
-    video.muted = shouldMute;
+    const hasInteracted = hasUserInteractedRef.current || (typeof navigator !== 'undefined' && Boolean((navigator as any).userActivation?.hasBeenActive));
+    const effectiveMuted = shouldMute || (!hasInteracted && isAutoplayBlocked);
+    video.muted = effectiveMuted;
     video.volume = 1.0;
     try {
       await video.play();
+      if (!shouldMute && video.muted && hasInteracted) {
+        video.muted = false;
+        setIsAutoplayBlocked(false);
+      }
     } catch (err: any) {
       if (err?.name === 'NotAllowedError') {
         if (!shouldMute) {
-          console.warn('[CinemaPlayer] Browser autoplay policy required initial mute; will unmute on interaction');
+          console.warn('[CinemaPlayer] Browser autoplay policy restricted audio; will unmute on interaction');
+          setIsAutoplayBlocked(true);
           video.muted = true;
           video.play().catch(() => {});
         }
@@ -148,15 +156,16 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         console.warn('[CinemaPlayer] Video playback error:', err);
       }
     }
-  }, []);
+  }, [isAutoplayBlocked]);
 
   // Global user interaction listener to permanently unlock audio as soon as the user touches/clicks anywhere
   useEffect(() => {
     const unlockAudio = () => {
       hasUserInteractedRef.current = true;
+      setIsAutoplayBlocked(false);
       if (!isMutedRef.current && !isOptionVoting && phase === 'PLAYING') {
         const activeVideo = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
-        if (activeVideo && activeVideo.muted) {
+        if (activeVideo) {
           activeVideo.muted = false;
           activeVideo.volume = 1.0;
         }
@@ -351,6 +360,8 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   }, [isPaused, phase, activeSlot, safePlayVideo]);
 
   const toggleMute = () => {
+    hasUserInteractedRef.current = true;
+    setIsAutoplayBlocked(false);
     const nextMuted = audioCues.toggleMute();
     setIsMuted(nextMuted);
     isMutedRef.current = nextMuted;
@@ -412,21 +423,24 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         src={slotSrcA}
         poster={activeStep.thumbnailUrl}
         preload="auto"
-        autoPlay
         playsInline
-        muted={activeSlot === 'A' ? (isOptionVoting || phase === 'COMMERCIAL_BREAK' ? true : isMuted) : true}
+        muted={activeSlot === 'A' ? (isOptionVoting || phase === 'COMMERCIAL_BREAK' ? true : (isMuted || isAutoplayBlocked)) : true}
         onError={() => handleVideoError('A')}
         onEnded={() => handleSlotEnded('A')}
         onCanPlay={() => {
-          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && videoRefA.current && activeSlot === 'A') {
+          const hasInteracted = hasUserInteractedRef.current || (typeof navigator !== 'undefined' && Boolean((navigator as any).userActivation?.hasBeenActive));
+          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && hasInteracted && videoRefA.current && activeSlot === 'A') {
             videoRefA.current.muted = false;
             videoRefA.current.volume = 1.0;
+            setIsAutoplayBlocked(false);
           }
         }}
         onPlaying={() => {
-          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && videoRefA.current) {
+          const hasInteracted = hasUserInteractedRef.current || (typeof navigator !== 'undefined' && Boolean((navigator as any).userActivation?.hasBeenActive));
+          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && hasInteracted && videoRefA.current) {
             videoRefA.current.muted = false;
             videoRefA.current.volume = 1.0;
+            setIsAutoplayBlocked(false);
           }
           if (activeSlot === 'A') onPlaybackStarted?.();
         }}
@@ -444,19 +458,23 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         preload="auto"
         autoPlay={false}
         playsInline
-        muted={activeSlot === 'B' ? (isOptionVoting || phase === 'COMMERCIAL_BREAK' ? true : isMuted) : true}
+        muted={activeSlot === 'B' ? (isOptionVoting || phase === 'COMMERCIAL_BREAK' ? true : (isMuted || isAutoplayBlocked)) : true}
         onError={() => handleVideoError('B')}
         onEnded={() => handleSlotEnded('B')}
         onCanPlay={() => {
-          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && videoRefB.current && activeSlot === 'B') {
+          const hasInteracted = hasUserInteractedRef.current || (typeof navigator !== 'undefined' && Boolean((navigator as any).userActivation?.hasBeenActive));
+          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && hasInteracted && videoRefB.current && activeSlot === 'B') {
             videoRefB.current.muted = false;
             videoRefB.current.volume = 1.0;
+            setIsAutoplayBlocked(false);
           }
         }}
         onPlaying={() => {
-          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && videoRefB.current) {
+          const hasInteracted = hasUserInteractedRef.current || (typeof navigator !== 'undefined' && Boolean((navigator as any).userActivation?.hasBeenActive));
+          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && hasInteracted && videoRefB.current) {
             videoRefB.current.muted = false;
             videoRefB.current.volume = 1.0;
+            setIsAutoplayBlocked(false);
           }
           if (activeSlot === 'B') onPlaybackStarted?.();
         }}
@@ -479,6 +497,34 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
           <InSceneProductHotspot ad={inSceneAd} />
         </div>
       )}
+
+      {/* Interactive Unmute Banner (Shown ONLY when browser autoplay policy blocks sound before user clicks) */}
+      <AnimatePresence>
+        {isAutoplayBlocked && !isMuted && phase === 'PLAYING' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            transition={{ duration: 0.3 }}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-auto cursor-pointer"
+            onClick={() => {
+              hasUserInteractedRef.current = true;
+              setIsAutoplayBlocked(false);
+              const activeVideo = activeSlot === 'A' ? videoRefA.current : videoRefB.current;
+              if (activeVideo) {
+                activeVideo.muted = false;
+                activeVideo.volume = 1.0;
+              }
+              audioCues.playClick();
+            }}
+          >
+            <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-cyan-950/90 border border-cyan-400/60 text-cyan-200 text-xs font-mono font-bold tracking-wider uppercase shadow-[0_0_25px_rgba(6,182,212,0.4)] backdrop-blur-md hover:bg-cyan-900 transition-all hover:scale-105 active:scale-95">
+              <Volume2 className="w-4 h-4 text-cyan-400 animate-bounce" />
+              <span>Tap anywhere to enable movie audio</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Commercial Break Holographic Interstitial */}
       {phase === 'COMMERCIAL_BREAK' && (
@@ -530,9 +576,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
           <button
             onClick={toggleMute}
             className="p-2.5 rounded-full bg-black/70 hover:bg-neutral-800 text-neutral-200 border border-white/10 md:backdrop-blur-md transition-all hover:scale-105 active:scale-95"
-            title={isMuted ? "Unmute" : "Mute"}
+            title={(isMuted || isAutoplayBlocked) ? "Unmute" : "Mute"}
           >
-            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
+            {(isMuted || isAutoplayBlocked) ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
           </button>
 
           {/* Fullscreen Button */}
