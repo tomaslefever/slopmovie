@@ -273,24 +273,9 @@ export const CINEMATIQUE_AESTHETIC_PRESETS = [
  * Standard Prompt Engineering Rules for LLM Directors (DeepSeek).
  * Enforces Cinematique's 6-layer visual prompt formula & 4-layer camera motion formula.
  */
-export const CINEMATIQUE_SYSTEM_PROMPT_DIRECTIVES = `
-CINEMATIQUE CINEMATOGRAPHY ENGINE (MANDATORY PROMPT CRAFTING RULES):
-Every "visualPrompt" and "cameraMotionPrompt" MUST follow professional Hollywood cinematographer grammar sourced from Cinematique (https://vvsvs.pro/cinematique):
-
-1. "visualPrompt" STRUCTURE (Mandatory 6-Layer Cinematic Formula):
-   [Layer 1: Shot Framing & Scale] (e.g. "Medium Close-Up (MCU)", "Cowboy Shot", "Extreme Close-Up", "Choker Shot", "Low-Angle Hero Shot", "Over-the-Shoulder").
-   [Layer 2: Subject & Wardrobe] (Full immutable character traits, signature costumes, physical micro-details, eye direction).
-   [Layer 3: Setting Architecture & Spatial Depth] (Foreground elements for depth, mid-ground subject, receding background architecture).
-   [Layer 4: Lighting Setup & Kelvin Temperature] (e.g. "Caravaggio Chiaroscuro 16:1 contrast", "Rembrandt triangle key at 3200K", "Low-Key Noir with gobo venetian shadows", "Cross-lighting with 2700K tungsten and 6500K blue kicker", "Practical neon reflections in rain puddles").
-   [Layer 5: Lens Optics, Camera Package & Film Stock] (e.g. "Shot on 35mm Panavision C-Series anamorphic glass, oval bokeh, horizontal streak flare", "Cooke S4/i prime with organic skin roll-off", "Zeiss Master Prime T1.3", "Kodak Vision3 500T 5219 motion picture stock").
-   [Layer 6: Atmospheric Physics & Color Science] (e.g. "Volumetric steam shafts, airborne dust motes in light beam, rich teal-amber split-tone, 24fps motion blur, 480p 16:9 film still").
-
-2. "cameraMotionPrompt" STRUCTURE (Mandatory 4-Layer Movement Formula):
-   [Layer 1: Rig & Movement Type] (e.g. "Steadicam floating tracking glide", "Imperceptibly slow dolly push-in", "Smooth lateral tracking on steel rails with 3-layer parallax separation", "Technocrane vertical arc sweep", "Dolly zoom (vertigo zolly)", "360-degree orbital track", "Violent whip-pan snap").
-   [Layer 2: Trajectory & Pacing] (e.g. "Gliding smoothly at shoulder height at steady walking pace", "Slow 15-second creeping advance closing from 8ft to 3ft distance").
-   [Layer 3: Focal Length & Depth Behavior] (e.g. "40mm anamorphic prime wide open, shallow focus with creamy background separation", "2-second deliberate rack focus from foreground prop to background eyes").
-   [Layer 4: Optical Physics & Shutter] (e.g. "Horizontal anamorphic cyan streak flare catching lens edge, 180-degree shutter angle with natural 24fps cinematic motion blur").
-`;
+export const CINEMATIQUE_SYSTEM_PROMPT_DIRECTIVES = `CINEMATIQUE RULES:
+1. visualPrompt (6-Layers): [Shot Scale/Framing: MCU/Cowboy/ECU/Low-Angle/OTS] + [Subject & Wardrobe micro-details] + [Setting Architecture & Depth] + [Lighting & Kelvin Temp: Chiaroscuro/Rembrandt/3200K/6500K] + [Lens & Stock: 35mm Panavision anamorphic / Cooke S4 / Kodak Vision3 500T] + [Atmosphere: steam, dust motes, 24fps].
+2. cameraMotionPrompt (4-Layers): [Rig: Steadicam glide / Dolly push-in / Lateral track / Technocrane] + [Pacing/Trajectory] + [Focal length & Focus pull] + [180-deg shutter, 24fps motion blur].`;
 
 /**
  * Returns a random curated aesthetic preset from Cinematique.

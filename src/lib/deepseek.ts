@@ -2018,146 +2018,99 @@ MANDATORY RULES:
 
 Respond ONLY with a valid JSON object matching this schema:
 {
-  "title": "Compelling Cinematic Title in English",
-  "genre": "Distinct Cinematic Genre (e.g. Superhero, Anime, 3D Animation, Film Noir, Horror, Epic Fantasy, Police Mystery, Psychological Thriller, etc.)",
-  "tagline": "Intriguing Hook in English",
-  "initialPlot": "Full master narrative arc in English that serves as the spine for 50 steps",
-  "masterArcThread": "Core story trajectory in English that evolves with audience choices",
-  "cinematicStyle": "Exact camera package, lenses, lighting scheme (Kelvin temp), film stock and color grade in English",
-  "targetTheme": "Underlying philosophical theme",
+  "title": "Compelling Title in English",
+  "genre": "Cinematic Genre",
+  "tagline": "Hook in English",
+  "initialPlot": "Master narrative arc in English",
+  "masterArcThread": "Core story trajectory in English",
+  "cinematicStyle": "Camera package, lenses, lighting (Kelvin), film stock and color grade",
+  "targetTheme": "Philosophical theme",
   "characters": [
     {
       "id": "char_1",
       "name": "Full Character Name",
-      "role": "Lead Detective / Protagonist",
-      "visualTraits": "IMMUTABLE physical and facial traits (eyes, age, hair, scars)",
-      "clothing": "Iconic signature wardrobe and permanent tactical gear",
-      "personality": "Key psychological traits",
-      "voiceStyle": "Short descriptive voice label",
-      "voicePrompt": "Detailed acoustic voice prompt in English (timbre, pitch, tempo, accent, texture)",
-      "avatarUrl": "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=300"
+      "role": "Lead Role",
+      "visualTraits": "Immutable physical/facial traits",
+      "clothing": "Signature wardrobe",
+      "personality": "Psychological traits",
+      "voiceStyle": "Voice label",
+      "voicePrompt": "Acoustic voice prompt (timbre, pitch, tempo, accent)"
     }
   ],
   "props": [
     {
       "id": "prop_1",
       "name": "Key Prop Name",
-      "description": "Narrative purpose in English",
-      "visualAppearance": "Specific, unmistakable physical visual traits for image/video prompts",
-      "narrativeSignificance": "Why it is critical to the story",
-      "ownerCharacterId": "char_1",
-      "ownerCharacterName": "Owner Character Name",
-      "imageUrl": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600"
+      "description": "Narrative purpose",
+      "visualAppearance": "Specific physical visual traits",
+      "narrativeSignificance": "Significance",
+      "ownerCharacterId": "char_1"
     }
   ],
   "environments": [
     {
       "id": "env_1",
       "name": "Opening Environment Name",
-      "lighting": "Lighting temperature and sources",
-      "atmosphere": "Visual and acoustic mood",
-      "colorPalette": "Dominant tones and neon accents",
-      "architecturalStyle": "Architectural or natural aesthetic"
+      "lighting": "Lighting sources & Kelvin",
+      "atmosphere": "Atmospheric mood",
+      "colorPalette": "Color tones",
+      "architecturalStyle": "Architectural aesthetic"
     }
   ],
   "initialSteps": [
     {
       "stepNumber": 1,
-      "title": "Title of Scene 1 (0-15s): Establishing the World & Tone",
-      "synopsis": "High-impact visual opening establishing the film universe, setting the atmospheric tone and initial world status quo in English",
-      "dialogueSnippet": "Establishing monologue, radio transmission, or environmental voiceover in English",
-      "subtitles": [
-        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line establishing the world...", "textEs": "Spanish translation..." },
-        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation setting the tone...", "textEs": "Spanish translation..." }
-      ],
-      "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Cinematique 6-layer prompt: [Establishing / Low-Angle Shot] + [Protagonist & signature attire] + [Opening environment with deep spatial layers] + [Key lighting setup, practical sources & Kelvin temp] + [Camera package: 35mm Panavision anamorphic / Cooke S4, Kodak Vision3 500T] + [Atmospheric particles, mist, 24fps film still]",
-      "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Technocrane or Steadicam tracking glide] + [Smooth trajectory introducing setting] + [Anamorphic lens optics with oval bokeh] + [24fps cinematic motion blur]",
+      "title": "Scene 1: Establishing the World",
+      "synopsis": "World and atmospheric tone",
+      "dialogueSnippet": "Opening monologue in English",
+      "subtitles": [{"start": 1.0, "end": 14.0, "speaker": "Character", "text": "Opening line..."}],
+      "visualPrompt": "Cinematique 6-layer prompt for Scene 1",
+      "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
       "activeProps": ["prop_1"],
-      "environment": "env_1",
-      "options": []
+      "environment": "env_1"
     },
     {
       "stepNumber": 2,
-      "title": "Title of Scene 2 (15-30s): Establishing the Protagonist & Mission",
-      "synopsis": "Continuous action in seconds 15-30 establishing the protagonist's identity, signature prop, mission objective, and personal stakes",
-      "dialogueSnippet": "Character declaration or mission briefing dialogue in English",
-      "subtitles": [
-        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line defining identity and mission...", "textEs": "Spanish translation..." },
-        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English line establishing personal stakes...", "textEs": "Spanish translation..." }
-      ],
-      "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Cinematique 6-layer prompt: [Cowboy Shot or Dynamic Medium Shot] + [Protagonist coiled readiness with signature prop visible] + [Immediate architectural setting] + [Cross-lighting or Chiaroscuro high-contrast shadows] + [Panavision / Cooke lens character with streak flare] + [Volumetric steam and rich color grading]",
-      "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Lateral tracking shot on rails or fluid Steadicam] + [Parallel movement keeping pace with action] + [3-layer parallax foreground blur] + [24fps motion blur]",
+      "title": "Scene 2: Protagonist & Mission",
+      "synopsis": "Protagonist identity and stakes",
+      "dialogueSnippet": "Mission dialogue in English",
+      "subtitles": [{"start": 1.0, "end": 14.0, "speaker": "Character", "text": "Mission line..."}],
+      "visualPrompt": "Cinematique 6-layer prompt for Scene 2",
+      "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
       "activeProps": ["prop_1"],
-      "environment": "env_1",
-      "options": []
+      "environment": "env_1"
     },
     {
       "stepNumber": 3,
-      "title": "Title of Scene 3 (30-45s): The Looming Threat & Gathering Shadows",
-      "synopsis": "Continuous action in seconds 30-45 where the baseline fractures as an encroaching hostile threat, anomaly, or perimeter breach draws dangerously near",
-      "dialogueSnippet": "Tense spoken dialogue sensing the impending threat in English",
-      "subtitles": [
-        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line warning of the incoming danger...", "textEs": "Spanish translation..." },
-        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English line preparing for the breach...", "textEs": "Spanish translation..." }
-      ],
-      "voiceDirection": "Acoustic direction in English based on character voicePrompt",
-      "visualPrompt": "Cinematique 6-layer prompt: [Over-the-Shoulder or Macro Insert Shot on Key Prop] + [Character micro-tension or prop physical patina] + [Encroaching perimeter backdrop] + [Hard directional gobo light or flickering warning pulse] + [Macro lens or 85mm prime wide open] + [Airborne embers, lens halation, 24fps film still]",
-      "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Rapid whip-pan snap or deliberate 2-second rack focus] + [Transitioning from foreground prop to background threat] + [Creamy bokeh separation] + [Dynamic 24fps motion blur]",
+      "title": "Scene 3: The Looming Threat",
+      "synopsis": "Threat approaches and status quo fractures",
+      "dialogueSnippet": "Threat warning dialogue",
+      "subtitles": [{"start": 1.0, "end": 14.0, "speaker": "Character", "text": "Warning line..."}],
+      "visualPrompt": "Cinematique 6-layer prompt for Scene 3",
+      "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
       "activeProps": ["prop_1"],
-      "environment": "env_1",
-      "options": []
+      "environment": "env_1"
     },
     {
       "stepNumber": 4,
-      "title": "Title of Scene 4 (45-60s): The First Major Conflict — Audience Decision Dilemma",
-      "synopsis": "Climactic action in seconds 45-60 where the first major conflict explodes in an urgent crisis, with the dialogue and subtitles actively and urgently inciting the spectator to decide between two divergent solutions",
-      "dialogueSnippet": "We are pinned down in the crossfire! Frontal breakthrough or tactical shadow diversion? Spectators, you decide — cast your vote now!",
+      "title": "Scene 4: First Conflict & Audience Dilemma",
+      "synopsis": "First conflict explodes inciting audience vote",
+      "dialogueSnippet": "Audience decision call to action",
       "subtitles": [
-        { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "We are pinned down in the crossfire! Do we breach frontally or deploy the shadow diversion?", "textEs": "¡Estamos acorralados en el fuego cruzado! ¿Rompemos de frente o desplegamos la distracción sombra?" },
-        { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "Spectators, the choice is yours — decide our fate right now!", "textEs": "¡Espectadores, la decisión es de ustedes — elijan nuestro destino ahora mismo!" }
+        {"start": 1.0, "end": 7.0, "speaker": "Character", "text": "We are pinned down in the crossfire! Frontal breach or tactical diversion?"},
+        {"start": 8.0, "end": 14.0, "speaker": "Character", "text": "Spectators, the choice is yours — decide our fate right now!"}
       ],
-      "voiceDirection": "Acoustic direction in English based on character voicePrompt with maximum dramatic urgency",
-      "visualPrompt": "Cinematique 6-layer prompt: [Choker Shot or Dramatic Dutch Angle Close-Up] + [Peak emotional conflict in character eyes during the standoff] + [Imminent explosive or tactical threshold] + [Caravaggio Chiaroscuro or Rembrandt triangle key with eye catchlights] + [35mm anamorphic glass, subtle barrel distortion] + [Epic tension, deep blacks, high-contrast film still]",
-      "cameraMotionPrompt": "Cinematique 4-layer motion prompt: [Imperceptibly slow dolly push-in or Vertigo zolly effect] + [Closing from medium to tight choker over 15s] + [Narrowing depth of field, focus breathing] + [180-degree shutter, 24fps motion blur]",
+      "visualPrompt": "Cinematique 6-layer prompt for Scene 4",
+      "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
       "activeProps": ["prop_1"],
       "environment": "env_1",
       "options": [
-        {
-          "id": "A",
-          "title": "Option A Title in English",
-          "text": "First bold choice resolving the first conflict",
-          "dramaticHook": "Dramatic hook for Option A",
-          "expectedConsequence": "Narrative consequence if Option A wins",
-          "visualPrompt": "Cinematique 6-layer visual prompt: [Framing/Shot type] + [Characters/Wardrobe] + [Setting/Depth] + [Lighting/Kelvin] + [Lenses/Optics] + [Atmosphere] if Option A is chosen",
-          "cameraMotionPrompt": "Cinematique 4-layer camera motion prompt: [Rig] + [Pacing/Trajectory] + [Focus pull/Optics] + [Shutter/blur] if Option A is chosen",
-          "synopsis": "1-2 sentence synopsis of scene 5 if Option A wins",
-          "dialogueSnippet": "Key dialogue line in English if Option A wins",
-          "subtitles": [
-            { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
-            { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
-          ]
-        },
-        {
-          "id": "B",
-          "title": "Option B Title in English",
-          "text": "Radically different alternative choice resolving the first conflict",
-          "dramaticHook": "Dramatic hook for Option B",
-          "expectedConsequence": "Narrative consequence if Option B wins",
-          "visualPrompt": "Cinematique 6-layer visual prompt if Option B is chosen",
-          "cameraMotionPrompt": "Cinematique 4-layer camera motion prompt if Option B is chosen",
-          "synopsis": "1-2 sentence synopsis of scene 5 if Option B wins",
-          "dialogueSnippet": "Key dialogue line in English if Option B wins",
-          "subtitles": [
-            { "start": 1.0, "end": 7.0, "speaker": "Character Name", "text": "English line...", "textEs": "Spanish translation..." },
-            { "start": 8.0, "end": 14.0, "speaker": "Character Name", "text": "English continuation...", "textEs": "Spanish translation..." }
-          ]
-        }
+        {"id": "A", "title": "Option A Title", "text": "First bold choice resolving the conflict", "dramaticHook": "Dramatic hook", "expectedConsequence": "Consequence"},
+        {"id": "B", "title": "Option B Title", "text": "Alternative choice resolving the conflict", "dramaticHook": "Dramatic hook", "expectedConsequence": "Consequence"}
       ]
     }
   ]
@@ -2192,7 +2145,7 @@ Respond ONLY with a valid JSON object matching this schema:
         (targetPremise && !targetPremise.startsWith('force_reset_') && targetPremise.trim().length > 3)
       );
       const titleBlacklistNotice = existingTitles.length > 0
-        ? `\nTITLES ALREADY IN DATABASE (YOU MUST NOT DUPLICATE ANY OF THESE TITLES): ${existingTitles.slice(-25).map(t => `"${t}"`).join(', ')}\n`
+        ? `\nTITLES ALREADY IN DATABASE (do not duplicate): ${existingTitles.slice(-15).map(t => `"${t}"`).join(', ')}\n`
         : '';
       const dynamicGenre = sampleRandom(CREATIVE_GENRES);
       const dynamicProtagonist = sampleRandom(CREATIVE_PROTAGONISTS);
@@ -2201,26 +2154,26 @@ Respond ONLY with a valid JSON object matching this schema:
 
       const arcInstruction = `
 MANDATORY 4-CLIP OPENING ARC:
-- Clip 1 (0-15s): Establish the world, setting, visual tone, and atmosphere.
-- Clip 2 (15-30s): Establish the protagonist, identity, signature prop, mission, and personal stakes.
-- Clip 3 (30-45s): Looming threat emerges; status quo fractures as hostile danger approaches.
-- Clip 4 (45-60s): THE FIRST MAJOR CONFLICT! Spoken dialogue and subtitles MUST actively and urgently incite the audience to decide between Option A and Option B!`;
+- Clip 1 (0-15s): World, setting and tone.
+- Clip 2 (15-30s): Protagonist, signature prop, mission and stakes.
+- Clip 3 (30-45s): Threat emerges; status quo fractures.
+- Clip 4 (45-60s): FIRST MAJOR CONFLICT! Dialogue & subtitles incite audience to choose Option A vs B.`;
 
       const userMessage = targetTitle
-        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot).
-MANDATORY TITLE: You MUST use the exact title "${targetTitle}".
-MANDATORY GENRE: You MUST use the exact genre "${targetGenre || 'Cinematic Drama'}".
+        ? `Create the interactive cinema master bible and 4 opening scenes (1-minute first-shot).
+MANDATORY TITLE: "${targetTitle}".
+MANDATORY GENRE: "${targetGenre || 'Cinematic Drama'}".
 Logline: "${targetLogline || ''}".
 Story Premise: "${targetPremise || ''}".
 ${arcInstruction}
-Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+Write all fields in ENGLISH. ${titleBlacklistNotice} Entropy: ${Date.now()}`
         : isRealCustom
-        ? `Create the interactive cinema master bible and the 4 opening scenes (1-minute continuous first-shot) based on this premise: "${targetPremise}".
+        ? `Create the interactive cinema master bible and 4 opening scenes based on premise: "${targetPremise}".
 ${arcInstruction}
-Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. ${titleBlacklistNotice} Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-        : `Create a high-tension interactive ${dynamicGenre} master bible featuring ${dynamicProtagonist} facing ${dynamicCatalyst} with visual aesthetic of ${dynamicAesthetic}, and the 4 opening scenes (1-minute continuous first-shot).
+Write all fields in ENGLISH. ${titleBlacklistNotice} Entropy: ${Date.now()}`
+        : `Create a high-tension interactive ${dynamicGenre} master bible featuring ${dynamicProtagonist} facing ${dynamicCatalyst} with aesthetic of ${dynamicAesthetic}, and 4 opening scenes.
 ${arcInstruction}
-Write all story elements, dialogue, subtitles, character voice prompts, and the 2 voting options for Scene 4 in ENGLISH. Unique entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+Write all fields in ENGLISH. Entropy: ${Date.now()}`;
 
       const parsed = await callLlmJson<any>({
         label: 'story-bible',
@@ -2230,7 +2183,7 @@ Write all story elements, dialogue, subtitles, character voice prompts, and the 
         ],
         temperature: 1,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 3500,
+        max_tokens: 1400,
         timeoutMs: 45000
       });
 
@@ -2887,53 +2840,44 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
       // STATIC system prompt (no per-request interpolation): DeepSeek's context
       // caching reuses the cached prefix across all 46+ scene calls, slashing
       // input-token cost. All dynamic content lives in the user message.
-      const systemPrompt = `You are an elite Interactive Cinema AI Director writing ONE 30-second continuous scene (composed of two 15-second cinematic shots: Shot 1 Opening and Shot 2 Climax) of a 50-step interactive film for MiniMax H3-Max (480p 16:9).
+      const systemPrompt = `You are an elite Interactive Cinema AI Director writing ONE 30-second continuous scene (two 15s shots: Shot 1 Opening and Shot 2 Climax) of a 50-step interactive film for MiniMax H3-Max (480p 16:9).
 Rules:
 1. ALL output in cinematic ENGLISH.
-2. Include timed "subtitles" across the 30-second scene (start, end, speaker, text EN, textEs ES).
-3. Never invent props freely: define "newCharacter" (with voicePrompt) AND their signature "newProp" ONLY when a NEW character enters; otherwise both null.
-4. "activeProps": only prop IDs physically visible or manipulated in THIS scene; empty [] otherwise.
-5. "activeCharacters": only characters on screen.
-6. CINEMATIQUE "visualPrompt" (Shot 1, 15s): Craft a rich 6-layer visual prompt: [Shot Framing: MCU / Cowboy / Low-Angle / OTS] + [Subject & Wardrobe] + [Setting Architecture with Depth] + [Lighting: Chiaroscuro / Practical fixtures / Kelvin Temp] + [Lenses & Stock: Panavision anamorphic, Kodak Vision3 500T grain] + [Atmosphere & 24fps film still].
-7. CINEMATIQUE "cameraMotionPrompt" (Shot 1, 15s): Craft a rich 4-layer camera prompt: [Rig: Steadicam glide / Lateral track with 3-layer parallax / Technocrane arc] + [Pacing & Trajectory] + [Focal length & Focus pull] + [24fps motion blur].
-8. The two voting "options" MUST be a genuinely NEW dilemma every scene: never repeat, re-title or re-skin an option already offered earlier in this film (the previous-options ledger is in the user message). Invent fresh stakes, fresh risks and fresh consequences each time — a voter should never recognize an earlier choice in a new costume.
-9. PRE-GENERATED DUAL-SHOT VIDEO PROMPTS (30s TOTAL): In each of the two voting "options" (A and B), you MUST pre-generate the exact video prompts for BOTH Shot 1 (Opening Action - 15s) and Shot 2 (Climax / Resolution - 15s) so whichever option wins can be rendered immediately in parallel by the video model without querying the LLM again:
-- "visualPrompt": Full Cinematique 6-layer visual prompt for Shot 1 (opening action/establishing).
-- "cameraMotionPrompt": Full Cinematique 4-layer camera motion prompt for Shot 1.
-- "visualPrompt2": Full Cinematique 6-layer visual prompt for Shot 2 (direct narrative continuation, tighter framing or dramatic consequence continuing Shot 1).
-- "cameraMotionPrompt2": Full Cinematique 4-layer camera motion prompt for Shot 2.
-- "synopsis": 1-2 sentence synopsis of the resulting scene.
-- "dialogueSnippet": Key dialogue line in English.
-- "subtitles": Timed subtitles cues array across the 30-second duration.
-Respond ONLY with JSON:
-{"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""},{"start":15.0,"end":28.0,"speaker":"","text":"","textEs":""}],"voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""},{"start":15.0,"end":28.0,"speaker":"","text":"","textEs":""}]},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":"","textEs":""},{"start":15.0,"end":28.0,"speaker":"","text":"","textEs":""}]}]}`;
+2. Timed "subtitles" across the scene (start, end, speaker, text).
+3. "newCharacter" (with voicePrompt) & "newProp" ONLY when a NEW character enters; otherwise null.
+4. "activeProps": only prop IDs physically in THIS scene; empty [] otherwise.
+5. "activeCharacters": only character IDs on screen.
+6. visualPrompt: 6-layer Cinematique prompt (Framing, Subject, Depth, Lighting/Kelvin, Optics/Stock, Atmosphere 24fps).
+7. cameraMotionPrompt: 4-layer Cinematique motion (Rig, Trajectory, Focus pull, 24fps blur).
+8. visualPrompt2 & cameraMotionPrompt2: Shot 2 dramatic consequence/climax.
+9. "options": Two genuinely NEW decision options with distinct stakes and trade-offs.
 
-      // Compact ledger of every voting option already offered in this film.
-      // Without it the model has no memory of past dilemmas and recycles the
-      // same generic binaries (attack vs stealth, trust vs betray) all movie long.
+Respond ONLY with JSON:
+{"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":""},{"start":15.0,"end":28.0,"speaker":"","text":""}],"voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":""},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":""}]}`;
+
+      // Compact ledger of recent voting options (last 6 steps)
       const usedOptionsLedger = (() => {
         const past = movie.steps
           .filter(s => s.stepNumber < nextStepNum && Array.isArray(s.options) && s.options.length >= 2 && s.options[0]?.title && s.options[1]?.title)
-          .slice(-12);
-        if (past.length === 0) return 'none yet — this is the first audience vote.';
+          .slice(-6);
+        if (past.length === 0) return 'none yet — first vote.';
         return past.map(s =>
-          `Step ${s.stepNumber}: A) "${s.options[0].title}"${s.selectedOption === 'A' ? ' [CHOSEN BY AUDIENCE]' : ''} — B) "${s.options[1].title}"${s.selectedOption === 'B' ? ' [CHOSEN BY AUDIENCE]' : ''}`
+          `Step ${s.stepNumber}: A) "${s.options[0].title}" — B) "${s.options[1].title}"`
         ).join('\n');
       })();
 
-      const antiRepeatDirective = `PREVIOUS VOTING OPTIONS ALREADY OFFERED IN THIS FILM (forbidden to repeat — do NOT reuse, re-title or re-skin ANY of these):
+      const antiRepeatDirective = `PREVIOUS VOTING OPTIONS (do NOT repeat):
 ${usedOptionsLedger}
-For Step ${nextStepNum} invent TWO options that have never appeared in this film: a brand-new dilemma with new stakes, a new risk trade-off and a new consequence. Check the ledger: if one of your two options resembles an earlier one, discard it and invent something genuinely different.`;
+For Step ${nextStepNum}, invent TWO brand-new options with fresh stakes and consequences.`;
 
-      // Compact user message: only the context this scene needs (no bible dump,
-      // no video URLs, compact id:name rosters).
+      // Compact user message
       const userContext = `Film: "${movie.title}" (${movie.genre})
-Style: ${movie.bible?.cinematicStyle || '35mm Panavision anamorphic, high contrast cinematic'}
+Style: ${movie.bible?.cinematicStyle || '35mm Panavision anamorphic, cinematic'}
 Master arc: ${movie.masterArcThread || movie.initialPlot}
 ${getNarrativeArcDirective(nextStepNum)}
 Previous scene ${previousStep.stepNumber} "${previousStep.title}": ${previousStep.synopsis}${previousStep.dialogueSnippet ? ` Dialogue: "${previousStep.dialogueSnippet}"` : ''}
-Audience chose OPTION ${chosenOptionId}: "${chosenOption.title}" — ${chosenOption.text}${chosenOption.expectedConsequence ? ` (${chosenOption.expectedConsequence})` : ''}
-Characters: ${movie.bible.characters.map(c => `${c.id}:${c.name}(${c.role})`).join('; ') || 'none'}
+Audience chose OPTION ${chosenOptionId}: "${chosenOption.title}" — ${chosenOption.text}
+Characters: ${movie.bible.characters.map(c => `${c.id}:${c.name}`).join('; ') || 'none'}
 Props: ${movie.bible.props.map(p => `${p.id}:${p.name}`).join('; ') || 'none'}
 ${antiRepeatDirective}
 ${influenceDirective}`;
@@ -2946,7 +2890,7 @@ ${influenceDirective}`;
         ],
         temperature: 1,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 2500,
+        max_tokens: 750,
         timeoutMs: 30000
       });
 
@@ -3641,12 +3585,12 @@ function sampleUniqueRandom<T>(array: T[], count: number): T[] {
  * the ad clip; the product must never leak into future story prompts.
  */
 export async function generateImmersiveAdPromptWithDeepSeek(params: {
+  movieTitle: string;
+  genre: string;
   brandName: string;
   title: string;
   tagline?: string;
   description?: string;
-  movieTitle: string;
-  genre: string;
   cinematicStyle?: string;
   characters: string;
   environment: string;
@@ -3683,7 +3627,7 @@ PRODUCT DESCRIPTION: ${params.description || 'No description — infer a plausib
         { role: "user", content: userContent }
       ],
       temperature: 1,
-      max_tokens: 16384
+      max_tokens: 350
     });
 
     if (parsed) {
@@ -3768,7 +3712,7 @@ MANDATORY RULES:
         label: 'blockbuster-candidates',
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Generate 4 wildly different, fresh and compelling blockbuster candidate pitches now. Unique session entropy: ${Date.now()}_${Math.random().toString(36).slice(2, 8)}` }
+          { role: "user", content: `Generate 4 fresh blockbuster candidate pitches now. Entropy: ${Date.now()}` }
         ],
         temperature: 1.0,
         seed: Math.floor(Math.random() * 2147483647),
