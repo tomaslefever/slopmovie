@@ -2022,21 +2022,20 @@ Your mission is to formulate a MASTER STORY AND ART BIBLE for a 50-step interact
 ${CINEMATIQUE_SYSTEM_PROMPT_DIRECTIVES}
 
 MANDATORY RULES:
-1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, character description, voice prompt, prop, dialogue, subtitle, visualPrompt, cameraMotionPrompt, and option must be written in high-caliber cinematic English.
+1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, character description, voice prompt, prop, dialogue, visualPrompt, cameraMotionPrompt, and option must be written in high-caliber cinematic English.
 2. VOICE CONTINUITY: Every character must have an immutable "voicePrompt" (timbre, frequency, pacing, breathing, accent, audio processing) so audio engines synthesize the exact same voice across all 50 clips.
 3. PROPS & CHARACTERS: Every initial character must have their signature linked prop (ownerCharacterId) for consistent visual prompting.
-4. SUBTITLES: The first step must include timed "subtitles" (start in seconds, end in seconds, speaker, text in English, and optional textEs in Spanish).
-5. ONLY NECESSARY PROPS: In "firstStep.activeProps", specify ONLY the prop ID(s) that are physically visible or actively held/used in this opening 15-second scene. DO NOT pass all props. If no prop is visible in the shot, "activeProps" must be empty [].
-6. NARRATIVE ARC: The 50-step film follows a strict act structure that every step must respect — steps 1-10 SETUP (present the world, the characters and the central problem), steps 11-39 DEVELOPMENT (escalating conflict, twists and new characters), steps 40-49 DENOUEMENT (converging resolution), and step 50 THE END (definitive closing scene, no new conflicts). "masterArcThread" and "initialPlot" must be designed so the story can be resolved by step 50.
-7. CINEMATIQUE CAMERA & LIGHTING FIDELITY:
+4. ONLY NECESSARY PROPS: In "firstStep.activeProps", specify ONLY the prop ID(s) that are physically visible or actively held/used in this opening 15-second scene. DO NOT pass all props. If no prop is visible in the shot, "activeProps" must be empty [].
+5. NARRATIVE ARC: The 50-step film follows a strict act structure that every step must respect — steps 1-10 SETUP (present the world, the characters and the central problem), steps 11-39 DEVELOPMENT (escalating conflict, twists and new characters), steps 40-49 DENOUEMENT (converging resolution), and step 50 THE END (definitive closing scene, no new conflicts). "masterArcThread" and "initialPlot" must be designed so the story can be resolved by step 50.
+6. CINEMATIQUE CAMERA & LIGHTING FIDELITY:
    - "cinematicStyle": Must specify the camera package, lenses (e.g. Panavision C-Series anamorphic, Cooke S4/S7, Zeiss Master Prime), lighting setup (e.g. Caravaggio chiaroscuro, Rembrandt key, motivated practical light, Kelvin color temperature), and film stock (e.g. Kodak Vision3 500T, Kodak Double-X).
    - "visualPrompt": Every scene prompt MUST follow the 6-layer Cinematique formula: [Shot Scale/Framing (MCU, Cowboy, ECU, Choker, Low-Angle)] + [Subject & Wardrobe] + [Environment with Foreground/Mid/Background Depth] + [Lighting Rig & Kelvin Temperature] + [Camera Lens, Sensor/Stock & Flare Characteristics] + [Atmosphere & 24fps film still].
    - "cameraMotionPrompt": Every camera motion prompt MUST follow the 4-layer Cinematique motion formula: [Rig & Movement (Steadicam glide, slow dolly push-in, lateral track with 3-layer parallax, Technocrane arc, Dolly zoom vertigo)] + [Pacing & Trajectory] + [Focal Length & Focus Pull/Rack Focus] + [Optical physics & 24fps motion blur].
-8. FIRST-SHOT 4-CLIP PROGRESSION & CLIP 4 AUDIENCE INCITEMENT:
+7. FIRST-SHOT 4-CLIP PROGRESSION & CLIP 4 AUDIENCE INCITEMENT:
    - Clip 1 (0-15s) [World & Tone]: Establish the cinematic universe, architectural environment, visual lighting, atmospheric mood, and initial status quo.
    - Clip 2 (15-30s) [Protagonist & Mission]: Establish the protagonist, their identity, signature prop, mission objective, and personal stakes.
    - Clip 3 (30-45s) [Looming Threat]: The baseline status quo fractures; a looming threat, perimeter breach, or hostile anomaly approaches.
-   - Clip 4 (45-60s) [The First Conflict & Audience Call to Decide]: THE FIRST MAJOR CONFLICT explodes with full force! Spoken dialogue and subtitles MUST actively and urgently incite the spectator/audience to decide how to resolve this crisis (e.g., "We're surrounded and taking heavy fire! Do we breach frontally or deploy the shadow protocol? Spectators, you decide — cast your vote now! / ¡Estamos rodeados! ¿Ataque frontal o maniobra evasiva? ¡Ustedes deciden!"). The 2 voting options (A and B) represent the two high-stakes solutions to this first conflict.
+   - Clip 4 (45-60s) [The First Conflict & Audience Call to Decide]: THE FIRST MAJOR CONFLICT explodes with full force! Spoken dialogue MUST actively and urgently incite the spectator/audience to decide how to resolve this crisis (e.g., "We're surrounded and taking heavy fire! Do we breach frontally or deploy the shadow protocol? Spectators, you decide — cast your vote now!"). The 2 voting options (A and B) represent the two high-stakes solutions to this first conflict.
 
 Respond ONLY with a valid JSON object matching this schema:
 {
@@ -2085,7 +2084,6 @@ Respond ONLY with a valid JSON object matching this schema:
       "title": "Scene 1: Establishing the World",
       "synopsis": "World and atmospheric tone",
       "dialogueSnippet": "Opening monologue in English",
-      "subtitles": [{"start": 1.0, "end": 14.0, "speaker": "Character", "text": "Opening line..."}],
       "visualPrompt": "Cinematique 6-layer prompt for Scene 1",
       "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
@@ -2097,7 +2095,6 @@ Respond ONLY with a valid JSON object matching this schema:
       "title": "Scene 2: Protagonist & Mission",
       "synopsis": "Protagonist identity and stakes",
       "dialogueSnippet": "Mission dialogue in English",
-      "subtitles": [{"start": 1.0, "end": 14.0, "speaker": "Character", "text": "Mission line..."}],
       "visualPrompt": "Cinematique 6-layer prompt for Scene 2",
       "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
@@ -2109,7 +2106,6 @@ Respond ONLY with a valid JSON object matching this schema:
       "title": "Scene 3: The Looming Threat",
       "synopsis": "Threat approaches and status quo fractures",
       "dialogueSnippet": "Threat warning dialogue",
-      "subtitles": [{"start": 1.0, "end": 14.0, "speaker": "Character", "text": "Warning line..."}],
       "visualPrompt": "Cinematique 6-layer prompt for Scene 3",
       "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
@@ -2121,10 +2117,6 @@ Respond ONLY with a valid JSON object matching this schema:
       "title": "Scene 4: First Conflict & Audience Dilemma",
       "synopsis": "First conflict explodes inciting audience vote",
       "dialogueSnippet": "Audience decision call to action",
-      "subtitles": [
-        {"start": 1.0, "end": 7.0, "speaker": "Character", "text": "We are pinned down in the crossfire! Frontal breach or tactical diversion?"},
-        {"start": 8.0, "end": 14.0, "speaker": "Character", "text": "Spectators, the choice is yours — decide our fate right now!"}
-      ],
       "visualPrompt": "Cinematique 6-layer prompt for Scene 4",
       "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
@@ -2865,17 +2857,16 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
       const systemPrompt = `You are an elite Interactive Cinema AI Director writing ONE 30-second continuous scene (two 15s shots: Shot 1 Opening and Shot 2 Climax) of a 50-step interactive film for MiniMax H3-Max (480p 16:9).
 Rules:
 1. ALL output in cinematic ENGLISH.
-2. Timed "subtitles" across the scene (start, end, speaker, text).
-3. "newCharacter" (with voicePrompt) & "newProp" ONLY when a NEW character enters; otherwise null.
-4. "activeProps": only prop IDs physically in THIS scene; empty [] otherwise.
-5. "activeCharacters": only character IDs on screen.
-6. visualPrompt: 6-layer Cinematique prompt (Framing, Subject, Depth, Lighting/Kelvin, Optics/Stock, Atmosphere 24fps).
-7. cameraMotionPrompt: 4-layer Cinematique motion (Rig, Trajectory, Focus pull, 24fps blur).
-8. visualPrompt2 & cameraMotionPrompt2: Shot 2 dramatic consequence/climax.
-9. "options": Two genuinely NEW decision options with distinct stakes and trade-offs.
+2. "newCharacter" (with voicePrompt) & "newProp" ONLY when a NEW character enters; otherwise null.
+3. "activeProps": only prop IDs physically in THIS scene; empty [] otherwise.
+4. "activeCharacters": only character IDs on screen.
+5. visualPrompt: 6-layer Cinematique prompt (Framing, Subject, Depth, Lighting/Kelvin, Optics/Stock, Atmosphere 24fps).
+6. cameraMotionPrompt: 4-layer Cinematique motion (Rig, Trajectory, Focus pull, 24fps blur).
+7. visualPrompt2 & cameraMotionPrompt2: Shot 2 dramatic consequence/climax.
+8. "options": Two genuinely NEW decision options with distinct stakes and trade-offs.
 
 Respond ONLY with JSON:
-{"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","subtitles":[{"start":1.0,"end":14.0,"speaker":"","text":""},{"start":15.0,"end":28.0,"speaker":"","text":""}],"voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":""},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":""}]}`;
+{"stepNumber":0,"title":"","synopsis":"","dialogueSnippet":"","voiceDirection":"","visualPrompt":"","cameraMotionPrompt":"","visualPrompt2":"","cameraMotionPrompt2":"","activeCharacters":["char_id"],"activeProps":[],"newCharacter":null,"newProp":null,"environment":"","options":[{"id":"A","title":"","text":"","dramaticHook":"","expectedConsequence":""},{"id":"B","title":"","text":"","dramaticHook":"","expectedConsequence":""}]}`;
 
       // Compact ledger of recent voting options (last 6 steps)
       const usedOptionsLedger = (() => {
@@ -2912,8 +2903,8 @@ ${influenceDirective}`;
         ],
         temperature: 1,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 750,
-        timeoutMs: 30000
+        max_tokens: 650,
+        timeoutMs: 25000
       });
 
       if (parsed) {
@@ -2952,22 +2943,12 @@ ${influenceDirective}`;
           .map(p => p.imageUrl)
           .filter(Boolean) as string[];
 
-        const stepSubtitles = parsed.subtitles || [
-          {
-            start: 1.0,
-            end: 14.0,
-            speaker: parsed.activeCharacters?.[0] || "Character",
-            text: parsed.dialogueSnippet || "We must choose our path immediately.",
-            textEs: "Debemos elegir nuestro camino de inmediato."
-          }
-        ];
-
         return {
           stepNumber: nextStepNum,
           title: parsed.title,
           synopsis: parsed.synopsis,
           dialogueSnippet: parsed.dialogueSnippet,
-          subtitles: stepSubtitles,
+          subtitles: [],
           voiceDirection: parsed.voiceDirection || movie.bible.characters[0]?.voicePrompt,
           visualPrompt: parsed.visualPrompt,
           cameraMotionPrompt: parsed.cameraMotionPrompt,

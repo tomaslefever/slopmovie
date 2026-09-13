@@ -1281,22 +1281,7 @@ class CinemaOrchestrator {
           title: guaranteedWinningOption.title || nextStepRaw?.title || `Scene ${nextStepNum}`,
           synopsis: nextStepRaw?.synopsis || guaranteedWinningOption.synopsis || `${guaranteedWinningOption.title}: ${guaranteedWinningOption.text}`,
           dialogueSnippet: nextStepRaw?.dialogueSnippet || guaranteedWinningOption.dialogueSnippet,
-          subtitles: nextStepRaw?.subtitles || guaranteedWinningOption.subtitles || [
-            {
-              start: 1.0,
-              end: 14.0,
-              speaker: this.movie.bible.characters[0]?.name || "Character",
-              text: guaranteedWinningOption.title,
-              textEs: guaranteedWinningOption.title
-            },
-            {
-              start: hasAd ? 31.0 : 16.0,
-              end: hasAd ? 44.0 : 29.0,
-              speaker: this.movie.bible.characters[0]?.name || "Character",
-              text: guaranteedWinningOption.text || guaranteedWinningOption.title,
-              textEs: guaranteedWinningOption.text || guaranteedWinningOption.title
-            }
-          ],
+          subtitles: [],
           voiceDirection: nextStepRaw?.voiceDirection || voiceDirectionToUse,
           visualPrompt: videoPromptToUse,
           cameraMotionPrompt: cameraPromptToUse,
@@ -1365,22 +1350,7 @@ class CinemaOrchestrator {
           title: guaranteedWinningOption.title || `Scene ${nextStepNum}`,
           synopsis: guaranteedWinningOption.synopsis || guaranteedWinningOption.title,
           dialogueSnippet: guaranteedWinningOption.dialogueSnippet,
-          subtitles: guaranteedWinningOption.subtitles || [
-            {
-              start: 1.0,
-              end: 14.0,
-              speaker: this.movie.bible.characters[0]?.name || "Character",
-              text: guaranteedWinningOption.title,
-              textEs: guaranteedWinningOption.title
-            },
-            {
-              start: 16.0,
-              end: 29.0,
-              speaker: this.movie.bible.characters[0]?.name || "Character",
-              text: guaranteedWinningOption.text || guaranteedWinningOption.title,
-              textEs: guaranteedWinningOption.text || guaranteedWinningOption.title
-            }
-          ],
+          subtitles: [],
           visualPrompt: videoPromptToUse,
           cameraMotionPrompt: cameraPromptToUse,
           visualPrompt2: videoPrompt2ToUse,
