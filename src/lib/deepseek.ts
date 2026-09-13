@@ -3090,7 +3090,7 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
             type: "object",
             properties: {
               stepNumber: { type: "integer" },
-              title: { type: "string" },
+              title: { type: "string", description: "Short descriptive scene or chapter title for this specific 30s clip (e.g. 'The Perimeter Breach')" },
               synopsis: { type: "string" },
               dialogueSnippet: { type: "string" },
               voiceDirection: { type: "string" },
@@ -3223,7 +3223,7 @@ ${influenceDirective}`;
 
         return {
           stepNumber: nextStepNum,
-          title: parsed.title,
+          title: parsed.title ? (parsed.title.startsWith('Scene ') || parsed.title.startsWith('Step ') ? parsed.title : `Scene ${nextStepNum}: ${parsed.title}`) : `Scene ${nextStepNum}`,
           synopsis: parsed.synopsis,
           dialogueSnippet: parsed.dialogueSnippet,
           subtitles: [],
