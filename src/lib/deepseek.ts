@@ -64,32 +64,46 @@ export function cleanAndParseJson<T = any>(raw: string): T {
   try {
     return JSON.parse(cleaned);
   } catch (err) {
-    // 2. Intelligent JSON repair for truncated strings or unclosed braces
+    // 2. Intelligent JSON repair for unescaped newlines, truncated strings, or unclosed braces
     try {
-      let str = cleaned;
+      let str = '';
       let inString = false;
       let escaped = false;
       let openBraces = 0;
       let openBrackets = 0;
 
-      for (let i = 0; i < str.length; i++) {
-        const c = str[i];
+      for (let i = 0; i < cleaned.length; i++) {
+        const c = cleaned[i];
         if (c === '\\' && inString) {
           escaped = !escaped;
+          str += c;
           continue;
         }
         if (c === '"' && !escaped) {
           inString = !inString;
-        } else if (!inString) {
+          str += c;
+        } else if (inString) {
+          if (c === '\n') {
+            str += '\\n';
+          } else if (c === '\r') {
+            // skip
+          } else if (c === '\t') {
+            str += '\\t';
+          } else {
+            str += c;
+          }
+        } else {
           if (c === '{') openBraces++;
           else if (c === '}') openBraces--;
           else if (c === '[') openBrackets++;
           else if (c === ']') openBrackets--;
+          str += c;
         }
         escaped = false;
       }
 
       if (inString) str += '"';
+      str = str.replace(/,\s*$/, '');
       while (openBrackets > 0) {
         str += ']';
         openBrackets--;
@@ -2246,100 +2260,193 @@ Write all fields in ENGLISH. ${titleBlacklistNotice} Entropy: ${Date.now()}`
 ${arcInstruction}
 Write all fields in ENGLISH. Entropy: ${Date.now()}`;
 
+      const bibleTool = {
+        type: "function",
+        function: {
+          name: "create_movie_concept",
+          description: "Provide the high-concept creative parameters for an interactive film in English.",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              genre: { type: "string" },
+              tagline: { type: "string" },
+              initialPlot: { type: "string" },
+              cinematicStyle: { type: "string", description: "Camera package, lenses, lighting Kelvin, and film stock" },
+              protagonistName: { type: "string" },
+              protagonistRole: { type: "string" },
+              protagonistVisual: { type: "string" },
+              protagonistVoice: { type: "string" },
+              keyPropName: { type: "string" },
+              keyPropAppearance: { type: "string" },
+              environmentName: { type: "string" },
+              environmentLighting: { type: "string" },
+              firstConflictHook: { type: "string" },
+              optionATitle: { type: "string" },
+              optionAText: { type: "string" },
+              optionBTitle: { type: "string" },
+              optionBText: { type: "string" }
+            },
+            required: [
+              "title", "genre", "tagline", "initialPlot", "cinematicStyle",
+              "protagonistName", "protagonistRole", "protagonistVisual", "protagonistVoice",
+              "keyPropName", "keyPropAppearance", "environmentName", "environmentLighting",
+              "firstConflictHook", "optionATitle", "optionAText", "optionBTitle", "optionBText"
+            ]
+          }
+        }
+      };
+
       const parsed = await callLlmJson<any>({
         label: 'story-bible',
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: "You are an elite Hollywood Director and Screenwriter. Formulate the master movie concept and high-stakes conflict in English by calling create_movie_concept." },
           { role: "user", content: userMessage }
         ],
-        temperature: 1,
+        tools: [bibleTool],
+        tool_choice: { type: "function", function: { name: "create_movie_concept" } },
+        temperature: 0.8,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 1400,
-        timeoutMs: 45000
+        max_tokens: 1000,
+        timeoutMs: 30000
       });
 
       if (parsed) {
-        
-        const rawSteps = Array.isArray(parsed.initialSteps) && parsed.initialSteps.length > 0
-          ? parsed.initialSteps
-          : [parsed.firstStep || {}];
+        const charName = parsed.protagonistName || "Kael Vance";
+        const charRole = parsed.protagonistRole || "Lead Operative";
+        const charVisual = parsed.protagonistVisual || "Rugged features, sharp gaze, cyber-tactical jacket";
+        const charVoice = parsed.protagonistVoice || "Deep, resonant, measured cadence with calm intensity";
+        const propName = parsed.keyPropName || "Quantum Drive";
+        const propVisual = parsed.keyPropAppearance || "Matte obsidian casing with pulsing sapphire emitter";
+        const envName = parsed.environmentName || "Neo-Veridia Sublevel 9";
+        const envLighting = parsed.environmentLighting || "Moody tungsten practicals with cool cyan fill, Caravaggio chiaroscuro, 3200K";
+        const cineStyle = parsed.cinematicStyle || "Panavision C-Series anamorphic, Cooke S4 optics, Kodak Vision3 500T, 24fps";
+        const title = parsed.title || targetTitle || "The Terminal Horizon";
+        const genre = parsed.genre || targetGenre || "Sci-Fi Cyberpunk";
+        const tagline = parsed.tagline || targetLogline || "Every decision rewires reality.";
+        const initialPlot = parsed.initialPlot || targetPremise || "A race against time across a decaying metropolis.";
+        const conflictHook = parsed.firstConflictHook || "A critical security breach forces an immediate tactical choice.";
 
-        const initialSteps: MovieStep[] = rawSteps.slice(0, 4).map((stepData: any, idx: number) => {
-          const stepNum = idx + 1;
-          const isFinalFirstShot = stepNum === 4;
+        const characters: Character[] = [
+          {
+            id: "char_1",
+            name: charName,
+            role: charRole,
+            visualTraits: charVisual,
+            clothing: "Signature tactical wardrobe",
+            personality: "Pragmatic, resolute, adaptable",
+            voiceStyle: "Lead Voice",
+            voicePrompt: charVoice
+          }
+        ];
 
-          const defaultSubtitles = stepNum === 4
-            ? [
-                {
-                  start: 1.0,
-                  end: 7.0,
-                  speaker: parsed.characters[0]?.name || "Protagonist",
-                  text: stepData.dialogueSnippet || "We are pinned down in the crossfire! Do we breach frontally or deploy the shadow diversion?",
-                  textEs: "¡Estamos acorralados en el fuego cruzado! ¿Rompemos de frente o desplegamos la distracción sombra?"
-                },
-                {
-                  start: 8.0,
-                  end: 14.0,
-                  speaker: parsed.characters[0]?.name || "Protagonist",
-                  text: "Spectators, the choice is yours — decide our fate right now!",
-                  textEs: "¡Espectadores, la decisión es de ustedes — elijan nuestro destino ahora mismo!"
-                }
-              ]
-            : [
-                {
-                  start: 1.0,
-                  end: 14.0,
-                  speaker: parsed.characters[0]?.name || "Protagonist",
-                  text: stepData.dialogueSnippet || (stepNum === 1 ? "Establishing contact. The world begins here." : (stepNum === 2 ? `Identity verified. The mission is underway.` : "Perimeter breach detected. Shadows approach.")),
-                  textEs: stepNum === 1 ? "Estableciendo contacto. El mundo comienza aquí." : (stepNum === 2 ? "Identidad verificada. La misión está en marcha." : "Brecha perimetral detectada. Las sombras se acercan.")
-                }
-              ];
+        const props: Prop[] = [
+          {
+            id: "prop_1",
+            name: propName,
+            description: "Signature key asset",
+            visualAppearance: propVisual,
+            narrativeSignificance: "Core mission instrument",
+            ownerCharacterId: "char_1"
+          }
+        ];
 
-          const options: [DecisionOption, DecisionOption] = isFinalFirstShot && Array.isArray(stepData.options) && stepData.options.length >= 2
-            ? [
-                ensureOptionPrompts(stepData.options[0], 'A', {
-                  characterName: parsed.characters?.[0]?.name,
-                  visualTraits: parsed.characters?.[0]?.visualTraits,
-                  clothing: parsed.characters?.[0]?.clothing,
-                  propName: parsed.props?.[0]?.name,
-                  propVisual: parsed.props?.[0]?.visualAppearance,
-                  envName: parsed.environments?.[0]?.name,
-                  cinematicStyle: parsed.cinematicStyle
-                }),
-                ensureOptionPrompts(stepData.options[1], 'B', {
-                  characterName: parsed.characters?.[0]?.name,
-                  visualTraits: parsed.characters?.[0]?.visualTraits,
-                  clothing: parsed.characters?.[0]?.clothing,
-                  propName: parsed.props?.[0]?.name,
-                  propVisual: parsed.props?.[0]?.visualAppearance,
-                  envName: parsed.environments?.[0]?.name,
-                  cinematicStyle: parsed.cinematicStyle
-                })
-              ]
-            : [
-                ensureOptionPrompts({ id: 'A', title: 'Advance the Offensive', text: 'Push forward into the breach.', dramaticHook: 'High risk frontal assault.', expectedConsequence: 'Immediate combat escalation.', votes: 0 }, 'A', { characterName: parsed.characters?.[0]?.name, envName: parsed.environments?.[0]?.name, cinematicStyle: parsed.cinematicStyle }),
-                ensureOptionPrompts({ id: 'B', title: 'Regroup and Adapt', text: 'Fall back into the defensive perimeter.', dramaticHook: 'Strategic redeployment.', expectedConsequence: 'Preserves resources at cost of tempo.', votes: 0 }, 'B', { characterName: parsed.characters?.[0]?.name, envName: parsed.environments?.[0]?.name, cinematicStyle: parsed.cinematicStyle })
-              ];
+        const environments: SceneEnvironment[] = [
+          {
+            id: "env_1",
+            name: envName,
+            lighting: envLighting,
+            atmosphere: "High-contrast atmospheric immersion with 24fps motion blur",
+            colorPalette: "Moody amber and teal with deep shadows",
+            architecturalStyle: "Industrial cinematic architecture"
+          }
+        ];
 
-          return {
-            stepNumber: stepNum,
-            title: stepData.title || `Scene ${stepNum}: Act I`,
-            synopsis: stepData.synopsis || parsed.initialPlot?.slice(0, 180) || "The adventure unfolds.",
-            dialogueSnippet: stepData.dialogueSnippet || undefined,
-            subtitles: stepData.subtitles || defaultSubtitles,
-            voiceDirection: stepData.voiceDirection || parsed.characters[0]?.voicePrompt,
-            visualPrompt: stepData.visualPrompt || `Cinematic masterpiece shot of ${parsed.characters[0]?.name || 'Protagonist'} in ${parsed.environments?.[0]?.name || 'Opening environment'}, ${parsed.cinematicStyle || '35mm anamorphic'}`,
-            cameraMotionPrompt: stepData.cameraMotionPrompt || "Cinematic camera dolly tracking in with shallow depth of field, 24fps",
+        const optionA: DecisionOption = ensureOptionPrompts({
+          id: "A",
+          title: parsed.optionATitle || "Initiate Direct Breach",
+          text: parsed.optionAText || `Advance directly through ${envName} using the ${propName}.`,
+          dramaticHook: "Immediate offensive escalation.",
+          expectedConsequence: "High tactical confrontation.",
+          votes: 0
+        }, "A", { characterName: charName, visualTraits: charVisual, propName, propVisual, envName, cinematicStyle: cineStyle });
+
+        const optionB: DecisionOption = ensureOptionPrompts({
+          id: "B",
+          title: parsed.optionBTitle || "Deploy Stealth Protocol",
+          text: parsed.optionBText || `Divert power to shadow evasion in ${envName}.`,
+          dramaticHook: "Calculated covert maneuver.",
+          expectedConsequence: "Avoids direct fire but risks detection delay.",
+          votes: 0
+        }, "B", { characterName: charName, visualTraits: charVisual, propName, propVisual, envName, cinematicStyle: cineStyle });
+
+        const initialSteps: MovieStep[] = [
+          {
+            stepNumber: 1,
+            title: "Scene 1: Establishing the World",
+            synopsis: `Establishing look at ${envName}. ${envLighting}. Setting the visual atmosphere.`,
+            visualPrompt: `Cinematic wide establishing shot of ${envName}, ${envLighting}, ${cineStyle}, volumetric haze, atmospheric depth, 24fps film still`,
+            cameraMotionPrompt: "Slow cinematic dolly forward with wide anamorphic lens and atmospheric perspective, 24fps",
             videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
             duration: 15,
-            votingWindowSeconds: isFinalFirstShot ? 10 : 0,
-            activeCharacters: stepData.activeCharacters || [parsed.characters[0]?.id || "char_1"],
-            activeProps: stepData.activeProps || (parsed.props?.[0] ? [parsed.props[0].id] : []),
-            environment: stepData.environment || parsed.environments?.[0]?.id || "env_1",
+            votingWindowSeconds: 0,
+            activeCharacters: ["char_1"],
+            activeProps: ["prop_1"],
+            environment: "env_1",
             createdAt: new Date().toISOString(),
-            options
-          };
-        });
+            options: [optionA, optionB],
+            subtitles: []
+          },
+          {
+            stepNumber: 2,
+            title: "Scene 2: Protagonist & Mission",
+            synopsis: `${charName} (${charRole}) arrives in ${envName}, preparing the ${propName}.`,
+            visualPrompt: `Medium close-up of ${charName}, ${charVisual}, wielding the ${propName} (${propVisual}) in ${envName}, motivated rim lighting, ${cineStyle}, 24fps`,
+            cameraMotionPrompt: "Steadicam circular track focusing on protagonist and prop, rack focus to background, 24fps",
+            videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+            duration: 15,
+            votingWindowSeconds: 0,
+            activeCharacters: ["char_1"],
+            activeProps: ["prop_1"],
+            environment: "env_1",
+            createdAt: new Date().toISOString(),
+            options: [optionA, optionB],
+            subtitles: []
+          },
+          {
+            stepNumber: 3,
+            title: "Scene 3: Looming Threat",
+            synopsis: `The baseline status quo fractures in ${envName} as perimeter alarms trigger.`,
+            visualPrompt: `Dynamic cinematic tracking shot of ${charName} reacting as sirens flare across ${envName}, high contrast chiaroscuro, ${cineStyle}, 24fps`,
+            cameraMotionPrompt: "Fast lateral tracking with rapid parallax shift and optical zoom blur, 24fps",
+            videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+            duration: 15,
+            votingWindowSeconds: 0,
+            activeCharacters: ["char_1"],
+            activeProps: ["prop_1"],
+            environment: "env_1",
+            createdAt: new Date().toISOString(),
+            options: [optionA, optionB],
+            subtitles: []
+          },
+          {
+            stepNumber: 4,
+            title: "Scene 4: The First Conflict & Audience Dilemma",
+            synopsis: conflictHook,
+            dialogueSnippet: `We are under heavy pressure! Option A: ${optionA.title} or Option B: ${optionB.title}. Audience, decide now!`,
+            visualPrompt: `Intense cinematic over-the-shoulder shot of ${charName} facing the critical crossroads in ${envName}, sparks and dynamic lighting, ${cineStyle}, 24fps`,
+            cameraMotionPrompt: "Dolly push-in directly into extreme close-up of protagonist's determined eyes, 24fps",
+            videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+            duration: 15,
+            votingWindowSeconds: 10,
+            activeCharacters: ["char_1"],
+            activeProps: ["prop_1"],
+            environment: "env_1",
+            createdAt: new Date().toISOString(),
+            options: [optionA, optionB],
+            subtitles: []
+          }
+        ];
 
         // Ensure we always have exactly 4 steps for the 1-minute first-shot
         while (initialSteps.length < 4) {
@@ -3384,17 +3491,6 @@ export async function generateMovieFinalSummaryWithDeepSeek(movie: Movie): Promi
 
   if (apiKey) {
     try {
-      const systemPrompt = `You are an elite Hollywood Film Director and Film Scholar. The interactive film "${movie.title}" has just concluded its 50-step arc, created and voted upon live by the audience.
-Your mission is to generate:
-1. "finalSynopsis": A definitive, thrilling master synopsis (2-3 paragraphs in ENGLISH) summarizing the full story created by the audience.
-2. "finalSummary": A detailed retrospective breakdown in ENGLISH (divided into Act I: The Catalyst & The Breach, Act II: Divergent Alliances & Shadow Warfare, and Act III: The Zenith Climax & Liberation), celebrating the characters introduced, key props utilized, and the philosophical weight of the audience's choices.
-
-Respond ONLY with a valid JSON object:
-{
-  "finalSynopsis": "Definitive master synopsis in English...",
-  "finalSummary": "Comprehensive narrative retrospective in English..."
-}`;
-
       const userContent = `Title: "${movie.title}"
 Initial Plot: "${movie.initialPlot}"
 Total Steps Completed: ${movie.steps.length}
@@ -3402,14 +3498,33 @@ Characters in story: ${movie.bible.characters.map(c => `${c.name} (${c.role})`).
 Key props used: ${movie.bible.props.map(p => `${p.name} (${p.narrativeSignificance})`).join(', ')}
 Major milestones: ${movie.steps.slice(0, 15).map(s => `Step ${s.stepNumber}: Option ${s.selectedOption} won (${s.title})`).join(' | ')}...`;
 
+      const summaryTool = {
+        type: "function",
+        function: {
+          name: "create_final_summary",
+          description: "Generate a master retrospective synopsis and comprehensive summary in English.",
+          parameters: {
+            type: "object",
+            properties: {
+              finalSynopsis: { type: "string" },
+              finalSummary: { type: "string" }
+            },
+            required: ["finalSynopsis", "finalSummary"]
+          }
+        }
+      };
+
       const parsed = await callLlmJson<any>({
         label: 'final-summary',
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: "You are an elite Hollywood Film Director and Film Scholar. Generate the master retrospective by calling create_final_summary." },
           { role: "user", content: userContent }
         ],
-        temperature: 1,
-        max_tokens: 16384
+        tools: [summaryTool],
+        tool_choice: { type: "function", function: { name: "create_final_summary" } },
+        temperature: 0.8,
+        max_tokens: 2000,
+        timeoutMs: 30000
       });
 
       if (parsed) {
@@ -3707,23 +3822,7 @@ export async function generateImmersiveAdPromptWithDeepSeek(params: {
   environment: string;
 }): Promise<string | null> {
   const apiKey = getLlmApiKey();
-  if (!apiKey) return null;
-
   try {
-    const systemPrompt = `You are an elite in-story product-placement cinematographer and director for high-concept interactive cinema.
-Write ONE ultra-detailed cinematic visual prompt in ENGLISH for a 15-second fal.ai MiniMax video clip, incorporating the Cinematique visual formula.
-RULES:
-1. IN-WORLD INTEGRATION: The sponsor product/service must be woven organically INTO the film's diegetic story world: a character wields it, examines it, activates it, or it sits in atmospheric set dressing — never a standalone commercial, never a banner or logo overlay, never breaking cinematic immersion.
-2. CINEMATIQUE LIGHTING & COLOR: Match the EXACT same visual texture, motivated lighting rigs (key/fill ratios, color temperature in Kelvin, practical fixtures), and color grade as the film.
-3. OPTICS & CAMERA CADENCE: Specify lens optics (anamorphic streak flares, prime focal lengths, depth of field) and an intentional camera movement (dolly track, Steadicam, or crane descent at 24fps film cadence).
-4. CONTINUITY: Feature the movie's established characters and environment so the scene flows seamlessly as the next chronological beat.
-5. The output must be a single continuous visual prompt (no script format), 150-300 words, structured as: [Shot Scale & Subject Action] + [Motivated Lighting] + [Lens Optics & Film Stock] + [Camera Movement].
-
-Respond ONLY with a valid JSON object:
-{
-  "adPrompt": "The immersive cinematic ad prompt in English..."
-}`;
-
     const userContent = `FILM: "${params.movieTitle}" (${params.genre})
 CINEMATIC STYLE: ${params.cinematicStyle || '35mm anamorphic, cinematic grade'}
 CHARACTERS: ${params.characters || 'None specified — invent fitting background extras'}
@@ -3731,14 +3830,32 @@ CURRENT ENVIRONMENT/SCENE: ${params.environment}
 SPONSOR: "${params.brandName}" — "${params.title}"${params.tagline ? ` (tagline: "${params.tagline}")` : ''}
 PRODUCT DESCRIPTION: ${params.description || 'No description — infer a plausible in-world form from the brand name.'}`;
 
+    const adTool = {
+      type: "function",
+      function: {
+        name: "create_immersive_ad_prompt",
+        description: "Generate one immersive cinematic ad visual prompt in English.",
+        parameters: {
+          type: "object",
+          properties: {
+            adPrompt: { type: "string" }
+          },
+          required: ["adPrompt"]
+        }
+      }
+    };
+
     const parsed = await callLlmJson<any>({
       label: 'immersive-ad-prompt',
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: "You are an elite in-story product-placement cinematographer. Generate the immersive ad visual prompt in English by calling create_immersive_ad_prompt." },
         { role: "user", content: userContent }
       ],
-      temperature: 1,
-      max_tokens: 350
+      tools: [adTool],
+      tool_choice: { type: "function", function: { name: "create_immersive_ad_prompt" } },
+      temperature: 0.8,
+      max_tokens: 800,
+      timeoutMs: 20000
     });
 
     if (parsed) {
@@ -3773,61 +3890,51 @@ export async function generateBlockbusterCandidatesWithDeepSeek(existingTitles: 
       const selectedCatalysts = sampleUniqueRandom(CREATIVE_CATALYSTS, 4);
       const selectedAesthetics = sampleUniqueRandom(CREATIVE_AESTHETICS, 4);
 
-      const systemPrompt = `You are an avant-garde Head of Development at an interactive blockbuster cinema studio.
-Your mission is to formulate EXACTLY 4 completely DIFFERENT, wild, high-concept interactive film pitches for a live 50-step audience-driven interactive movie.
-
-MANDATORY RULES:
-1. RADICAL TRADITIONAL & ECLECTIC DIVERSITY: Each of the 4 candidates MUST come from a radically different classic or popular genre:
-   - Superheroes / Comic Book Cinematic Spectacle
-   - Anime / Shonen & Seinen Action
-   - Stylized 3D Animation (Pixar / Spider-Verse feel)
-   - Classic Horror / Gothic Dread
-   - Classic 1940s Film Noir
-   - Emotional Drama / Human Struggle
-   - Police Procedural / Detective Mystery
-   - Buddy Action-Comedy
-   - Psychological Thriller / Mind Games
-   - High Epic Fantasy / Sword & Sorcery
-   - Classic Western / Frontier Justice
-   - Pulp Archaeological Adventure
-   - Cold War Espionage
-   - Samurai Chambara
-   - Period Romance / Historical Drama
-   - War & Trench Heroism
-   - Country Manor Whodunnit
-   - Swashbuckling Pirates
-   - Mythological Odyssey
-   - Disaster Survival
-   STRICTLY FORBIDDEN: Do NOT default to cyber, punk, neon hackers, or post-apocalyptic cyborg wastelands. Embrace traditional cinematic genres with rich emotional palettes and distinct visual worlds.
-2. AUDIENCE HOOK: Audience members vote after reading ONLY the title, logline, and genre. The logline must be gripping, cinematic, and sell the core concept instantly.
-3. CINEMATIQUE PREMISE BRIEFS: In the premise, embed distinctive cinematographic cues (aspect ratio, signature lens, color science, and lighting mood) derived from the aesthetic inspiration.
-4. CREATIVE SEEDS TO INSPIRE THE 4 SLOTS:
+      const userMessage = `Generate 4 radically different blockbuster candidates with diverse classic themes:
 - Candidate A inspiration: ${selectedGenres[0]} featuring ${selectedProtagonists[0]} facing ${selectedCatalysts[0]} with aesthetic of ${selectedAesthetics[0]}.
 - Candidate B inspiration: ${selectedGenres[1]} featuring ${selectedProtagonists[1]} facing ${selectedCatalysts[1]} with aesthetic of ${selectedAesthetics[1]}.
 - Candidate C inspiration: ${selectedGenres[2]} featuring ${selectedProtagonists[2]} facing ${selectedCatalysts[2]} with aesthetic of ${selectedAesthetics[2]}.
 - Candidate D inspiration: ${selectedGenres[3]} featuring ${selectedProtagonists[3]} facing ${selectedCatalysts[3]} with aesthetic of ${selectedAesthetics[3]}.
+Entropy: ${Date.now()}`;
 
-5. Respond ONLY with a valid JSON object matching this schema:
-{
-  "candidates": [
-    {
-      "title": "Unforgettable Cinematic Title",
-      "logline": "One razor-sharp sentence describing the hook, protagonist goal, and immediate stakes.",
-      "genre": "Precise Distinct Genre / Hybrid",
-      "premise": "Full creative brief: the world, protagonist, antagonist, central conflict, signature prop/technology, and the core audience choices across the 50-step arc."
-    }
-  ]
-}`;
+      const candidatesTool = {
+        type: "function",
+        function: {
+          name: "create_blockbuster_candidates",
+          description: "Formulate 4 radically varied blockbuster movie pitches in English.",
+          parameters: {
+            type: "object",
+            properties: {
+              candidates: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    logline: { type: "string" },
+                    genre: { type: "string" },
+                    premise: { type: "string" }
+                  },
+                  required: ["title", "logline", "genre", "premise"]
+                }
+              }
+            },
+            required: ["candidates"]
+          }
+        }
+      };
 
       const parsed = await callLlmJson<any>({
         label: 'blockbuster-candidates',
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Generate 4 fresh blockbuster candidate pitches now. Entropy: ${Date.now()}` }
+          { role: "system", content: "You are an avant-garde Head of Development at an interactive cinema studio. Formulate 4 completely different blockbuster candidate pitches in English by calling create_blockbuster_candidates." },
+          { role: "user", content: userMessage }
         ],
-        temperature: 1.0,
+        tools: [candidatesTool],
+        tool_choice: { type: "function", function: { name: "create_blockbuster_candidates" } },
+        temperature: 0.8,
         seed: Math.floor(Math.random() * 2147483647),
-        max_tokens: 950,
+        max_tokens: 1500,
         timeoutMs: 25000
       });
 
