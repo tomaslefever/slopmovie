@@ -686,15 +686,19 @@ class CinemaOrchestrator {
     }
 
     if (!this.movie) {
-      // A forceReset (new blockbuster rotation) is mid-flight: the worker must NOT
-      // auto-generate a competing movie while the director's/rotation's movie is being created.
-      if (this.isResetting || this.phase === 'GENERATING' || this.phase === 'BLOCKBUSTER_VOTING') {
-        if (this.phase !== 'BLOCKBUSTER_VOTING') return;
-      } else {
+      if (this.isResetting) {
+        return;
+      }
+      // Always restore from DB first (even during GENERATING or BLOCKBUSTER_VOTING)
+      await this.syncFromDatabase();
+      if (!this.movie) {
         const liveState = await loadLiveCinemaStateFromDb().catch(() => null);
-        if (liveState?.phase === 'GENERATING' || liveState?.phase === 'BLOCKBUSTER_VOTING') {
-          return;
+        if (liveState?.movieId) {
+          const restoredMovie = await loadActiveMovieFromDb(liveState.movieId);
+          if (restoredMovie) this.movie = restoredMovie;
         }
+      }
+      if (!this.movie && this.phase !== 'BLOCKBUSTER_VOTING') {
         await this.initializeMovie();
         if (!this.movie) return;
       }
@@ -987,7 +991,7 @@ class CinemaOrchestrator {
     } 
     else if (this.phase === 'VOTING') {
       // 10-second voting has concluded -> Resolve winner
-      this.setPhase('GENERATING', 6); // 6s buffer for secret ballot results reveal and zoom-out/zoom-in transitions
+      this.setPhase('GENERATING', 35); // 35s buffer for dual video synthesis, DeepSeek LLM generation and secret ballot reveal transitions
       this.blockbusterCandidates = [];
       this.blockbusterUserVotes.clear();
       this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
@@ -1190,8 +1194,14 @@ class CinemaOrchestrator {
           return null;
         });
 
-        // Await dual-shot video rendering, LLM option generation, and optional ad concurrently
-        const [videoRes, nextStepRaw, adVideoUrl] = await Promise.all([videoPromise, deepseekPromise, adPromise]);
+        // Await dual-shot video rendering, LLM option generation, and optional ad concurrently with 30s fail-safe timeout
+        const generationTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Generation timeout (30s elapsed)')), 30000)
+        );
+        const [videoRes, nextStepRaw, adVideoUrl] = await Promise.race([
+          Promise.all([videoPromise, deepseekPromise, adPromise]),
+          generationTimeout
+        ]);
 
         if (commentInfluence) {
           this.addSystemMessage(`💡 Community idea from @${commentInfluence.userName} shaped Option ${commentInfluence.optionId} for this round (marked as used).`);
@@ -1347,34 +1357,115 @@ class CinemaOrchestrator {
       }
     }
     else if (this.phase === 'GENERATING') {
-      // Watchdog: If the engine is in GENERATING and the timer elapsed,
-      // verify that an async movie reset or generation is not actively mid-flight.
-      if (this.isResetting || this.initializeMoviePromise || !this.movie || this.movie.status === 'completed') {
-        console.log('[CinemaEngine] Movie generation still mid-flight (or awaiting premiere) — extending GENERATING timer.');
-        this.phaseEndsAt = Date.now() + 15000;
-        this.timeRemaining = 15;
-        this.phaseDuration = 15;
-        await this.persistCurrentStateToSupabase(workerId);
+      // Watchdog: If the engine is in GENERATING and the timer elapsed
+      if (this.isResetting || this.initializeMoviePromise || !this.movie) {
+        // If movie is missing or resetting, attempt to sync from DB
+        await this.syncFromDatabase();
+        if (!this.movie) {
+          console.log('[CinemaEngine] Movie still initializing mid-flight — extending GENERATING timer.');
+          this.phaseEndsAt = Date.now() + 15000;
+          this.timeRemaining = 15;
+          this.phaseDuration = 15;
+          await this.persistCurrentStateToSupabase(workerId);
+          return;
+        }
+      }
+
+      if (this.movie.status === 'completed') {
+        console.log('[CinemaEngine] Completed movie awaiting next blockbuster — opening blockbuster voting.');
+        await this.prepareBlockbusterVoting();
         return;
       }
 
-      console.log(`[CinemaEngine] ⏱️ Watchdog: GENERATING phase buffer ended for Step ${this.movie.currentStep}. Transitioning to PLAYING...`);
-      const currentStepObj = (this.movie.steps.find(s => s.stepNumber === this.movie!.currentStep))
-        || this.movie.steps[this.movie.steps.length - 1]
-        || this.movie.steps[0];
-      const duration = currentStepObj?.duration || 15;
-      this.setPhase('PLAYING', duration);
+      // Check if this.movie has already received next steps in history
+      const highestStep = this.movie.steps.reduce((max, s) => s.stepNumber > max.stepNumber ? s : max, this.movie.steps[0]);
+      const currentStepNum = this.movie.currentStep || 1;
+
+      if (highestStep && highestStep.stepNumber > currentStepNum) {
+        // Generation succeeded previously: advance currentStep to the newly generated step!
+        console.log(`[CinemaEngine] ⏱️ Watchdog: Step ${highestStep.stepNumber} is ready in history! Advancing currentStep from ${currentStepNum} -> ${highestStep.stepNumber}...`);
+        this.movie.currentStep = highestStep.stepNumber;
+        await persistMovie(this.movie);
+        const duration = highestStep.duration || 30;
+        this.setPhase('PLAYING', duration);
+        this.votesA = 0;
+        this.votesB = 0;
+        this.userVotes.clear();
+
+        broadcastCinemaEvent('phase_change', {
+          phase: 'PLAYING',
+          timeRemaining: duration,
+          phaseDuration: duration,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
+        });
+        await this.persistCurrentStateToSupabase(workerId);
+        await this.broadcastStateSnapshot(workerId);
+        return;
+      }
+
+      // If no new step was generated and GENERATING timed out, synthesize a safe fallback step immediately
+      console.warn(`[CinemaEngine] ⏱️ Watchdog: GENERATING phase timed out for Step ${currentStepNum}. Synthesizing fallback Step ${currentStepNum + 1}...`);
+      const nextStepNum = currentStepNum + 1;
+      if (nextStepNum > TOTAL_STEPS) {
+        this.movie.status = 'completed';
+        this.movie.completedAt = new Date().toISOString();
+        await persistMovie(this.movie);
+        await this.prepareBlockbusterVoting();
+        return;
+      }
+
+      const mockVideos = await this.pickTwoArchivedOrMockVideos(nextStepNum);
+      const prevStep = this.movie.steps.find(s => s.stepNumber === currentStepNum) || this.movie.steps[this.movie.steps.length - 1];
+      const fallbackOption = (prevStep?.options?.find(o => o.id === prevStep.selectedOption) || prevStep?.options?.[0]);
+
+      const fallbackStep: MovieStep = {
+        stepNumber: nextStepNum,
+        title: fallbackOption?.title || `Scene ${nextStepNum}: The Turning Point`,
+        synopsis: fallbackOption?.synopsis || fallbackOption?.text || `The narrative advances down the chosen path as new developments unfold.`,
+        visualPrompt: "Cinematic film continuity with deep anamorphic focus",
+        cameraMotionPrompt: "Smooth cinematic tracking hold",
+        videoUrl: mockVideos.shot1.videoUrl,
+        thumbnailUrl: mockVideos.shot1.thumbnailUrl,
+        videoUrl2: mockVideos.shot2.videoUrl,
+        duration: 30,
+        votingWindowSeconds: 10,
+        options: [
+          ensureOptionPrompts({ id: 'A', title: 'Advance the Offensive', text: 'Push forward through the perimeter.', dramaticHook: 'Immediate confrontation.', expectedConsequence: 'Escalation of stakes.', votes: 0 }, 'A', { characterName: this.movie.bible?.characters?.[0]?.name, envName: this.movie.bible?.environments?.[0]?.name }),
+          ensureOptionPrompts({ id: 'B', title: 'Regroup and Adapt', text: 'Seek tactical high ground and fortify.', dramaticHook: 'Calculated repositioning.', expectedConsequence: 'Preserves initiative.', votes: 0 }, 'B', { characterName: this.movie.bible?.characters?.[0]?.name, envName: this.movie.bible?.environments?.[0]?.name })
+        ],
+        activeCharacters: prevStep?.activeCharacters || [],
+        activeProps: prevStep?.activeProps || [],
+        environment: prevStep?.environment || '',
+        createdAt: new Date().toISOString()
+      };
+
+      this.movie.steps.push(fallbackStep);
+      this.movie.currentStep = fallbackStep.stepNumber;
+      await persistMovie(this.movie);
+      await persistMovieStep(this.movie.id, fallbackStep);
+
       this.votesA = 0;
       this.votesB = 0;
       this.userVotes.clear();
+      this.setPhase('PLAYING', 30);
 
-      broadcastCinemaEvent('phase_change', {
-        phase: 'PLAYING',
-        timeRemaining: duration,
-        phaseDuration: duration,
+      broadcastCinemaEvent('new_step', {
+        step: fallbackStep,
+        currentStep: fallbackStep.stepNumber,
+        phaseDuration: 30,
         phaseStartedAt: this.phaseStartedAt,
         phaseEndsAt: this.phaseEndsAt
       });
+
+      broadcastCinemaEvent('phase_change', {
+        phase: 'PLAYING',
+        timeRemaining: 30,
+        phaseDuration: 30,
+        phaseStartedAt: this.phaseStartedAt,
+        phaseEndsAt: this.phaseEndsAt
+      });
+
       await this.persistCurrentStateToSupabase(workerId);
       await this.broadcastStateSnapshot(workerId);
       return;

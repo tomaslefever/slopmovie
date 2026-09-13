@@ -607,7 +607,7 @@ export const VotingOverlay: React.FC<VotingOverlayProps> = ({
                 </div>
 
                 <p className="text-[11px] text-neutral-400 font-mono">
-                  fal.ai MiniMax H3-Max generating 15s clip • Begins automatically
+                  Generative neural pipeline synthesizing scene continuation • Begins automatically
                 </p>
               </div>
             </motion.div>
