@@ -79,7 +79,7 @@ export async function callLlmJson<T = any>(params: CallLlmParams): Promise<T | n
 
   const endpoint = getLlmEndpoint();
   const primaryModel = getLlmModel();
-  const timeoutMs = params.timeoutMs ?? 25000;
+  const timeoutMs = params.timeoutMs ?? 12000;
 
   // Build model try-list: primary first, followed by remaining candidates
   const modelsToTry = [

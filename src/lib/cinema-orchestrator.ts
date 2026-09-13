@@ -1214,23 +1214,25 @@ class CinemaOrchestrator {
 
         // 3. RUN DEEPSEEK IN PARALLEL IN BACKGROUND: Flesh out dialogue, new characters/props,
         // and pre-generate the NEXT pair of options (with their dual visualPrompts)
-        const deepseekPromise: Promise<MovieStep | null> = generateNextStepWithDeepSeek(
-          this.movie,
-          chosenOption,
-          currentStep,
-          commentInfluence ?? undefined
-        ).catch((err) => {
+        // Guarded with an independent 15s timeout so a slow LLM never aborts video synthesis
+        const deepseekPromise: Promise<MovieStep | null> = Promise.race([
+          generateNextStepWithDeepSeek(
+            this.movie,
+            chosenOption,
+            currentStep,
+            commentInfluence ?? undefined
+          ),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000))
+        ]).catch((err) => {
           console.warn("[Cinema] DeepSeek next-step generation error during background execution:", err);
           return null;
         });
 
-        // Await dual-shot video rendering, LLM option generation, and optional ad concurrently with 30s fail-safe timeout
-        const generationTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Generation timeout (30s elapsed)')), 30000)
-        );
-        const [videoRes, nextStepRaw, adVideoUrl] = await Promise.race([
-          Promise.all([videoPromise, deepseekPromise, adPromise]),
-          generationTimeout
+        // Await dual-shot video rendering, LLM option generation, and optional ad concurrently
+        const [videoRes, nextStepRaw, adVideoUrl] = await Promise.all([
+          videoPromise,
+          deepseekPromise,
+          adPromise
         ]);
 
         if (commentInfluence) {
@@ -1362,15 +1364,34 @@ class CinemaOrchestrator {
           stepNumber: nextStepNum,
           title: guaranteedWinningOption.title || `Scene ${nextStepNum}`,
           synopsis: guaranteedWinningOption.synopsis || guaranteedWinningOption.title,
+          dialogueSnippet: guaranteedWinningOption.dialogueSnippet,
+          subtitles: guaranteedWinningOption.subtitles || [
+            {
+              start: 1.0,
+              end: 14.0,
+              speaker: this.movie.bible.characters[0]?.name || "Character",
+              text: guaranteedWinningOption.title,
+              textEs: guaranteedWinningOption.title
+            },
+            {
+              start: 16.0,
+              end: 29.0,
+              speaker: this.movie.bible.characters[0]?.name || "Character",
+              text: guaranteedWinningOption.text || guaranteedWinningOption.title,
+              textEs: guaranteedWinningOption.text || guaranteedWinningOption.title
+            }
+          ],
           visualPrompt: videoPromptToUse,
           cameraMotionPrompt: cameraPromptToUse,
+          visualPrompt2: videoPrompt2ToUse,
+          cameraMotionPrompt2: cameraPrompt2ToUse,
           videoUrl: mock1.url,
           videoUrl2: mock2.url,
           duration: 30,
           votingWindowSeconds: 10,
           options: [
-            ensureOptionPrompts({ id: 'A', title: 'Advance', text: 'Push forward.', dramaticHook: 'Assault', expectedConsequence: 'Combat', votes: 0 }, 'A', {}),
-            ensureOptionPrompts({ id: 'B', title: 'Regroup', text: 'Fall back.', dramaticHook: 'Defense', expectedConsequence: 'Tactical delay', votes: 0 }, 'B', {})
+            ensureOptionPrompts({ id: 'A', title: 'Advance the Offensive', text: 'Push forward into the breach.', dramaticHook: 'Assault', expectedConsequence: 'Combat', votes: 0 }, 'A', { characterName: this.movie.bible.characters[0]?.name, envName: this.movie.bible.environments[0]?.name, cinematicStyle: this.movie.bible.cinematicStyle }),
+            ensureOptionPrompts({ id: 'B', title: 'Regroup and Adapt', text: 'Fall back into the defensive perimeter.', dramaticHook: 'Defense', expectedConsequence: 'Tactical delay', votes: 0 }, 'B', { characterName: this.movie.bible.characters[0]?.name, envName: this.movie.bible.environments[0]?.name, cinematicStyle: this.movie.bible.cinematicStyle })
           ],
           activeCharacters: currentStep.activeCharacters,
           activeProps: currentStep.activeProps,
@@ -1379,10 +1400,19 @@ class CinemaOrchestrator {
         };
         this.movie.steps.push(fallbackStep);
         this.movie.currentStep = fallbackStep.stepNumber;
+        await persistMovie(this.movie);
+        await persistMovieStep(this.movie.id, fallbackStep);
         this.votesA = 0;
         this.votesB = 0;
         this.userVotes.clear();
         this.setPhase('PLAYING', 30);
+        broadcastCinemaEvent('new_step', {
+          step: fallbackStep,
+          currentStep: fallbackStep.stepNumber,
+          phaseDuration: 30,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
+        });
         await this.broadcastStateSnapshot(workerId);
       }
     }
