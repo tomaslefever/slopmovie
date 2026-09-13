@@ -79,8 +79,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   }, [activeStep.stepNumber]);
 
   // Construct sequential segments for this scene:
-  // Normal scene (30s): [Shot 1 (Opening), Shot 2 (Climax)]
-  // Mid-roll ad scene (45s): [Shot 1 (Opening), Sponsor Ad (Block 2), Shot 2 (Climax)]
+  // 15s Prologue scenes (Steps 1-4): ONLY [Shot 1 (Opening 15s)] — all 4 sum to 1 minute total
+  // Normal dual-shot scene (30s): [Shot 1 (Opening 15s), Shot 2 (Climax 15s)]
+  // Mid-roll ad scene (45s): [Shot 1 (Opening 15s), Sponsor Ad (15s), Shot 2 (Climax 15s)]
   const segments = React.useMemo<PlaybackSegment[]>(() => {
     const list: PlaybackSegment[] = [];
 
@@ -90,22 +91,24 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       url: getSanitizedVideoUrl(activeStep.videoUrl, 0)
     });
 
-    // 2. Optional Mid-roll Sponsor Ad in Block 2 (15s)
-    if (activeStep.hasMidRollAd && activeStep.adVideoUrl) {
+    // 2. Optional Mid-roll Sponsor Ad in Block 2 (15s) — Strictly forbidden during prologue (steps 1-4)
+    if (activeStep.stepNumber > 4 && activeStep.hasMidRollAd && activeStep.adVideoUrl) {
       list.push({
         type: 'ad',
         url: getSanitizedVideoUrl(activeStep.adVideoUrl, 2)
       });
     }
 
-    // 3. Shot 2: Climax / Consequence (15s) - ALWAYS concatenated
-    list.push({
-      type: 'shot2',
-      url: getSanitizedVideoUrl(activeStep.videoUrl2, 1)
-    });
+    // 3. Shot 2: Climax / Consequence (15s) — ONLY for dual-shot scenes (steps > 4 AND duration > 15)
+    if (activeStep.stepNumber > 4 && activeStep.duration > 15 && activeStep.videoUrl2) {
+      list.push({
+        type: 'shot2',
+        url: getSanitizedVideoUrl(activeStep.videoUrl2, 1)
+      });
+    }
 
     return list;
-  }, [activeStep.videoUrl, activeStep.videoUrl2, activeStep.hasMidRollAd, activeStep.adVideoUrl, getSanitizedVideoUrl]);
+  }, [activeStep.stepNumber, activeStep.duration, activeStep.videoUrl, activeStep.videoUrl2, activeStep.hasMidRollAd, activeStep.adVideoUrl, getSanitizedVideoUrl]);
 
   // dual-Buffer Seamless A/B Player state
   const [activeSlot, setActiveSlot] = useState<'A' | 'B'>('A');
@@ -125,6 +128,26 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   segmentsRef.current = segments;
 
   const isOptionVoting = phase === 'VOTING' || phase === 'OPTION_VOTING';
+
+  // Global user interaction listener to ensure audio is unmuted as soon as the user touches/clicks anywhere
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (!isMutedRef.current && !isOptionVoting && phase === 'PLAYING') {
+        const activeVideo = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
+        if (activeVideo && activeVideo.muted) {
+          activeVideo.muted = false;
+        }
+      }
+    };
+    window.addEventListener('click', unlockAudio, { passive: true });
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio, { passive: true });
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, [phase, isOptionVoting]);
 
   // Initialize slots when scene / activeStep changes (NOT on mute toggle)
   useEffect(() => {
@@ -146,10 +169,13 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       videoA.src = src0;
       videoA.currentTime = 0;
       videoA.loop = false;
-      videoA.muted = isOptionVoting ? true : (isFirstAd ? false : isMutedRef.current);
+      const targetMuted = isOptionVoting ? true : (isFirstAd ? false : isMutedRef.current);
+      videoA.muted = targetMuted;
       videoA.play().catch(() => {
-        videoA.muted = true;
-        videoA.play().catch(() => {});
+        if (!targetMuted) {
+          videoA.muted = true;
+          videoA.play().catch(() => {});
+        }
       });
     }
 
@@ -161,7 +187,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       videoB.preload = "auto";
       videoB.load();
     }
-  }, [activeStep.stepNumber, activeStep.videoUrl, activeStep.videoUrl2, activeStep.hasMidRollAd, activeStep.adVideoUrl, isOptionVoting, fallbackUrl]);
+  }, [activeStep.stepNumber, activeStep.videoUrl, activeStep.videoUrl2, activeStep.duration, activeStep.hasMidRollAd, activeStep.adVideoUrl, isOptionVoting, fallbackUrl]);
 
   // Handle seamless transition when a slot finishes playing
   const handleSlotEnded = React.useCallback((finishedSlot: 'A' | 'B') => {
@@ -187,11 +213,13 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
         if (targetVideo) {
           targetVideo.currentTime = 0;
-          // Ads MUST play with sound!
-          targetVideo.muted = isNextAd ? false : isMutedRef.current;
+          const targetMuted = isNextAd ? false : isMutedRef.current;
+          targetVideo.muted = targetMuted;
           targetVideo.play().catch(() => {
-            targetVideo.muted = true;
-            targetVideo.play().catch(() => {});
+            if (!targetMuted) {
+              targetVideo.muted = true;
+              targetVideo.play().catch(() => {});
+            }
           });
         }
 
@@ -311,10 +339,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   const toggleMute = () => {
     const nextMuted = audioCues.toggleMute();
     setIsMuted(nextMuted);
-    const activeVideo = activeSlot === 'A' ? videoRefA.current : videoRefB.current;
-    if (activeVideo) {
-      activeVideo.muted = isOptionVoting ? true : nextMuted;
-    }
+    isMutedRef.current = nextMuted;
+    if (videoRefA.current) videoRefA.current.muted = isOptionVoting ? true : nextMuted;
+    if (videoRefB.current) videoRefB.current.muted = isOptionVoting ? true : nextMuted;
     audioCues.playClick();
   };
 

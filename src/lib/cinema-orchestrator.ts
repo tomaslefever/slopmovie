@@ -381,17 +381,18 @@ class CinemaOrchestrator {
             const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
             const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
             const needsReplacement2 = !s.videoUrl2 || s.videoUrl2.startsWith('/videos/');
+            const isPrologue = s.stepNumber <= 4;
             return {
               ...s,
               videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
               thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster,
-              videoUrl2: needsReplacement2 ? mock2.url : s.videoUrl2,
-              duration: s.hasMidRollAd ? 45 : 30
+              videoUrl2: isPrologue ? undefined : (needsReplacement2 ? mock2.url : s.videoUrl2),
+              duration: s.hasMidRollAd ? 45 : (isPrologue ? 15 : (s.duration || 30))
             };
           });
           this.movie = savedMovie;
           this.phase = 'PLAYING';
-          this.timeRemaining = 15;
+          this.timeRemaining = (savedMovie.currentStep || 1) <= 4 ? 15 : 30;
           this.votesA = 0;
           this.votesB = 0;
           this.userVotes.clear();
@@ -530,7 +531,7 @@ class CinemaOrchestrator {
           ...step,
           videoUrl: stepVideoUrl,
           thumbnailUrl: stepThumbnailUrl,
-          videoUrl2: stepVideoUrl2,
+          videoUrl2: undefined,
           duration: 15,
           propReferenceImages: stepPropImages
         };
@@ -558,7 +559,7 @@ class CinemaOrchestrator {
       totalVotesCast: 0
     };
 
-    this.setPhase('PLAYING', 30);
+    this.setPhase('PLAYING', 15);
     this.votesA = 0;
     this.votesB = 0;
     this.userVotes.clear();
@@ -599,12 +600,13 @@ class CinemaOrchestrator {
           const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
           const needsReplacement = !s.videoUrl || s.videoUrl.startsWith('/videos/');
           const needsReplacement2 = !s.videoUrl2 || s.videoUrl2.startsWith('/videos/');
+          const isPrologue = s.stepNumber <= 4;
           return {
             ...s,
             videoUrl: needsReplacement ? (archivedFallback?.videoUrl ?? mock.url) : s.videoUrl,
             thumbnailUrl: s.thumbnailUrl || archivedFallback?.thumbnailUrl || mock.poster,
-            videoUrl2: needsReplacement2 ? mock2.url : s.videoUrl2,
-            duration: s.hasMidRollAd ? 45 : 30
+            videoUrl2: isPrologue ? undefined : (needsReplacement2 ? mock2.url : s.videoUrl2),
+            duration: s.hasMidRollAd ? 45 : (isPrologue ? 15 : (s.duration || 30))
           };
         });
         this.movie = savedMovie;
@@ -618,10 +620,10 @@ class CinemaOrchestrator {
           if (this.movie && this.movie.status === 'streaming' && (this.movie.currentStep || 1) < 50 && liveState.phase === 'BLOCKBUSTER_VOTING') {
             console.log('[CinemaEngine] Correcting corrupt BLOCKBUSTER_VOTING on streaming movie. Setting phase to PLAYING.');
             this.phase = 'PLAYING';
-            this.phaseDuration = 30;
+            this.phaseDuration = (this.movie.currentStep || 1) <= 4 ? 15 : 30;
           } else {
             this.phase = liveState.phase || 'PLAYING';
-            this.phaseDuration = liveState.phaseDuration || 15;
+            this.phaseDuration = liveState.phaseDuration || ((this.movie?.currentStep || 1) <= 4 ? 15 : 30);
           }
         }
         this.phaseStartedAt = liveState.phaseStartedAt ? new Date(liveState.phaseStartedAt).getTime() : Date.now();
