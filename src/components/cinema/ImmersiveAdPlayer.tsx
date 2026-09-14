@@ -97,33 +97,29 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
     return () => clearInterval(timer);
   }, [ad.id, ad.duration]);
 
-  // Auto-play video on mount and whenever the source changes (e.g. fal.ai clip arrives).
-  // Ads are NOT muted: attempt sound-first playback, and only fall back to muted when
-  // the browser blocks autoplay-with-sound (no user gesture yet).
-  useEffect(() => {
-    const video = videoRef.current;
+  const attemptPlay = React.useCallback((video: HTMLVideoElement | null) => {
     if (!video) return;
-
-    video.load();          // Force reload when src changes
-    video.currentTime = 0;
-    video.muted = false;
-    setIsMuted(false);
-
     const playPromise = video.play();
     if (playPromise) {
       playPromise.then(() => {
         setIsMuted(false);
       }).catch(() => {
-        // Autoplay with sound blocked — retry muted so the ad still plays
+        // Autoplay with sound blocked: retry muted so the ad still plays smoothly without freezing!
         video.muted = true;
         setIsMuted(true);
-        video.play().catch(() => {
-          // Handled by muted autoplay
-        });
+        video.play().catch(() => {});
       });
     }
+  }, []);
+
+  // Auto-play video on mount and whenever the source changes (e.g. fal.ai clip arrives).
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      attemptPlay(video);
+    }
     audioCues.playVoteConfirm();
-  }, [ad.id, activeVideoSrc]);
+  }, [ad.id, activeVideoSrc, attemptPlay]);
 
   const handleCtaClick = async () => {
     audioCues.playClick();
@@ -156,6 +152,7 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
       {/* Background Media / Video */}
       {activeVideoSrc ? (
         <video
+          key={activeVideoSrc}
           ref={videoRef}
           src={activeVideoSrc}
           autoPlay
@@ -163,6 +160,14 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
           muted={isMuted}
           playsInline
           onEnded={triggerCompleted}
+          onCanPlay={(e) => {
+            const v = e.currentTarget;
+            if (v.paused) attemptPlay(v);
+          }}
+          onLoadedData={(e) => {
+            const v = e.currentTarget;
+            if (v.paused) attemptPlay(v);
+          }}
           className="w-full h-full object-cover object-center filter brightness-[0.85] contrast-[1.1]"
         />
       ) : ad.imageUrl ? (

@@ -209,22 +209,12 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       setActiveSlot('A');
       setSlotSrcA(src0);
       setSlotSrcB(src1);
-
-      const videoA = videoRefA.current;
-      const targetMuted = isOptionVoting ? true : (segments[0]?.type === 'ad' ? false : isMutedRef.current);
-      if (videoA) {
-        videoA.loop = false;
-        safePlayVideo(videoA, targetMuted);
-      }
       return;
     }
 
     // Subsequent step change: alternate to the standby slot seamlessly without freezing the current one
     const currentSlot = activeSlotRef.current;
     const nextSlot: 'A' | 'B' = currentSlot === 'A' ? 'B' : 'A';
-    const targetVideo = nextSlot === 'A' ? videoRefA.current : videoRefB.current;
-    const oldVideo = currentSlot === 'A' ? videoRefA.current : videoRefB.current;
-    const targetMuted = isOptionVoting ? true : (segments[0]?.type === 'ad' ? false : isMutedRef.current);
 
     if (nextSlot === 'A') {
       setSlotSrcA(src0);
@@ -232,17 +222,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       setSlotSrcB(src0);
     }
 
-    if (targetVideo) {
-      targetVideo.loop = false;
-      safePlayVideo(targetVideo, targetMuted);
-    }
-
     setActiveSlot(nextSlot);
-
-    if (oldVideo) {
-      oldVideo.pause();
-      oldVideo.muted = true;
-    }
 
     // Preload next segment (if dual-shot) into the now standby old slot
     if (segments[1]?.url) {
@@ -252,7 +232,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         setSlotSrcB(segments[1].url);
       }
     }
-  }, [stepKey, segments, fallbackUrl, isOptionVoting, safePlayVideo]);
+  }, [stepKey, segments, fallbackUrl]);
 
   // Handle seamless transition when a slot finishes playing
   const handleSlotEnded = React.useCallback((finishedSlot: 'A' | 'B') => {
@@ -457,6 +437,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
       {/* Dual Video Buffer: Slot A */}
       <video
+        key={`slot-A-${slotSrcA}`}
         ref={videoRefA}
         src={slotSrcA}
         poster={activeSlot === 'A' ? activeStep.thumbnailUrl : undefined}
@@ -502,6 +483,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
       {/* Dual Video Buffer: Slot B (Standby / Preloading / Seamless Switch) */}
       <video
+        key={`slot-B-${slotSrcB}`}
         ref={videoRefB}
         src={slotSrcB}
         poster={activeSlot === 'B' ? activeStep.thumbnailUrl : undefined}
