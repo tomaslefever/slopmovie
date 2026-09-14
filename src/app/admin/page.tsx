@@ -1176,9 +1176,10 @@ export default function AdminDashboardPage() {
           movie: data.movie || prev.movie,
           ...data.state
         } : prev);
+        const effectiveStep = data.currentStep || data.movie?.currentStep || stepNum;
         setSelectedMovieId(movieId);
-        setSelectedStepNumber(stepNum);
-        showFeedback(`🎬 Broadcasting film "${data.movie?.title || movieId}" (Step ${stepNum}) live.`);
+        setSelectedStepNumber(effectiveStep);
+        showFeedback(`🎬 Broadcasting film "${data.movie?.title || movieId}" (Step ${effectiveStep}) live.`);
         fetchData();
       } else {
         showFeedback('Error switching movie');

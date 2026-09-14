@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { CinemaState, ChatMessage, PlaybackPhase, MovieStep, ImmersiveAd, isOptionVotingPhase, isMovieVotingPhase } from '@/types/cinema';
+import { CinemaState, ChatMessage, PlaybackPhase, MovieStep, Movie, ImmersiveAd, isOptionVotingPhase, isMovieVotingPhase } from '@/types/cinema';
 import { CinemaPlayer } from '@/components/cinema/CinemaPlayer';
 import { VotingOverlay } from '@/components/cinema/VotingOverlay';
 import { BlockbusterVoting } from '@/components/cinema/BlockbusterVoting';
@@ -259,7 +259,10 @@ export default function CinemaStreamingPage() {
         setCinemaState((prev) => {
           const snapshot = payload.payload;
           const defaultApiStatus = { hasDeepseek: false, hasFal: false, isMockMode: true };
-          if (snapshot?.blockbusterWinner !== undefined) {
+          if (snapshot.phase === 'PLAYING') {
+            setBlockbusterWinner(null);
+            setBlockbusterUserVoted(null);
+          } else if (snapshot?.blockbusterWinner !== undefined) {
             setBlockbusterWinner(snapshot.blockbusterWinner);
           }
           if (!prev) {
@@ -287,16 +290,23 @@ export default function CinemaStreamingPage() {
             isLive: snapshot.isLive ?? prev.isLive,
             isPaused: snapshot.isPaused !== undefined ? snapshot.isPaused : prev.isPaused,
             isGenerationPaused: snapshot.isGenerationPaused !== undefined ? snapshot.isGenerationPaused : prev.isGenerationPaused,
-            blockbusterCandidates: snapshot.blockbusterCandidates ?? prev.blockbusterCandidates,
-            blockbusterVoteCounts: snapshot.blockbusterVoteCounts ?? prev.blockbusterVoteCounts,
-            blockbusterWinner: snapshot.blockbusterWinner ?? prev.blockbusterWinner
+            blockbusterCandidates: snapshot.phase === 'PLAYING'
+              ? []
+              : (Array.isArray(snapshot.blockbusterCandidates) ? snapshot.blockbusterCandidates : prev.blockbusterCandidates),
+            blockbusterVoteCounts: snapshot.phase === 'PLAYING'
+              ? { A: 0, B: 0, C: 0, D: 0 }
+              : (snapshot.blockbusterVoteCounts !== undefined ? snapshot.blockbusterVoteCounts : prev.blockbusterVoteCounts),
+            blockbusterWinner: snapshot.phase === 'PLAYING'
+              ? null
+              : (snapshot.blockbusterWinner !== undefined ? snapshot.blockbusterWinner : prev.blockbusterWinner)
           };
         });
       })
       .on('broadcast', { event: 'phase_change' }, (payload: { payload: { phase: PlaybackPhase; timeRemaining?: number; votesA?: number; votesB?: number; selectedOption?: 'A' | 'B'; wasRandomPick?: boolean; phaseEndsAt?: string | number; phaseDuration?: number; options?: any; winner?: any } }) => {
-        if (isOptionVotingPhase(payload.payload.phase)) {
+        if (payload.payload.phase === 'PLAYING' || isOptionVotingPhase(payload.payload.phase)) {
           setUserVoted(null);
           setBlockbusterWinner(null);
+          setBlockbusterUserVoted(null);
         }
         if (payload.payload.selectedOption) {
           setBlockbusterWinner(null);
@@ -321,14 +331,20 @@ export default function CinemaStreamingPage() {
           return {
             ...prev,
             phase: payload.payload.phase,
-            timeRemaining: isOptionVote ? (payload.payload.timeRemaining ?? 10) : 0,
+            timeRemaining: payload.payload.timeRemaining ?? (isOptionVote ? 10 : prev.timeRemaining),
             phaseDuration: payload.payload.phaseDuration ?? (payload.payload as any).phaseDuration ?? prev.phaseDuration,
             phaseEndsAt: payload.payload.phaseEndsAt ?? prev.phaseEndsAt,
             votesA: payload.payload.votesA ?? (isOptionVote ? 0 : prev.votesA),
             votesB: payload.payload.votesB ?? (isOptionVote ? 0 : prev.votesB),
-            blockbusterCandidates: (payload.payload as any).blockbusterCandidates ?? prev.blockbusterCandidates,
-            blockbusterVoteCounts: (payload.payload as any).blockbusterVoteCounts ?? prev.blockbusterVoteCounts,
-            blockbusterWinner: payload.payload.winner ?? prev.blockbusterWinner,
+            blockbusterCandidates: payload.payload.phase === 'PLAYING'
+              ? []
+              : ((payload.payload as any).blockbusterCandidates ?? prev.blockbusterCandidates),
+            blockbusterVoteCounts: payload.payload.phase === 'PLAYING'
+              ? { A: 0, B: 0, C: 0, D: 0 }
+              : ((payload.payload as any).blockbusterVoteCounts ?? prev.blockbusterVoteCounts),
+            blockbusterWinner: payload.payload.phase === 'PLAYING'
+              ? null
+              : (payload.payload.winner !== undefined ? payload.payload.winner : prev.blockbusterWinner),
             activeStep: updatedStep
           };
         });
@@ -344,19 +360,21 @@ export default function CinemaStreamingPage() {
           };
         });
       })
-      .on('broadcast', { event: 'new_step' }, (payload: { payload: { step: MovieStep; currentStep: number; phaseEndsAt?: string | number } }) => {
+      .on('broadcast', { event: 'new_step' }, (payload: { payload: { step: MovieStep; currentStep: number; phaseEndsAt?: string | number; movie?: Movie } }) => {
         setUserVoted(null);
         setBlockbusterWinner(null);
+        setBlockbusterUserVoted(null);
         if (payload.payload.step) {
           setCinemaState((prev) => {
             if (!prev) return prev;
-            const existingStepIndex = prev.movie.steps.findIndex(s => s.stepNumber === payload.payload.step.stepNumber);
+            const baseMovie: Movie = payload.payload.movie || prev.movie;
+            const existingStepIndex = baseMovie.steps.findIndex((s: MovieStep) => s.stepNumber === payload.payload.step.stepNumber);
             const updatedSteps = existingStepIndex >= 0
-              ? prev.movie.steps.map((s, idx) => idx === existingStepIndex ? payload.payload.step : s)
-              : [...prev.movie.steps, payload.payload.step];
+              ? baseMovie.steps.map((s: MovieStep, idx: number) => idx === existingStepIndex ? payload.payload.step : s)
+              : [...baseMovie.steps, payload.payload.step];
 
             const updatedMovie = {
-              ...prev.movie,
+              ...baseMovie,
               currentStep: payload.payload.currentStep,
               steps: updatedSteps
             };
@@ -757,7 +775,9 @@ export default function CinemaStreamingPage() {
   }
 
   const isBlockbusterActive = Boolean(
-    cinemaState && (
+    cinemaState &&
+    cinemaState.phase !== 'PLAYING' &&
+    cinemaState.movie?.status !== 'streaming' && (
       isMovieVotingPhase(cinemaState.phase) ||
       (cinemaState.phase === 'GENERATING' && Boolean(blockbusterWinner || cinemaState.blockbusterWinner) && (cinemaState.activeStep?.stepNumber || 0) >= (cinemaState.movie?.totalSteps || 50))
     )

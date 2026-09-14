@@ -18,12 +18,18 @@ import {
   countActiveViewersFromDb
 } from '@/lib/supabase/db';
 import { CINEMATIC_MOCK_VIDEOS } from '@/lib/fal-video';
+import { loadStepVideoUrlsPool, resolveStepPlaybackUrl } from '@/lib/video-pool';
 import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const cookieStore = await cookies();
-  const cookieViewerId = cookieStore.get('kinetic_viewer_id')?.value;
+  let cookieViewerId: string | undefined;
+  try {
+    const cookieStore = await cookies();
+    cookieViewerId = cookieStore.get('kinetic_viewer_id')?.value;
+  } catch {
+    // Non-request or simulated context fallback
+  }
   
   const rawId = searchParams.get('userId') || cookieViewerId;
   const isUuid = Boolean(rawId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId));
@@ -52,13 +58,13 @@ export async function GET(request: Request) {
   }
 
   // Adopt blockbuster voting state persisted in the DB (survives restarts / multi-process)
-  if (Array.isArray(liveState?.blockbusterCandidates) && liveState.blockbusterCandidates.length > 0) {
+  if (Array.isArray(liveState?.blockbusterCandidates)) {
     cinemaEngine.blockbusterCandidates = liveState.blockbusterCandidates;
   }
-  if (liveState?.blockbusterVoteCounts) {
-    cinemaEngine.blockbusterVoteCounts = liveState.blockbusterVoteCounts;
+  if (liveState?.blockbusterVoteCounts !== undefined) {
+    cinemaEngine.blockbusterVoteCounts = liveState.blockbusterVoteCounts || { A: 0, B: 0, C: 0, D: 0 };
   }
-  if (liveState?.blockbusterWinner) {
+  if (liveState?.blockbusterWinner !== undefined) {
     cinemaEngine.blockbusterWinner = liveState.blockbusterWinner as any;
   }
   if (liveState?.phase) {
@@ -67,23 +73,33 @@ export async function GET(request: Request) {
 
   const isTransitionPhase = (liveState?.phase === 'BLOCKBUSTER_VOTING' || liveState?.phase === 'GENERATING') && activeMovie?.status === 'completed';
 
-  // If the live-state movie id points at an archived/completed movie (stale pointer),
-  // fall back to the newest streaming/paused movie so the same old film is never resurrected.
-  // CRITICAL: During transition phases (BLOCKBUSTER_VOTING and GENERATING), the completed film is the legitimate film whose successors are being voted on or generated!
-  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0 || (activeMovie.status === 'completed' && !isTransitionPhase)) {
+  // If activeMovie was not found or has no steps, fall back to newest streaming/paused movie
+  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) {
     const dbActive = await loadActiveMovieFromDb();
-    if (dbActive) {
+    if (dbActive && dbActive.steps && dbActive.steps.length > 0) {
       activeMovie = dbActive;
     }
   }
 
-  // If activeMovie is actively streaming, correct any corrupt blockbuster state
-  if (activeMovie && activeMovie.status === 'streaming' && (activeMovie.currentStep || 1) < 50) {
-    if (liveState?.phase === 'BLOCKBUSTER_VOTING') {
+  // If activeMovie is set for live broadcast, ensure streaming status when playing
+  if (activeMovie && (!liveState?.phase || liveState.phase === 'PLAYING') && activeMovie.status !== 'streaming') {
+    activeMovie.status = 'streaming';
+  }
+
+  // If activeMovie is actively streaming or phase is PLAYING, wipe any stale blockbuster state
+  if (activeMovie && (activeMovie.status === 'streaming' || liveState?.phase === 'PLAYING' || cinemaEngine.phase === 'PLAYING')) {
+    if (liveState?.phase === 'BLOCKBUSTER_VOTING' || liveState?.phase === 'MOVIE_VOTING') {
       if (liveState) liveState.phase = 'PLAYING';
       cinemaEngine.phase = 'PLAYING';
     }
     cinemaEngine.blockbusterWinner = null;
+    cinemaEngine.blockbusterCandidates = [];
+    cinemaEngine.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
+    if (liveState) {
+      liveState.blockbusterWinner = null;
+      liveState.blockbusterCandidates = [];
+      liveState.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
+    }
   }
 
   // Fallback to in-memory engine movie if available
@@ -102,54 +118,45 @@ export async function GET(request: Request) {
     }
   }
 
-  // Ensure active movie steps have valid playback URLs.
-  // Missing or empty URLs pick a random video from the archive pool so a scene never stalls or degrades.
-  if (activeMovie) {
-    const pool = await cinemaEngine.buildArchivedGeneratedVideoPool();
-    activeMovie.steps = activeMovie.steps.map((s, idx) => {
-      const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
-      const needsReplacement = !s.videoUrl || typeof s.videoUrl !== 'string' || s.videoUrl.trim() === '' || s.videoUrl.startsWith('/videos/');
-      let fallbackUrl = mock.url;
-      let fallbackThumb = mock.poster;
-      if (pool.length > 0) {
-        const randPick = pool[Math.floor(Math.random() * pool.length)];
-        fallbackUrl = randPick.videoUrl;
-        fallbackThumb = randPick.thumbnailUrl || fallbackThumb;
-      } else {
-        const randMock = CINEMATIC_MOCK_VIDEOS[Math.floor(Math.random() * CINEMATIC_MOCK_VIDEOS.length)];
-        fallbackUrl = randMock.url;
-        fallbackThumb = randMock.poster;
-      }
-      return {
-        ...s,
-        videoUrl: needsReplacement ? fallbackUrl : s.videoUrl,
-        thumbnailUrl: s.thumbnailUrl || (needsReplacement ? fallbackThumb : mock.poster)
-      };
-    });
+  // Precargar pool de URLs de public.movie_steps al comenzar
+  await loadStepVideoUrlsPool();
+
+  if (activeMovie && activeMovie.steps && activeMovie.steps.length > 0) {
+    activeMovie.steps.sort((a, b) => a.stepNumber - b.stepNumber);
   }
 
-  const currentStepNum = liveState?.currentStep || activeMovie?.currentStep || 1;
-  const activeStep = activeMovie?.steps.find(s => s.stepNumber === currentStepNum)
-    || activeMovie?.steps?.[activeMovie.steps.length - 1]
-    || {
-      stepNumber: 1,
-      title: "Opening Scene",
-      synopsis: "The adventure begins.",
-      visualPrompt: "",
-      videoUrl: CINEMATIC_MOCK_VIDEOS[0].url,
-      thumbnailUrl: CINEMATIC_MOCK_VIDEOS[0].poster,
-      duration: 15,
-      votingWindowSeconds: 10,
-      options: [
-        { id: 'A', title: 'Option A', description: 'Branch A', prompt: '', votes: 0 },
-        { id: 'B', title: 'Option B', description: 'Branch B', prompt: '', votes: 0 }
-      ],
-      activeCharacters: [],
-      activeProps: [],
-      subtitles: [],
-      environment: "",
-      createdAt: new Date().toISOString()
-    };
+  const requestedStepNum = liveState?.currentStep || activeMovie?.currentStep || 1;
+  let rawActiveStep = activeMovie?.steps.find(s => s.stepNumber === requestedStepNum);
+  if (!rawActiveStep && activeMovie?.steps && activeMovie.steps.length > 0) {
+    rawActiveStep = activeMovie.steps.find(s => s.stepNumber >= requestedStepNum) || activeMovie.steps[0];
+  }
+  const currentStepNum = rawActiveStep ? rawActiveStep.stepNumber : requestedStepNum;
+  if (activeMovie) {
+    activeMovie.currentStep = currentStepNum;
+  }
+
+  const activeStep: any = rawActiveStep ? {
+    ...rawActiveStep,
+    videoUrl: resolveStepPlaybackUrl(rawActiveStep, CINEMATIC_MOCK_VIDEOS[0].url)
+  } : {
+    stepNumber: 1,
+    title: "Opening Scene",
+    synopsis: "The adventure begins.",
+    visualPrompt: "",
+    videoUrl: resolveStepPlaybackUrl(null, CINEMATIC_MOCK_VIDEOS[0].url),
+    thumbnailUrl: CINEMATIC_MOCK_VIDEOS[0].poster,
+    duration: 15,
+    votingWindowSeconds: 10,
+    options: [
+      { id: 'A', title: 'Option A', description: 'Branch A', prompt: '', votes: 0 },
+      { id: 'B', title: 'Option B', description: 'Branch B', prompt: '', votes: 0 }
+    ],
+    activeCharacters: [],
+    activeProps: [],
+    subtitles: [],
+    environment: "",
+    createdAt: new Date().toISOString()
+  };
 
   // Load vote for this step directly from Supabase
   const hasUserVoted = activeMovie 
@@ -199,7 +206,7 @@ export async function GET(request: Request) {
         stepNumber: s.stepNumber,
         title: s.title,
         duration: s.duration || 15,
-        videoUrl: s.videoUrl,
+        videoUrl: resolveStepPlaybackUrl(s, CINEMATIC_MOCK_VIDEOS[0].url),
         synopsis: s.synopsis
       }))
     }));
@@ -227,9 +234,15 @@ export async function GET(request: Request) {
     : (cinemaEngine.phaseEndsAt ? new Date(cinemaEngine.phaseEndsAt).toISOString() : new Date(Date.now() + timeRemaining * 1000).toISOString());
 
   const response = NextResponse.json({
-    movie: activeMovie,
+    movie: activeMovie ? {
+      ...activeMovie,
+      steps: activeMovie.steps.map(s => ({
+        ...s,
+        videoUrl: resolveStepPlaybackUrl(s, CINEMATIC_MOCK_VIDEOS[0].url)
+      }))
+    } : null,
     activeStep,
-    phase,
+    phase: (activeMovie?.status === 'streaming' && (phase === 'BLOCKBUSTER_VOTING' || phase === 'MOVIE_VOTING')) ? 'PLAYING' : phase,
     timeRemaining,
     phaseDuration,
     phaseStartedAt,
@@ -245,16 +258,16 @@ export async function GET(request: Request) {
     isMovieGenerationPaused: liveState?.isMovieGenerationPaused ?? cinemaEngine.isMovieGenerationPaused ?? false,
     videoModel: cinemaEngine.videoModel,
     videoResolution: cinemaEngine.videoResolution,
-    blockbusterCandidates: cinemaEngine.blockbusterCandidates,
-    blockbusterVoteCounts: cinemaEngine.blockbusterVoteCounts,
-    blockbusterWinner: (activeMovie?.status === 'streaming' && (activeMovie.currentStep || 1) < 50) ? null : (cinemaEngine.blockbusterWinner ? {
+    blockbusterCandidates: (phase === 'PLAYING' || activeMovie?.status === 'streaming') ? [] : (cinemaEngine.blockbusterCandidates || []),
+    blockbusterVoteCounts: (phase === 'PLAYING' || activeMovie?.status === 'streaming') ? { A: 0, B: 0, C: 0, D: 0 } : (cinemaEngine.blockbusterVoteCounts || { A: 0, B: 0, C: 0, D: 0 }),
+    blockbusterWinner: (phase === 'PLAYING' || activeMovie?.status === 'streaming') ? null : (cinemaEngine.blockbusterWinner ? {
       id: cinemaEngine.blockbusterWinner.id,
       title: cinemaEngine.blockbusterWinner.title,
       logline: cinemaEngine.blockbusterWinner.logline,
       genre: cinemaEngine.blockbusterWinner.genre,
       premise: cinemaEngine.blockbusterWinner.premise
-    } : (liveState?.blockbusterWinner || null)),
-    blockbusterUserVoted,
+    } : null),
+    blockbusterUserVoted: (phase === 'PLAYING' || activeMovie?.status === 'streaming') ? null : blockbusterUserVoted,
     activeAd: liveState?.activeAd || null,
     adsConfig: liveState?.adsConfig || { autoAdsEnabled: true, adIntervalSteps: 5, lastAdStep: 0 },
     apiStatus: {

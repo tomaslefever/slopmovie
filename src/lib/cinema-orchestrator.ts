@@ -37,9 +37,17 @@ import {
   deleteMoviesFromDb,
   persistBlockbusterVote,
   loadBlockbusterVoteCountsFromDb,
-  countActiveViewersFromDb
+  countActiveViewersFromDb,
+  setActiveStreamingMovie,
+  invalidateCinemaCache
 } from './supabase/db';
 import { generateAndStorePropReferenceImage } from './supabase/storage';
+import { 
+  loadStepVideoUrlsPool, 
+  getRandomMovieStepVideoUrl, 
+  resolveStepPlaybackUrl, 
+  registerGeneratedVideoUrlInPool 
+} from './video-pool';
 
 
 const DEFAULT_IMMERSIVE_ADS: ImmersiveAd[] = [
@@ -379,34 +387,8 @@ class CinemaOrchestrator {
       try {
         const savedMovie = await loadActiveMovieFromDb();
         if (savedMovie && savedMovie.steps.length > 0) {
-          // Sanitize step video URLs so none are missing, empty or 404.
-          // Pick a random archived video from ANY movie so a scene never fails or stays frozen.
-          const pool = await this.buildArchivedGeneratedVideoPool();
-          savedMovie.steps = savedMovie.steps.map((s, idx) => {
-            const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
-            const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
-            const needsReplacement = !s.videoUrl || typeof s.videoUrl !== 'string' || s.videoUrl.trim() === '' || s.videoUrl.startsWith('/videos/');
-            const needsReplacement2 = !s.videoUrl2 || typeof s.videoUrl2 !== 'string' || s.videoUrl2.trim() === '' || s.videoUrl2.startsWith('/videos/');
-            const isPrologue = s.stepNumber <= 4;
-            let fallbackUrl = mock.url;
-            let fallbackThumb = mock.poster;
-            if (pool.length > 0) {
-              const randPick = pool[Math.floor(Math.random() * pool.length)];
-              fallbackUrl = randPick.videoUrl;
-              fallbackThumb = randPick.thumbnailUrl || fallbackThumb;
-            } else {
-              const randMock = CINEMATIC_MOCK_VIDEOS[Math.floor(Math.random() * CINEMATIC_MOCK_VIDEOS.length)];
-              fallbackUrl = randMock.url;
-              fallbackThumb = randMock.poster;
-            }
-            return {
-              ...s,
-              videoUrl: needsReplacement ? fallbackUrl : s.videoUrl,
-              thumbnailUrl: s.thumbnailUrl || (needsReplacement ? fallbackThumb : mock.poster),
-              videoUrl2: isPrologue ? undefined : (needsReplacement2 ? mock2.url : s.videoUrl2),
-              duration: s.hasMidRollAd ? 45 : (isPrologue ? 15 : (s.duration || 30))
-            };
-          });
+          // Precarga el pool de video_urls de public.movie_steps al comenzar los pasos
+          await loadStepVideoUrlsPool();
           this.movie = savedMovie;
           this.phase = 'PLAYING';
           this.timeRemaining = (savedMovie.currentStep || 1) <= 4 ? 15 : 30;
@@ -508,17 +490,17 @@ class CinemaOrchestrator {
 
     // Generate videos for all initial steps (First-Shot: 4 scenes = 1 minute total)
     console.log(`[Cinema] Synthesizing 4-scene First-Shot sequence (1-minute uninterrupted opening)...`);
+    await loadStepVideoUrlsPool();
     const initialStepsWithVideo: MovieStep[] = await Promise.all(
-      initialStepsRaw.map(async (step, idx) => {
+      initialStepsRaw.map(async (step) => {
         // Collect reference images of props for this step
         const stepPropImages = generated.bible.props
           .filter(p => (step.activeProps || []).includes(p.id))
           .map(p => p.imageUrl)
           .filter(Boolean) as string[];
 
-        let stepVideoUrl: string;
+        let stepVideoUrl = "";
         let stepThumbnailUrl: string | undefined;
-        let stepVideoUrl2: string;
 
         if (!this.isGenerationPaused) {
           try {
@@ -531,24 +513,20 @@ class CinemaOrchestrator {
               model: this.videoModel,
               resolution: this.videoResolution || undefined
             });
-            stepVideoUrl = videoResult.videoUrl;
-            stepThumbnailUrl = videoResult.thumbnailUrl;
-            const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
-            stepVideoUrl2 = mock2.url;
+            if (videoResult && videoResult.isRealAiGenerated && videoResult.videoUrl) {
+              stepVideoUrl = videoResult.videoUrl;
+              stepThumbnailUrl = videoResult.thumbnailUrl;
+              registerGeneratedVideoUrlInPool(stepVideoUrl);
+            }
           } catch (err) {
-            console.warn(`[Cinema] Fal.ai video generation failed for step ${step.stepNumber}, using mock fallback:`, err);
-            const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
-            const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
-            stepVideoUrl = mock.url;
-            stepThumbnailUrl = mock.poster;
-            stepVideoUrl2 = mock2.url;
+            console.warn(`[Cinema] Fal.ai video generation failed for step ${step.stepNumber}:`, err);
+            stepVideoUrl = "";
+            stepThumbnailUrl = undefined;
           }
         } else {
-          console.log(`[Cinema] 🛡️ Generación PAUSADA: Seleccionando 2 videos existentes para el paso ${step.stepNumber}.`);
-          const twoVideos = await this.pickTwoArchivedOrMockVideos(step.stepNumber);
-          stepVideoUrl = twoVideos.shot1.videoUrl;
-          stepThumbnailUrl = twoVideos.shot1.thumbnailUrl;
-          stepVideoUrl2 = twoVideos.shot2.videoUrl;
+          console.log(`[Cinema] 🛡️ Generación PAUSADA: Sin video forzado para el paso ${step.stepNumber}.`);
+          stepVideoUrl = "";
+          stepThumbnailUrl = undefined;
         }
 
         return {
@@ -607,55 +585,50 @@ class CinemaOrchestrator {
   /**
    * Synchronize cinema orchestrator with state currently in Supabase.
    */
-  public async syncFromDatabase() {
+  public async syncFromDatabase(targetMovieId?: string) {
     if (!isSupabaseConfigured()) return;
     if (this.isResetting) {
       console.log('[CinemaEngine] Skipping DB sync: a movie reset is in progress.');
       return;
     }
     try {
-      const savedMovie = await loadActiveMovieFromDb();
+      const liveState = await loadLiveCinemaStateFromDb();
+      const effectiveMovieId = targetMovieId || liveState?.movieId || this.movie?.id;
+      let savedMovie: Movie | null = null;
+      if (effectiveMovieId) {
+        savedMovie = await loadActiveMovieFromDb(effectiveMovieId);
+        if (!savedMovie) {
+          savedMovie = await loadMovieByIdFromDb(effectiveMovieId);
+        }
+      }
+      if (!savedMovie) {
+        savedMovie = await loadActiveMovieFromDb();
+      }
+
       if (savedMovie && savedMovie.steps.length > 0) {
-        // Sanitize missing step URLs; pick a random archived generated video from
-        // the pool so a scene with missing clip plays immediately without errors.
-        const pool = await this.buildArchivedGeneratedVideoPool();
-        savedMovie.steps = savedMovie.steps.map((s, idx) => {
-          const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
-          const mock2 = CINEMATIC_MOCK_VIDEOS[(idx + 1) % CINEMATIC_MOCK_VIDEOS.length];
-          const needsReplacement = !s.videoUrl || typeof s.videoUrl !== 'string' || s.videoUrl.trim() === '' || s.videoUrl.startsWith('/videos/');
-          const needsReplacement2 = !s.videoUrl2 || typeof s.videoUrl2 !== 'string' || s.videoUrl2.trim() === '' || s.videoUrl2.startsWith('/videos/');
+        savedMovie.steps.sort((a, b) => a.stepNumber - b.stepNumber);
+        savedMovie.steps = savedMovie.steps.map((s) => {
           const isPrologue = s.stepNumber <= 4;
-          let fallbackUrl = mock.url;
-          let fallbackThumb = mock.poster;
-          if (pool.length > 0) {
-            const randPick = pool[Math.floor(Math.random() * pool.length)];
-            fallbackUrl = randPick.videoUrl;
-            fallbackThumb = randPick.thumbnailUrl || fallbackThumb;
-          } else {
-            const randMock = CINEMATIC_MOCK_VIDEOS[Math.floor(Math.random() * CINEMATIC_MOCK_VIDEOS.length)];
-            fallbackUrl = randMock.url;
-            fallbackThumb = randMock.poster;
-          }
           return {
             ...s,
-            videoUrl: needsReplacement ? fallbackUrl : s.videoUrl,
-            thumbnailUrl: s.thumbnailUrl || (needsReplacement ? fallbackThumb : mock.poster),
-            videoUrl2: isPrologue ? undefined : (needsReplacement2 ? mock2.url : s.videoUrl2),
+            videoUrl: resolveStepPlaybackUrl(s),
+            thumbnailUrl: s.thumbnailUrl || undefined,
+            videoUrl2: isPrologue ? undefined : (s.videoUrl2 || getRandomMovieStepVideoUrl() || undefined),
             duration: s.hasMidRollAd ? 45 : (isPrologue ? 15 : (s.duration || 30))
           };
         });
         this.movie = savedMovie;
       }
 
-      const liveState = await loadLiveCinemaStateFromDb(this.movie?.id);
       if (liveState) {
         const isLegitMovieMatch = !liveState.movieId || !this.movie || liveState.movieId === this.movie.id;
         if (isLegitMovieMatch) {
-          // If active movie is streaming and not complete (<50), never adopt stale BLOCKBUSTER_VOTING
-          if (this.movie && this.movie.status === 'streaming' && (this.movie.currentStep || 1) < 50 && liveState.phase === 'BLOCKBUSTER_VOTING') {
+          // If active movie is streaming or phase is PLAYING, never adopt stale BLOCKBUSTER_VOTING or MOVIE_VOTING
+          const isStreamingOrPlaying = (this.movie && this.movie.status === 'streaming') || liveState.phase === 'PLAYING';
+          if (isStreamingOrPlaying && (liveState.phase === 'BLOCKBUSTER_VOTING' || liveState.phase === 'MOVIE_VOTING')) {
             console.log('[CinemaEngine] Correcting corrupt BLOCKBUSTER_VOTING on streaming movie. Setting phase to PLAYING.');
             this.phase = 'PLAYING';
-            this.phaseDuration = (this.movie.currentStep || 1) <= 4 ? 15 : 30;
+            this.phaseDuration = (this.movie?.currentStep || 1) <= 4 ? 15 : 30;
           } else {
             this.phase = liveState.phase || 'PLAYING';
             this.phaseDuration = liveState.phaseDuration || ((this.movie?.currentStep || 1) <= 4 ? 15 : 30);
@@ -683,16 +656,22 @@ class CinemaOrchestrator {
         if (syncedModel) this.videoModel = syncedModel;
         if (isKnownVideoResolution(liveState.videoResolution)) this.videoResolution = liveState.videoResolution;
         if (liveState.currentStep && this.movie && isLegitMovieMatch) {
-          this.movie.currentStep = Math.min(Math.max(1, liveState.currentStep), this.movie.steps.length);
+          const hasExactStep = this.movie.steps.some(s => s.stepNumber === liveState.currentStep);
+          if (hasExactStep) {
+            this.movie.currentStep = liveState.currentStep;
+          } else if (this.movie.steps.length > 0) {
+            const nextClosest = this.movie.steps.find(s => s.stepNumber >= liveState.currentStep);
+            this.movie.currentStep = (nextClosest || this.movie.steps[0]).stepNumber;
+          }
         }
-        if (Array.isArray(liveState.blockbusterCandidates) && liveState.blockbusterCandidates.length > 0) {
-          this.blockbusterCandidates = liveState.blockbusterCandidates;
-        }
-        if (liveState.blockbusterVoteCounts) {
-          this.blockbusterVoteCounts = liveState.blockbusterVoteCounts;
-        }
-        if (liveState.blockbusterWinner) {
-          this.blockbusterWinner = liveState.blockbusterWinner as any;
+        if (this.phase === 'PLAYING' || (this.movie && this.movie.status === 'streaming')) {
+          this.blockbusterCandidates = [];
+          this.blockbusterWinner = null;
+          this.blockbusterVoteCounts = { A: 0, B: 0, C: 0, D: 0 };
+        } else {
+          this.blockbusterCandidates = Array.isArray(liveState.blockbusterCandidates) ? liveState.blockbusterCandidates : [];
+          this.blockbusterVoteCounts = liveState.blockbusterVoteCounts || { A: 0, B: 0, C: 0, D: 0 };
+          this.blockbusterWinner = (liveState.blockbusterWinner as any) || null;
         }
       }
     } catch (err) {
@@ -742,9 +721,9 @@ class CinemaOrchestrator {
       }
     }
 
-    // Blockbuster rotation watchdog: if a film completed but its rotation flow was
-    // lost (serverless restart / swallowed error), rotate automatically after 3 minutes.
-    if (this.movie && this.movie.status === 'completed') {
+    // Blockbuster rotation watchdog: if a film completed naturally and is NOT actively playing
+    // but its rotation flow was lost (serverless restart / swallowed error), rotate automatically after 3 minutes.
+    if (this.movie && this.movie.status === 'completed' && this.phase !== 'PLAYING') {
       // During the async generation of the winning blockbuster or reset, never auto-rotate on top of it.
       if (this.phase === 'GENERATING' || this.isResetting) {
         return;
@@ -827,9 +806,9 @@ class CinemaOrchestrator {
       return { success: true, state: this.getState() };
     }
 
-    // Prevent stale blockbuster completion while a film is actively streaming
-    if (requestedStage === 'BLOCKBUSTER_VOTING' && this.movie && this.movie.status === 'streaming' && (this.movie.currentStep || 1) < 50) {
-      console.log(`[CinemaEngine] completeStage: rejected stale BLOCKBUSTER_VOTING completion for streaming movie (Step ${this.movie.currentStep}). Returning live state.`);
+    // Prevent stale blockbuster completion while a film is actively streaming or playing
+    if (requestedStage === 'BLOCKBUSTER_VOTING' && this.movie && (this.movie.status === 'streaming' || this.phase === 'PLAYING')) {
+      console.log(`[CinemaEngine] completeStage: rejected stale BLOCKBUSTER_VOTING completion for streaming/playing movie (Step ${this.movie.currentStep}). Returning live state.`);
       return { success: true, state: this.getState() };
     }
 
@@ -1046,9 +1025,84 @@ class CinemaOrchestrator {
     if (this.phase === 'PLAYING') {
       const currentStepNum = this.movie.currentStep || 1;
       const totalSteps = this.movie.totalSteps || TOTAL_STEPS;
+      const sortedSteps = [...this.movie.steps].sort((a, b) => a.stepNumber - b.stepNumber);
 
-      // 1. Check if the movie reached the end (50 steps)
-      if (currentStepNum >= totalSteps) {
+      // 1. CONTINUOUS PLAYBACK WITHOUT INTERRUPTION:
+      // If any subsequent step exists in this movie, advance immediately to it without pausing to vote.
+      const nextStepObj = sortedSteps.find(s => s.stepNumber > currentStepNum);
+      if (nextStepObj) {
+        const nextStepNum = nextStepObj.stepNumber;
+        this.movie.currentStep = nextStepNum;
+        const duration = nextStepObj.duration || 15;
+
+        this.setPhase('PLAYING', duration);
+        this.addSystemMessage(`🎬 Continuing story: Scene ${nextStepNum}/${totalSteps} ("${nextStepObj.title || 'Next Scene'}")`);
+
+        const playbackStep = {
+          ...nextStepObj,
+          videoUrl: resolveStepPlaybackUrl(nextStepObj)
+        };
+
+        // Broadcast new_step so all connected clients switch immediately to the next scene
+        broadcastCinemaEvent('new_step', {
+          step: playbackStep,
+          currentStep: nextStepNum,
+          totalSteps: totalSteps,
+          phaseDuration: duration,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt,
+          movie: this.movie
+        });
+        broadcastCinemaEvent('phase_change', {
+          phase: 'PLAYING',
+          timeRemaining: duration,
+          phaseDuration: duration,
+          phaseStartedAt: this.phaseStartedAt,
+          phaseEndsAt: this.phaseEndsAt
+        });
+        await this.broadcastStateSnapshot(workerId);
+        return;
+      }
+
+      // 2. REPLAY LOOP: If movie reached the end of its existing scenes during replay or broadcast,
+      // loop seamlessly back to the opening scene without interrupting playback with voting!
+      if (this.isGenerationPaused || this.movie.status === 'streaming' || sortedSteps.length >= totalSteps) {
+        if (sortedSteps.length > 0) {
+          const firstStep = sortedSteps[0];
+          this.movie.currentStep = firstStep.stepNumber;
+          const duration = firstStep.duration || 15;
+
+          this.setPhase('PLAYING', duration);
+          this.addSystemMessage(`🎬 [REPLAY LOOP] Replaying "${this.movie.title}" from opening scene.`);
+
+          const playbackStep = {
+            ...firstStep,
+            videoUrl: resolveStepPlaybackUrl(firstStep)
+          };
+
+          broadcastCinemaEvent('new_step', {
+            step: playbackStep,
+            currentStep: firstStep.stepNumber,
+            totalSteps: totalSteps,
+            phaseDuration: duration,
+            phaseStartedAt: this.phaseStartedAt,
+            phaseEndsAt: this.phaseEndsAt,
+            movie: this.movie
+          });
+          broadcastCinemaEvent('phase_change', {
+            phase: 'PLAYING',
+            timeRemaining: duration,
+            phaseDuration: duration,
+            phaseStartedAt: this.phaseStartedAt,
+            phaseEndsAt: this.phaseEndsAt
+          });
+          await this.broadcastStateSnapshot(workerId);
+          return;
+        }
+      }
+
+      // 3. Check if an active generative movie reached the end (50 steps)
+      if (currentStepNum >= totalSteps && !this.isGenerationPaused) {
         this.movie.status = 'completed';
         this.movie.completedAt = new Date().toISOString();
 
@@ -1080,38 +1134,6 @@ class CinemaOrchestrator {
           console.error('[Cinema] Blockbuster voting preparation failed, auto-rotating:', err);
           this.startNextBlockbusterMovie().catch((e) => console.error('[Cinema] Fallback rotation failed:', e));
         }
-        return;
-      }
-
-      // 2. CONTINUOUS PLAYBACK WITHOUT VOTING OR REGENERATION:
-      // If the next step already exists in movie.steps, advance immediately to it without pausing to vote.
-      const nextStepExists = this.movie.steps.some(s => s.stepNumber === currentStepNum + 1);
-      if (nextStepExists) {
-        const nextStepNum = currentStepNum + 1;
-        this.movie.currentStep = nextStepNum;
-        const nextStepObj = this.movie.steps.find(s => s.stepNumber === nextStepNum) || this.movie.steps[nextStepNum - 1];
-        const duration = nextStepObj?.duration || 15;
-
-        this.setPhase('PLAYING', duration);
-        this.addSystemMessage(`🎬 Continuing story: Scene ${nextStepNum}/${totalSteps} ("${nextStepObj?.title || 'Next Scene'}")`);
-
-        // Broadcast new_step so all connected clients switch immediately to the next scene
-        broadcastCinemaEvent('new_step', {
-          step: nextStepObj,
-          currentStep: nextStepNum,
-          totalSteps: totalSteps,
-          phaseDuration: duration,
-          phaseStartedAt: this.phaseStartedAt,
-          phaseEndsAt: this.phaseEndsAt
-        });
-        broadcastCinemaEvent('phase_change', {
-          phase: 'PLAYING',
-          timeRemaining: duration,
-          phaseDuration: duration,
-          phaseStartedAt: this.phaseStartedAt,
-          phaseEndsAt: this.phaseEndsAt
-        });
-        await this.broadcastStateSnapshot(workerId);
         return;
       }
 
@@ -1227,9 +1249,9 @@ class CinemaOrchestrator {
           cameraMotionPrompt: winningOption.cameraMotionPrompt || "",
           visualPrompt2: winningOption.visualPrompt2 || "",
           cameraMotionPrompt2: winningOption.cameraMotionPrompt2 || "",
-          videoUrl: twoVideos.shot1.videoUrl,
-          thumbnailUrl: twoVideos.shot1.thumbnailUrl,
-          videoUrl2: twoVideos.shot2.videoUrl,
+          videoUrl: "", // Sin URL forzada en DB
+          thumbnailUrl: undefined,
+          videoUrl2: undefined,
           duration: 30,
           votingWindowSeconds: 10,
           options: resolvedOptions,
@@ -1252,8 +1274,14 @@ class CinemaOrchestrator {
 
         this.addSystemMessage(`🎲 [ARCHIVE REPLAY] Option ${chosenOption} ("${winningOption.title}") chosen. Continuing with Scene #${nextStepNum} directly.`);
 
+        const playbackStep = {
+          ...nextStep,
+          videoUrl: resolveStepPlaybackUrl(nextStep),
+          videoUrl2: getRandomMovieStepVideoUrl() || undefined
+        };
+
         broadcastCinemaEvent('new_step', {
-          step: nextStep,
+          step: playbackStep,
           currentStep: nextStep.stepNumber,
           totalSteps: this.movie.totalSteps || TOTAL_STEPS,
           phaseDuration: 30,
@@ -1460,6 +1488,12 @@ class CinemaOrchestrator {
           ? nextStepRaw.options
           : this.getProceduralOptionsForStep(nextStepNum);
 
+        const isRealAi = 'isRealAiGenerated' in videoRes && Boolean((videoRes as any).isRealAiGenerated);
+        const isReal1 = Boolean(isRealAi && videoRes.shot1?.videoUrl);
+        const isReal2 = Boolean(isRealAi && videoRes.shot2?.videoUrl);
+        if (isReal1 && videoRes.shot1?.videoUrl) registerGeneratedVideoUrlInPool(videoRes.shot1.videoUrl);
+        if (isReal2 && videoRes.shot2?.videoUrl) registerGeneratedVideoUrlInPool(videoRes.shot2.videoUrl);
+
         nextStep = {
           stepNumber: nextStepNum,
           title: guaranteedWinningOption.title || nextStepRaw?.title || `Scene ${nextStepNum}`,
@@ -1471,9 +1505,9 @@ class CinemaOrchestrator {
           cameraMotionPrompt: cameraPromptToUse,
           visualPrompt2: videoPrompt2ToUse,
           cameraMotionPrompt2: cameraPrompt2ToUse,
-          videoUrl: videoRes.shot1.videoUrl,
-          thumbnailUrl: videoRes.shot1.thumbnailUrl,
-          videoUrl2: videoRes.shot2.videoUrl,
+          videoUrl: isReal1 ? videoRes.shot1.videoUrl : "",
+          thumbnailUrl: isReal1 ? videoRes.shot1.thumbnailUrl : undefined,
+          videoUrl2: isReal2 ? videoRes.shot2.videoUrl : undefined,
           hasMidRollAd: hasAd,
           adVideoUrl: hasAd ? (adVideoUrl ?? undefined) : undefined,
           referenceVideoUrl: storyReferenceUrl,
@@ -1502,9 +1536,15 @@ class CinemaOrchestrator {
         this.userVotes.clear();
         this.setPhase('PLAYING', stepDuration);
 
-        // Realtime broadcast of new clip and phase transition
+        // Realtime broadcast of new clip and phase transition (resolved on the fly)
+        const playbackStep = {
+          ...nextStep,
+          videoUrl: resolveStepPlaybackUrl(nextStep),
+          videoUrl2: nextStep.videoUrl2 || getRandomMovieStepVideoUrl() || undefined
+        };
+
         broadcastCinemaEvent('new_step', {
-          step: nextStep,
+          step: playbackStep,
           currentStep: nextStep.stepNumber,
           phaseDuration: stepDuration,
           phaseStartedAt: this.phaseStartedAt,
@@ -1522,10 +1562,7 @@ class CinemaOrchestrator {
         await this.broadcastStateSnapshot(workerId);
       } catch (err) {
         console.error("Error generating next step:", err);
-        // Fallback recovery if something catastrophic happened
-        const mockIndex = nextStepNum % CINEMATIC_MOCK_VIDEOS.length;
-        const mock1 = CINEMATIC_MOCK_VIDEOS[mockIndex];
-        const mock2 = CINEMATIC_MOCK_VIDEOS[(mockIndex + 1) % CINEMATIC_MOCK_VIDEOS.length];
+        // Fallback recovery: no se fuerza video_url en base de datos
         const fallbackStep: MovieStep = {
           stepNumber: nextStepNum,
           title: guaranteedWinningOption.title || `Scene ${nextStepNum}`,
@@ -1536,8 +1573,8 @@ class CinemaOrchestrator {
           cameraMotionPrompt: cameraPromptToUse,
           visualPrompt2: videoPrompt2ToUse,
           cameraMotionPrompt2: cameraPrompt2ToUse,
-          videoUrl: mock1.url,
-          videoUrl2: mock2.url,
+          videoUrl: "",
+          videoUrl2: undefined,
           duration: 30,
           votingWindowSeconds: 10,
           options: this.getProceduralOptionsForStep(nextStepNum),
@@ -1554,8 +1591,15 @@ class CinemaOrchestrator {
         this.votesB = 0;
         this.userVotes.clear();
         this.setPhase('PLAYING', 30);
+
+        const playbackFallbackStep = {
+          ...fallbackStep,
+          videoUrl: resolveStepPlaybackUrl(fallbackStep),
+          videoUrl2: getRandomMovieStepVideoUrl() || undefined
+        };
+
         broadcastCinemaEvent('new_step', {
-          step: fallbackStep,
+          step: playbackFallbackStep,
           currentStep: fallbackStep.stepNumber,
           phaseDuration: 30,
           phaseStartedAt: this.phaseStartedAt,
@@ -1633,9 +1677,9 @@ class CinemaOrchestrator {
         synopsis: fallbackOption?.synopsis || fallbackOption?.text || `The narrative advances down the chosen path as new developments unfold.`,
         visualPrompt: "Cinematic film continuity with deep anamorphic focus",
         cameraMotionPrompt: "Smooth cinematic tracking hold",
-        videoUrl: mockVideos.shot1.videoUrl,
-        thumbnailUrl: mockVideos.shot1.thumbnailUrl,
-        videoUrl2: mockVideos.shot2.videoUrl,
+        videoUrl: "", // Sin URL forzada en DB
+        thumbnailUrl: undefined,
+        videoUrl2: undefined,
         duration: 30,
         votingWindowSeconds: 10,
         options: [
@@ -1658,8 +1702,14 @@ class CinemaOrchestrator {
       this.userVotes.clear();
       this.setPhase('PLAYING', 30);
 
+      const playbackFallbackStep = {
+        ...fallbackStep,
+        videoUrl: resolveStepPlaybackUrl(fallbackStep),
+        videoUrl2: getRandomMovieStepVideoUrl() || undefined
+      };
+
       broadcastCinemaEvent('new_step', {
-        step: fallbackStep,
+        step: playbackFallbackStep,
         currentStep: fallbackStep.stepNumber,
         phaseDuration: 30,
         phaseStartedAt: this.phaseStartedAt,
@@ -2423,9 +2473,16 @@ class CinemaOrchestrator {
   }
 
   public getState(userId?: string): CinemaState {
-    const activeStep = (this.movie?.steps.find(s => s.stepNumber === this.movie!.currentStep))
-      || this.movie?.steps[this.movie.steps.length - 1] 
-      || {
+    let rawActiveStep = this.movie?.steps.find(s => s.stepNumber === this.movie!.currentStep);
+    if (!rawActiveStep && this.movie?.steps && this.movie.steps.length > 0) {
+      const sorted = [...this.movie.steps].sort((a, b) => a.stepNumber - b.stepNumber);
+      rawActiveStep = sorted.find(s => s.stepNumber >= (this.movie!.currentStep || 1)) || sorted[0];
+    }
+
+    const activeStep: MovieStep = rawActiveStep ? {
+      ...rawActiveStep,
+      videoUrl: resolveStepPlaybackUrl(rawActiveStep)
+    } : {
       stepNumber: 1,
       title: "Loading clip...",
       synopsis: "Initializing cinematic transmission...",
@@ -2435,7 +2492,7 @@ class CinemaOrchestrator {
       ],
       visualPrompt: "",
       cameraMotionPrompt: "",
-      videoUrl: "",
+      videoUrl: resolveStepPlaybackUrl(null),
       duration: 15,
       votingWindowSeconds: 10,
       options: [
@@ -2450,8 +2507,16 @@ class CinemaOrchestrator {
 
     const hasUserVoted = userId ? this.userVotes.get(userId) || null : null;
 
+    const movieWithResolvedUrls = this.movie ? {
+      ...this.movie,
+      steps: this.movie.steps.map(s => ({
+        ...s,
+        videoUrl: resolveStepPlaybackUrl(s)
+      }))
+    } : this.movie!;
+
     return {
-      movie: this.movie!,
+      movie: movieWithResolvedUrls,
       phase: this.phase,
       timeRemaining: this.timeRemaining,
       phaseDuration: this.phaseDuration,
@@ -2729,19 +2794,9 @@ class CinemaOrchestrator {
     const targetStep = this.movie.steps.find(s => s.stepNumber === stepNumber);
     if (!targetStep) return false;
 
-    // Sanitize videoUrl if missing or broken
-    if (!targetStep.videoUrl || typeof targetStep.videoUrl !== 'string' || targetStep.videoUrl.trim() === '' || targetStep.videoUrl.startsWith('/videos/')) {
-      const pool = await this.buildArchivedGeneratedVideoPool();
-      const mockIndex = Math.abs(targetStep.stepNumber - 1) % CINEMATIC_MOCK_VIDEOS.length;
-      if (pool.length > 0) {
-        const randPick = pool[Math.floor(Math.random() * pool.length)];
-        targetStep.videoUrl = randPick.videoUrl;
-        targetStep.thumbnailUrl = targetStep.thumbnailUrl || randPick.thumbnailUrl || CINEMATIC_MOCK_VIDEOS[mockIndex].poster;
-      } else {
-        targetStep.videoUrl = CINEMATIC_MOCK_VIDEOS[mockIndex].url;
-        targetStep.thumbnailUrl = targetStep.thumbnailUrl || CINEMATIC_MOCK_VIDEOS[mockIndex].poster;
-      }
-    }
+    // Ensure targetStep has a valid playback URL resolved al vuelo
+    const playbackUrl = resolveStepPlaybackUrl(targetStep);
+    targetStep.videoUrl = playbackUrl;
 
     this.movie.currentStep = stepNumber;
     this.isPaused = false;
@@ -2762,14 +2817,25 @@ class CinemaOrchestrator {
 
     this.addSystemMessage(`⏮️ Director triggered manual replay of Step ${stepNumber}: "${targetStep.title}".`);
 
-    // Broadcast new_step so players switch video/subtitles immediately
+    // Broadcast phase_change and new_step so players switch video/subtitles immediately
+    await broadcastCinemaEvent('phase_change', {
+      phase: 'PLAYING',
+      timeRemaining: duration,
+      phaseDuration: duration,
+      phaseStartedAt: this.phaseStartedAt,
+      phaseEndsAt: this.phaseEndsAt,
+      blockbusterCandidates: [],
+      winner: null
+    });
+
     await broadcastCinemaEvent('new_step', {
-      step: targetStep,
+      step: { ...targetStep, videoUrl: playbackUrl },
       currentStep: stepNumber,
       totalSteps: this.movie.totalSteps || this.movie.steps.length,
       phaseDuration: duration,
       phaseStartedAt: this.phaseStartedAt,
-      phaseEndsAt: this.phaseEndsAt
+      phaseEndsAt: this.phaseEndsAt,
+      movie: this.movie
     });
 
     await this.broadcastStateSnapshot();
@@ -2802,45 +2868,47 @@ class CinemaOrchestrator {
       return false;
     }
 
-    // Archive current movie if switching to a different one
+    // Archive previous movie in-memory if switching to a different one
     if (this.movie && this.movie.id !== movieId) {
       this.movie.status = 'completed';
       if (!this.completedMovies.some(m => m.id === this.movie!.id)) {
         this.completedMovies.unshift(this.movie);
       }
-      await persistMovie(this.movie);
     }
 
-    // Sanitize all steps of targetMovie so videos play immediately without errors
-    const pool = await this.buildArchivedGeneratedVideoPool();
-    targetMovie.steps = targetMovie.steps.map((s, idx) => {
-      const mock = CINEMATIC_MOCK_VIDEOS[idx % CINEMATIC_MOCK_VIDEOS.length];
-      const needsReplacement = !s.videoUrl || typeof s.videoUrl !== 'string' || s.videoUrl.trim() === '' || s.videoUrl.startsWith('/videos/');
-      let fallbackUrl = mock.url;
-      let fallbackThumb = mock.poster;
-      if (pool.length > 0) {
-        const randPick = pool[Math.floor(Math.random() * pool.length)];
-        fallbackUrl = randPick.videoUrl;
-        fallbackThumb = randPick.thumbnailUrl || fallbackThumb;
-      } else {
-        const randMock = CINEMATIC_MOCK_VIDEOS[Math.floor(Math.random() * CINEMATIC_MOCK_VIDEOS.length)];
-        fallbackUrl = randMock.url;
-        fallbackThumb = randMock.poster;
-      }
-      return {
-        ...s,
-        videoUrl: needsReplacement ? fallbackUrl : s.videoUrl,
-        thumbnailUrl: s.thumbnailUrl || (needsReplacement ? fallbackThumb : mock.poster)
-      };
-    });
+    // Ensure targetMovie is removed from completedMovies
+    this.completedMovies = this.completedMovies.filter(m => m.id !== movieId);
 
-    const chosenStepNum = Math.max(1, Math.min(stepNumber, targetMovie.steps.length));
+    // 1. Sort steps ascending by stepNumber so we know the true order
+    targetMovie.steps.sort((a, b) => a.stepNumber - b.stepNumber);
+
+    // 2. Find matching step or clamp to valid existing stepNumber
+    let currentStepObj = targetMovie.steps.find(s => s.stepNumber === stepNumber);
+    if (!currentStepObj) {
+      currentStepObj = targetMovie.steps.find(s => s.stepNumber >= stepNumber) || targetMovie.steps[0];
+    }
+    const chosenStepNum = currentStepObj.stepNumber;
     targetMovie.currentStep = chosenStepNum;
     targetMovie.status = 'streaming';
+    targetMovie.completedAt = undefined;
+
+    // Resolve playback URLs al vuelo for all steps of targetMovie
+    targetMovie.steps = targetMovie.steps.map((s) => ({
+      ...s,
+      videoUrl: resolveStepPlaybackUrl(s),
+      thumbnailUrl: s.thumbnailUrl || undefined
+    }));
+
+    // Atomically persist status 'streaming' in DB, archiving all other movies
+    if (isSupabaseConfigured()) {
+      await setActiveStreamingMovie(targetMovie.id, chosenStepNum);
+    }
+
     this.movie = targetMovie;
     this.isPaused = false;
 
-    const currentStepObj = targetMovie.steps.find(s => s.stepNumber === chosenStepNum) || targetMovie.steps[0];
+    // Refresh reference to currentStepObj after URL resolution
+    currentStepObj = targetMovie.steps.find(s => s.stepNumber === chosenStepNum) || targetMovie.steps[0];
     const duration = currentStepObj.duration || 15;
     this.setPhase('PLAYING', duration);
     this.votesA = 0;
@@ -2858,18 +2926,35 @@ class CinemaOrchestrator {
 
     this.addSystemMessage(`🎬 [DIRECTOR SWITCH] Active film switched to "${this.movie.title}" (Step ${chosenStepNum}).`);
 
+    const playbackStep = {
+      ...currentStepObj,
+      videoUrl: resolveStepPlaybackUrl(currentStepObj)
+    };
+
+    // Explicitly broadcast phase_change to announce PLAYING and clear any lingering blockbuster screen
+    await broadcastCinemaEvent('phase_change', {
+      phase: 'PLAYING',
+      timeRemaining: duration,
+      phaseDuration: duration,
+      phaseStartedAt: this.phaseStartedAt,
+      phaseEndsAt: this.phaseEndsAt,
+      blockbusterCandidates: [],
+      winner: null
+    });
+
     // Broadcast new movie and new step to all clients
     await broadcastCinemaEvent('new_movie_started', {
       movie: this.movie
     });
 
     await broadcastCinemaEvent('new_step', {
-      step: currentStepObj,
+      step: playbackStep,
       currentStep: chosenStepNum,
       totalSteps: this.movie.totalSteps || this.movie.steps.length,
       phaseDuration: duration,
       phaseStartedAt: this.phaseStartedAt,
-      phaseEndsAt: this.phaseEndsAt
+      phaseEndsAt: this.phaseEndsAt,
+      movie: this.movie
     });
 
     await this.broadcastStateSnapshot();

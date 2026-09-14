@@ -151,6 +151,13 @@ export async function persistMovieStep(movieId: string, step: MovieStep): Promis
   if (!supabase) return;
 
   try {
+    const sanitizedVideoUrl = (step.videoUrl && typeof step.videoUrl === 'string' && step.videoUrl.trim() !== '' && !step.videoUrl.startsWith('/videos/'))
+      ? step.videoUrl.trim()
+      : null;
+    const sanitizedVideoUrl2 = (step.videoUrl2 && typeof step.videoUrl2 === 'string' && step.videoUrl2.trim() !== '' && !step.videoUrl2.startsWith('/videos/'))
+      ? step.videoUrl2.trim()
+      : null;
+
     const { error } = await supabase.from('movie_steps').upsert({
       movie_id: movieId,
       step_number: step.stepNumber,
@@ -160,7 +167,8 @@ export async function persistMovieStep(movieId: string, step: MovieStep): Promis
       voice_direction: step.voiceDirection || null,
       visual_prompt: step.visualPrompt,
       camera_motion_prompt: step.cameraMotionPrompt || null,
-      video_url: step.videoUrl,
+      video_url: sanitizedVideoUrl,
+      video_url2: sanitizedVideoUrl2,
       thumbnail_url: step.thumbnailUrl || null,
       duration: step.duration || 15,
       voting_window_seconds: step.votingWindowSeconds || 10,
@@ -626,6 +634,38 @@ export async function loadAllMoviesFromDb(limit = 100): Promise<Movie[]> {
 }
 
 /**
+ * Load all distinct, non-empty video URLs from public.movie_steps
+ */
+export async function loadAllValidVideoUrlsFromDb(): Promise<string[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('movie_steps')
+      .select('video_url')
+      .not('video_url', 'is', null)
+      .neq('video_url', '');
+
+    if (error) {
+      logSupabaseError('loadAllValidVideoUrlsFromDb', error);
+      return [];
+    }
+
+    const uniqueUrls = new Set<string>();
+    for (const row of data || []) {
+      if (row.video_url && typeof row.video_url === 'string' && row.video_url.trim() !== '') {
+        uniqueUrls.add(row.video_url.trim());
+      }
+    }
+    return Array.from(uniqueUrls);
+  } catch (err) {
+    console.error('[Supabase] Exception in loadAllValidVideoUrlsFromDb:', err);
+    return [];
+  }
+}
+
+/**
  * Load a single movie by its ID from database
  */
 export async function loadMovieByIdFromDb(movieId: string): Promise<Movie | null> {
@@ -929,6 +969,44 @@ export async function archiveAllStreamingMovies(): Promise<void> {
     }
   } catch (err) {
     console.error('[Supabase] Exception in archiveAllStreamingMovies:', err);
+  }
+}
+
+/**
+ * Atomically set a movie as the authoritative streaming broadcast in Supabase,
+ * archiving all other streaming/paused movies and clearing the cache.
+ */
+export async function setActiveStreamingMovie(movieId: string, currentStep: number): Promise<boolean> {
+  invalidateCinemaCache();
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return false;
+
+  try {
+    // 1. Archive any other movie currently marked streaming/paused
+    await supabase
+      .from('movies')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .neq('id', movieId)
+      .in('status', ['streaming', 'paused']);
+
+    // 2. Mark this movie as streaming and set current_step
+    const { error } = await supabase
+      .from('movies')
+      .update({
+        status: 'streaming',
+        current_step: currentStep,
+        completed_at: null
+      })
+      .eq('id', movieId);
+
+    if (error) {
+      logSupabaseError('setActiveStreamingMovie', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Exception in setActiveStreamingMovie:', err);
+    return false;
   }
 }
 

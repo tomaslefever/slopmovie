@@ -48,6 +48,7 @@ interface PlaybackSegment {
 }
 
 const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
+  movieTitle,
   activeStep,
   phase,
   activeAd,
@@ -215,7 +216,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       videoB.preload = "auto";
       videoB.load();
     }
-  }, [activeStep.stepNumber, activeStep.videoUrl, activeStep.videoUrl2, activeStep.duration, activeStep.hasMidRollAd, activeStep.adVideoUrl, isOptionVoting, fallbackUrl, safePlayVideo]);
+  }, [movieTitle, activeStep.stepNumber, activeStep.videoUrl, activeStep.videoUrl2, activeStep.duration, activeStep.hasMidRollAd, activeStep.adVideoUrl, isOptionVoting, fallbackUrl, safePlayVideo]);
 
   // Handle seamless transition when a slot finishes playing
   const handleSlotEnded = React.useCallback((finishedSlot: 'A' | 'B') => {
