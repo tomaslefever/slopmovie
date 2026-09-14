@@ -18,7 +18,7 @@ import {
   countActiveViewersFromDb
 } from '@/lib/supabase/db';
 import { CINEMATIC_MOCK_VIDEOS } from '@/lib/fal-video';
-import { loadStepVideoUrlsPool, resolveStepPlaybackUrl } from '@/lib/video-pool';
+import { loadStepVideoUrlsPool, resolveStepPlaybackUrl, isValidStepVideoUrl } from '@/lib/video-pool';
 import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
@@ -137,6 +137,9 @@ export async function GET(request: Request) {
 
   const activeStep: any = rawActiveStep ? {
     ...rawActiveStep,
+    rawVideoUrl: rawActiveStep.rawVideoUrl !== undefined ? rawActiveStep.rawVideoUrl : (rawActiveStep.videoUrl || null),
+    hasValidVideo: rawActiveStep.hasValidVideo !== undefined ? rawActiveStep.hasValidVideo : isValidStepVideoUrl(rawActiveStep.videoUrl),
+    playbackUrl: resolveStepPlaybackUrl(rawActiveStep, CINEMATIC_MOCK_VIDEOS[0].url),
     videoUrl: resolveStepPlaybackUrl(rawActiveStep, CINEMATIC_MOCK_VIDEOS[0].url)
   } : {
     stepNumber: 1,
@@ -202,13 +205,20 @@ export async function GET(request: Request) {
       stepsCount: m.steps.length,
       status: m.status,
       createdAt: m.createdAt,
-      steps: m.steps.map(s => ({
-        stepNumber: s.stepNumber,
-        title: s.title,
-        duration: s.duration || 15,
-        videoUrl: resolveStepPlaybackUrl(s, CINEMATIC_MOCK_VIDEOS[0].url),
-        synopsis: s.synopsis
-      }))
+      steps: m.steps.map(s => {
+        const rawVideoUrl = s.rawVideoUrl !== undefined ? s.rawVideoUrl : (s.videoUrl || null);
+        const hasValidVideo = s.hasValidVideo !== undefined ? s.hasValidVideo : isValidStepVideoUrl(s.videoUrl);
+        return {
+          stepNumber: s.stepNumber,
+          title: s.title,
+          duration: s.duration || 15,
+          videoUrl: s.videoUrl || null,
+          rawVideoUrl,
+          hasValidVideo,
+          playbackUrl: resolveStepPlaybackUrl(s, CINEMATIC_MOCK_VIDEOS[0].url),
+          synopsis: s.synopsis
+        };
+      })
     }));
   }
 
@@ -238,6 +248,9 @@ export async function GET(request: Request) {
       ...activeMovie,
       steps: activeMovie.steps.map(s => ({
         ...s,
+        rawVideoUrl: s.rawVideoUrl !== undefined ? s.rawVideoUrl : (s.videoUrl || null),
+        hasValidVideo: s.hasValidVideo !== undefined ? s.hasValidVideo : isValidStepVideoUrl(s.videoUrl),
+        playbackUrl: resolveStepPlaybackUrl(s, CINEMATIC_MOCK_VIDEOS[0].url),
         videoUrl: resolveStepPlaybackUrl(s, CINEMATIC_MOCK_VIDEOS[0].url)
       }))
     } : null,
@@ -621,9 +634,22 @@ export async function POST(request: Request) {
       if (!targetMovie) {
         return NextResponse.json({ error: 'Movie not found' }, { status: 404 });
       }
+      const enrichedSteps = (targetMovie.steps || []).map(s => {
+        const rawVideoUrl = s.rawVideoUrl !== undefined ? s.rawVideoUrl : (s.videoUrl || null);
+        const hasValidVideo = s.hasValidVideo !== undefined ? s.hasValidVideo : isValidStepVideoUrl(s.videoUrl);
+        return {
+          ...s,
+          rawVideoUrl,
+          hasValidVideo,
+          playbackUrl: resolveStepPlaybackUrl(s, CINEMATIC_MOCK_VIDEOS[0].url)
+        };
+      });
       return NextResponse.json({
         success: true,
-        movie: targetMovie
+        movie: {
+          ...targetMovie,
+          steps: enrichedSteps
+        }
       });
     }
 

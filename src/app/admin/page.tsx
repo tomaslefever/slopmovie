@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { getSupabaseBrowserClient, initSupabaseBrowserClient } from '@/lib/supabase/client';
-import { ImmersiveAd, AdsConfig, Movie, ContactMessage, isOptionVotingPhase, isMovieVotingPhase } from '@/types/cinema';
+import { ImmersiveAd, AdsConfig, Movie, ContactMessage, isOptionVotingPhase, isMovieVotingPhase, isValidStepVideoUrl } from '@/types/cinema';
 import { 
   Film, 
   Tv, 
@@ -36,7 +36,12 @@ import {
   Clapperboard,
   Mail,
   Inbox,
-  MessageSquare
+  MessageSquare,
+  CheckCircle2,
+  Video,
+  VideoOff,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
@@ -117,6 +122,18 @@ export default function AdminDashboardPage() {
   const [viewingMovieScenes, setViewingMovieScenes] = useState<any | null>(null);
   const [isLoadingMovieScenes, setIsLoadingMovieScenes] = useState(false);
   const [sceneSearchQuery, setSceneSearchQuery] = useState('');
+  const [sceneVideoFilter, setSceneVideoFilter] = useState<'all' | 'valid' | 'missing'>('all');
+  const [movieVideoFilter, setMovieVideoFilter] = useState<'all' | 'all_valid' | 'has_missing' | 'none'>('all');
+  const [expandedMovieScenes, setExpandedMovieScenes] = useState<Record<string, boolean>>({});
+  const [previewingVideoUrl, setPreviewingVideoUrl] = useState<{ url: string; title: string; stepNumber: number } | null>(null);
+
+  const toggleExpandMovieScenes = (movieId: string) => {
+    audioCues.playClick();
+    setExpandedMovieScenes(prev => ({
+      ...prev,
+      [movieId]: !prev[movieId]
+    }));
+  };
 
   // Stats state
   const [stats, setStats] = useState<{ visitsByDay: { date: string; count: number }[]; totalVisits: number; todayVisits: number; activeViewers: number } | null>(null);
@@ -2471,6 +2488,8 @@ export default function AdminDashboardPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar bg-black/20 p-2 rounded-xl border border-white/5">
                     {(cinemaState.movie.steps || []).map((step: any) => {
                       const isCurrentActive = cinemaState.movie.currentStep === step.stepNumber;
+                      const hasVid = Boolean(step.hasValidVideo || isValidStepVideoUrl(step.videoUrl) || isValidStepVideoUrl(step.rawVideoUrl));
+                      const videoSrc = step.videoUrl || step.playbackUrl || step.rawVideoUrl;
                       return (
                         <div
                           key={step.stepNumber}
@@ -2494,6 +2513,17 @@ export default function AdminDashboardPage() {
                                     STREAMING LIVE ON AIR
                                   </span>
                                 )}
+                                {hasVid ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                                    <span>Video OK</span>
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1" title="Sin video_url en BD. Usa pool al vuelo.">
+                                    <VideoOff className="w-2.5 h-2.5 text-rose-400" />
+                                    <span>Sin Video (pool)</span>
+                                  </span>
+                                )}
                               </div>
                               <span className="text-[10px] font-mono text-neutral-500">
                                 {step.duration || 15}s
@@ -2509,11 +2539,33 @@ export default function AdminDashboardPage() {
                           </div>
 
                           <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
-                            <div className="text-[10px] font-mono text-neutral-400 truncate max-w-[170px]">
+                            <div className="flex items-center gap-2">
+                              {videoSrc && (
+                                <button
+                                  onClick={() => setPreviewingVideoUrl({ url: videoSrc, title: step.title || `Step #${step.stepNumber}`, stepNumber: step.stepNumber })}
+                                  className="text-[10px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 hover:underline"
+                                  title="Previsualizar video clip"
+                                >
+                                  <Play className="w-2.5 h-2.5 fill-cyan-400" />
+                                  <span>Ver clip</span>
+                                </button>
+                              )}
+                              {step.videoUrl && (
+                                <a
+                                  href={step.videoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] font-mono text-neutral-400 hover:text-white flex items-center gap-1 transition-colors"
+                                  title="Abrir MP4 en nueva pestaña"
+                                >
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                  <span>MP4</span>
+                                </a>
+                              )}
                               {step.selectedOption ? (
-                                <span>Branch: Option {step.selectedOption}</span>
+                                <span className="text-[10px] font-mono text-neutral-500 truncate max-w-[120px]">Opt {step.selectedOption}</span>
                               ) : (
-                                <span className="text-neutral-500">Opening Scene</span>
+                                <span className="text-neutral-500 text-[10px] font-mono">Opening</span>
                               )}
                             </div>
 
@@ -2578,6 +2630,14 @@ export default function AdminDashboardPage() {
         {/* TAB 3: MOVIE CATALOG & BULK ACTIONS */}
         {activeTab === 'movies' && (() => {
           const availableGenres = Array.from(new Set(allMovies.map((m: any) => m.genre).filter(Boolean)));
+          const totalScenesGenerated = allMovies.reduce((acc: number, m: any) => acc + (m.steps?.length || 0), 0);
+          const totalValidVideos = allMovies.reduce((acc: number, m: any) => acc + (m.steps || []).filter((s: any) => s.hasValidVideo || isValidStepVideoUrl(s.videoUrl) || isValidStepVideoUrl(s.rawVideoUrl)).length, 0);
+          const totalMissingVideos = Math.max(0, totalScenesGenerated - totalValidVideos);
+          const filmsWithAllVideos = allMovies.filter((m: any) => {
+            const steps = m.steps || [];
+            return steps.length > 0 && steps.every((s: any) => s.hasValidVideo || isValidStepVideoUrl(s.videoUrl) || isValidStepVideoUrl(s.rawVideoUrl));
+          }).length;
+
           const filteredMovies = allMovies.filter((m: any) => {
             if (movieSearchQuery.trim()) {
               const q = movieSearchQuery.toLowerCase();
@@ -2596,6 +2656,14 @@ export default function AdminDashboardPage() {
               if (movieStatusFilter === 'streaming' && m.status !== 'streaming' && !isLive) return false;
               if (movieStatusFilter === 'paused' && m.status !== 'paused') return false;
             }
+            if (movieVideoFilter !== 'all') {
+              const steps = m.steps || [];
+              const validCount = steps.filter((s: any) => s.hasValidVideo || isValidStepVideoUrl(s.videoUrl) || isValidStepVideoUrl(s.rawVideoUrl)).length;
+              const missingCount = steps.length - validCount;
+              if (movieVideoFilter === 'all_valid' && (steps.length === 0 || missingCount > 0)) return false;
+              if (movieVideoFilter === 'has_missing' && (missingCount === 0 || steps.length === 0)) return false;
+              if (movieVideoFilter === 'none' && (validCount > 0 || steps.length === 0)) return false;
+            }
             return true;
           });
           const visibleMovieIds = filteredMovies.map((m: any) => m.id);
@@ -2612,11 +2680,11 @@ export default function AdminDashboardPage() {
                     <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.8)]" />
                     <h3 className="text-sm font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
                       <Clapperboard className="w-4 h-4 text-rose-400" />
-                      Movie Catalog & Bulk Actions
+                      Movie Catalog & Scene Health
                     </h3>
                   </div>
                   <p className="text-xs text-neutral-400 max-w-2xl">
-                    Explore all generated and archived interactive films. Select multiple titles to run batch operations such as permanent deletion or updating genre and status.
+                    Explore all generated interactive films. View each film&apos;s generated narrative steps, video URL validity, and play scenes or broadcast them live.
                   </p>
                 </div>
 
@@ -2633,7 +2701,7 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* Quick KPIs */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono">
                 <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
                   <span className="text-[10px] uppercase tracking-wider text-neutral-400">Total Films</span>
                   <div className="text-2xl font-black text-white">{allMovies.length}</div>
@@ -2648,10 +2716,27 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
                 <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
-                  <span className="text-[10px] uppercase tracking-wider text-purple-400">Completed</span>
+                  <span className="text-[10px] uppercase tracking-wider text-purple-400 flex items-center gap-1">
+                    <Layers className="w-3 h-3 text-purple-400" />
+                    Total Scenes
+                  </span>
                   <div className="text-2xl font-black text-purple-300">
-                    {allMovies.filter((m: any) => m.status === 'completed').length}
+                    {totalScenesGenerated}
                   </div>
+                </div>
+                <div className="p-4 rounded-xl bg-black/50 border border-white/5 space-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                    <Video className="w-3 h-3 text-emerald-400" />
+                    Videos Válidos
+                  </span>
+                  <div className="text-2xl font-black text-emerald-300">
+                    {totalValidVideos} <span className="text-xs font-normal text-neutral-500">/ {totalScenesGenerated}</span>
+                  </div>
+                  {totalMissingVideos > 0 && (
+                    <span className="text-[10px] text-amber-400 block font-normal">
+                      ⚠️ {totalMissingVideos} sin video (usa pool)
+                    </span>
+                  )}
                 </div>
                 <div className={`p-4 rounded-xl border space-y-1 transition-all ${
                   selectedMovieIds.length > 0 
@@ -2666,7 +2751,7 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* Search & Filter Bar */}
-              <div className="p-4 rounded-2xl bg-neutral-950/90 border border-white/10 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="p-4 rounded-2xl bg-neutral-950/90 border border-white/10 flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
@@ -2686,7 +2771,7 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex items-center gap-1.5 bg-black/60 border border-white/10 px-3 py-1.5 rounded-xl">
                     <Filter className="w-3.5 h-3.5 text-neutral-400" />
                     <select
@@ -2715,12 +2800,27 @@ export default function AdminDashboardPage() {
                     </select>
                   </div>
 
-                  {(movieSearchQuery || movieGenreFilter !== 'all' || movieStatusFilter !== 'all') && (
+                  <div className="flex items-center gap-1.5 bg-black/60 border border-white/10 px-3 py-1.5 rounded-xl">
+                    <Video className="w-3.5 h-3.5 text-neutral-400" />
+                    <select
+                      value={movieVideoFilter}
+                      onChange={e => setMovieVideoFilter(e.target.value as any)}
+                      className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="all" className="bg-neutral-900">All Video Health</option>
+                      <option value="all_valid" className="bg-neutral-900">🟢 100% Videos Válidos</option>
+                      <option value="has_missing" className="bg-neutral-900">⚠️ Con Videos Faltantes</option>
+                      <option value="none" className="bg-neutral-900">🔴 Sin Videos Generados</option>
+                    </select>
+                  </div>
+
+                  {(movieSearchQuery || movieGenreFilter !== 'all' || movieStatusFilter !== 'all' || movieVideoFilter !== 'all') && (
                     <button
                       onClick={() => {
                         setMovieSearchQuery('');
                         setMovieGenreFilter('all');
                         setMovieStatusFilter('all');
+                        setMovieVideoFilter('all');
                       }}
                       className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-mono transition-colors"
                       title="Reset filters"
@@ -2825,14 +2925,18 @@ export default function AdminDashboardPage() {
                     {filteredMovies.map((movie: any) => {
                       const isSelected = selectedMovieIds.includes(movie.id);
                       const isLive = cinemaState?.movie?.id === movie.id;
-                      const stepsCount = movie.steps?.length || movie.totalSteps || movie.stepsCount || 0;
+                      const steps: any[] = movie.steps || [];
+                      const stepsCount = steps.length || movie.totalSteps || movie.stepsCount || 0;
                       const isCompleted = movie.status === 'completed';
                       const isPaused = movie.status === 'paused';
+                      const validVideosCount = steps.filter((s: any) => s.hasValidVideo || isValidStepVideoUrl(s.videoUrl) || isValidStepVideoUrl(s.rawVideoUrl)).length;
+                      const missingVideosCount = steps.length > 0 ? steps.length - validVideosCount : 0;
+                      const isExpanded = Boolean(expandedMovieScenes[movie.id]);
 
                       return (
                         <div
                           key={movie.id}
-                          className={`p-4 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                          className={`p-4 transition-all flex flex-col space-y-3 ${
                             isSelected
                               ? 'bg-rose-950/20 border-l-4 border-l-rose-500'
                               : isLive
@@ -2840,105 +2944,308 @@ export default function AdminDashboardPage() {
                               : 'hover:bg-white/[0.02]'
                           }`}
                         >
-                          <div className="flex items-start space-x-3.5 min-w-0 flex-1">
-                            {/* Checkbox */}
-                            <button
-                              onClick={() => toggleSelectMovie(movie.id)}
-                              className="mt-1 p-1 rounded-md hover:bg-white/10 text-neutral-400 hover:text-white transition-colors flex-shrink-0"
-                            >
-                              {isSelected ? (
-                                <CheckSquare className="w-4 h-4 text-rose-400" />
-                              ) : (
-                                <Square className="w-4 h-4 text-neutral-500" />
-                              )}
-                            </button>
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div className="flex items-start space-x-3.5 min-w-0 flex-1">
+                              {/* Checkbox */}
+                              <button
+                                onClick={() => toggleSelectMovie(movie.id)}
+                                className="mt-1 p-1 rounded-md hover:bg-white/10 text-neutral-400 hover:text-white transition-colors flex-shrink-0"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="w-4 h-4 text-rose-400" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-neutral-500" />
+                                )}
+                              </button>
 
-                            {/* Info */}
-                            <div className="space-y-1.5 min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h4 className="text-sm font-bold text-white font-mono truncate" title={movie.title}>
-                                  {movie.title}
-                                </h4>
+                              {/* Info */}
+                              <div className="space-y-1.5 min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h4 className="text-sm font-bold text-white font-mono truncate" title={movie.title}>
+                                    {movie.title}
+                                  </h4>
 
-                                {isLive && (
-                                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[10px] font-mono font-bold text-amber-400 animate-pulse">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                    ON AIR
+                                  {isLive && (
+                                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[10px] font-mono font-bold text-amber-400 animate-pulse">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                      ON AIR
+                                    </span>
+                                  )}
+
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${
+                                    isCompleted
+                                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                      : isPaused
+                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  }`}>
+                                    {isCompleted ? 'Completed' : isPaused ? 'Paused' : 'Streaming'}
+                                  </span>
+
+                                  <span className="px-2 py-0.5 rounded bg-white/10 text-cyan-300 text-[10px] font-mono">
+                                    {movie.genre || 'Sci-Fi'}
+                                  </span>
+
+                                  <span className="px-2 py-0.5 rounded bg-white/5 text-neutral-300 text-[10px] font-mono flex items-center gap-1 border border-white/5">
+                                    <Layers className="w-3 h-3 text-purple-400" />
+                                    {steps.length} {steps.length === 1 ? 'scene generada' : 'scenes generadas'}
+                                  </span>
+
+                                  {/* Video URL Validity Health Badge */}
+                                  {steps.length === 0 ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-neutral-800 text-neutral-400 border border-white/10">
+                                      Sin escenas
+                                    </span>
+                                  ) : missingVideosCount === 0 ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-[0_0_10px_rgba(16,185,129,0.15)]">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      {validVideosCount}/{steps.length} Videos Válidos (100%)
+                                    </span>
+                                  ) : validVideosCount > 0 ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-[0_0_10px_rgba(245,158,11,0.15)]">
+                                      <AlertCircle className="w-3 h-3 text-amber-400" />
+                                      {validVideosCount}/{steps.length} Videos Válidos · {missingVideosCount} sin video
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1 shadow-[0_0_10px_rgba(244,63,94,0.15)]">
+                                      <VideoOff className="w-3 h-3 text-rose-400" />
+                                      0/{steps.length} Videos Válidos (usa pool)
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="text-xs text-neutral-400 line-clamp-1">
+                                  {movie.tagline || movie.initialPlot || 'Interactive AI generated film.'}
+                                </p>
+
+                                {movie.createdAt && (
+                                  <span className="text-[10px] font-mono text-neutral-500 block">
+                                    Created: {new Date(movie.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                 )}
-
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${
-                                  isCompleted
-                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                                    : isPaused
-                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                }`}>
-                                  {isCompleted ? 'Completed' : isPaused ? 'Paused' : 'Streaming'}
-                                </span>
-
-                                <span className="px-2 py-0.5 rounded bg-white/10 text-cyan-300 text-[10px] font-mono">
-                                  {movie.genre || 'Sci-Fi'}
-                                </span>
-
-                                <span className="text-[10px] font-mono text-neutral-500">
-                                  {stepsCount} scenes
-                                </span>
                               </div>
+                            </div>
 
-                              <p className="text-xs text-neutral-400 line-clamp-1">
-                                {movie.tagline || movie.initialPlot || 'Interactive AI generated film.'}
-                              </p>
+                            {/* Individual Actions */}
+                            <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center">
+                              <button
+                                onClick={() => handleOpenMovieScenes(movie)}
+                                className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500 text-purple-300 hover:text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-purple-500/30 active:scale-95"
+                                title="View all scenes and narrative steps of this movie"
+                              >
+                                <Layers className="w-3 h-3" />
+                                <span>Scenes ({stepsCount})</span>
+                              </button>
 
-                              {movie.createdAt && (
-                                <span className="text-[10px] font-mono text-neutral-500 block">
-                                  Created: {new Date(movie.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                </span>
+                              {!isLive && (
+                                <button
+                                  onClick={() => handleSwitchMovie(movie.id, 1)}
+                                  disabled={isSwitchingMovie}
+                                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-amber-500/30 active:scale-95"
+                                  title="Broadcast this movie live on air now"
+                                >
+                                  <Play className="w-3 h-3" />
+                                  <span>Put on Air</span>
+                                </button>
                               )}
+
+                              <button
+                                onClick={() => openEditMovie(movie)}
+                                className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-cyan-500/30 active:scale-95"
+                                title="Edit details of this movie"
+                              >
+                                <Pencil className="w-3 h-3" />
+                                <span>Edit</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleDeleteSpecificMovie(movie.id, movie.title)}
+                                className="px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-red-500/20 active:scale-95"
+                                title="Delete this movie"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
+                              </button>
                             </div>
                           </div>
 
-                          {/* Individual Actions */}
-                          <div className="flex items-center gap-2 flex-shrink-0 self-end lg:self-center">
-                            <button
-                              onClick={() => handleOpenMovieScenes(movie)}
-                              className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500 text-purple-300 hover:text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-purple-500/30 active:scale-95"
-                              title="View all scenes and narrative steps of this movie"
-                            >
-                              <Layers className="w-3 h-3" />
-                              <span>Scenes ({stepsCount})</span>
-                            </button>
+                          {/* Visual Step Scrubber & Inline Expansion */}
+                          {steps.length > 0 && (
+                            <div className="pt-2 space-y-1.5 border-t border-white/5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-bold flex items-center gap-1">
+                                    <Layers className="w-3 h-3 text-purple-400" />
+                                    Escenas ({steps.length}):
+                                  </span>
+                                  <span className="text-[10px] font-mono text-neutral-500 hidden sm:inline-block">
+                                    (Verde = Video URL OK · Rojo = Sin video_url · Clic para previsualizar)
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => toggleExpandMovieScenes(movie.id)}
+                                  className="text-[10px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors px-2 py-0.5 rounded bg-white/5 hover:bg-white/10"
+                                >
+                                  <span>{isExpanded ? 'Ocultar listado' : `Ver ${steps.length} escenas en detalle`}</span>
+                                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                </button>
+                              </div>
 
-                            {!isLive && (
-                              <button
-                                onClick={() => handleSwitchMovie(movie.id, 1)}
-                                disabled={isSwitchingMovie}
-                                className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-amber-500/30 active:scale-95"
-                                title="Broadcast this movie live on air now"
-                              >
-                                <Play className="w-3 h-3" />
-                                <span>Put on Air</span>
-                              </button>
-                            )}
+                              {/* Interactive step pills strip */}
+                              <div className="flex flex-wrap items-center gap-1.5 max-h-24 overflow-y-auto custom-scrollbar p-1.5 rounded-xl bg-black/40 border border-white/5">
+                                {steps.map((step: any) => {
+                                  const hasVideo = Boolean(step.hasValidVideo || isValidStepVideoUrl(step.videoUrl) || isValidStepVideoUrl(step.rawVideoUrl));
+                                  const isLiveStep = isLive && cinemaState?.movie?.currentStep === step.stepNumber;
+                                  const videoUrlToUse = step.videoUrl || step.playbackUrl;
 
-                            <button
-                              onClick={() => openEditMovie(movie)}
-                              className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-cyan-500/30 active:scale-95"
-                              title="Edit details of this movie"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              <span>Edit</span>
-                            </button>
+                                  return (
+                                    <button
+                                      key={step.stepNumber}
+                                      onClick={() => {
+                                        if (videoUrlToUse) {
+                                          setPreviewingVideoUrl({
+                                            url: videoUrlToUse,
+                                            title: step.title || `Paso #${step.stepNumber}`,
+                                            stepNumber: step.stepNumber
+                                          });
+                                        } else {
+                                          handleOpenMovieScenes(movie);
+                                        }
+                                      }}
+                                      className={`px-2 py-1 rounded-lg text-[10px] font-mono flex items-center gap-1 transition-all active:scale-95 ${
+                                        isLiveStep
+                                          ? 'bg-amber-500/30 text-amber-300 border border-amber-500/60 ring-1 ring-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.3)] font-bold'
+                                          : hasVideo
+                                          ? 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 hover:border-emerald-400/60'
+                                          : 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 hover:border-rose-400/60'
+                                      }`}
+                                      title={`Paso #${step.stepNumber}: ${step.title || 'Escena'}\n${hasVideo ? '🟢 Video URL Válida en BD' : '🔴 Sin video_url en BD (usa pool al vuelo al reproducir)'}${step.videoUrl ? `\nURL: ${step.videoUrl}` : ''}\nHaz clic para ver video`}
+                                    >
+                                      <span className="font-bold">#{step.stepNumber}</span>
+                                      {hasVideo ? (
+                                        <Video className="w-2.5 h-2.5 text-emerald-400 flex-shrink-0" />
+                                      ) : (
+                                        <VideoOff className="w-2.5 h-2.5 text-rose-400 flex-shrink-0" />
+                                      )}
+                                      {isLiveStep && (
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
 
-                            <button
-                              onClick={() => handleDeleteSpecificMovie(movie.id, movie.title)}
-                              className="px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 font-mono font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all border border-red-500/20 active:scale-95"
-                              title="Delete this movie"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Delete</span>
-                            </button>
-                          </div>
+                          {/* Inline Expandable Scenes Drawer */}
+                          {isExpanded && steps.length > 0 && (
+                            <div className="mt-3 p-4 rounded-xl bg-black/60 border border-white/10 space-y-3 animate-in fade-in duration-150">
+                              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <Layers className="w-4 h-4 text-purple-400" />
+                                  <h5 className="text-xs font-bold text-white font-mono uppercase tracking-wider">
+                                    Escenas de &quot;{movie.title}&quot; ({steps.length} generadas)
+                                  </h5>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] font-mono">
+                                  <span className="text-emerald-400 font-bold">🟢 {validVideosCount} con video</span>
+                                  {missingVideosCount > 0 && (
+                                    <span className="text-rose-400 font-bold">🔴 {missingVideosCount} sin video</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-96 overflow-y-auto custom-scrollbar pr-1">
+                                {steps.map((s: any) => {
+                                  const hasVid = Boolean(s.hasValidVideo || isValidStepVideoUrl(s.videoUrl) || isValidStepVideoUrl(s.rawVideoUrl));
+                                  const isCurrentActive = isLive && cinemaState?.movie?.currentStep === s.stepNumber;
+                                  const videoSrc = s.videoUrl || s.playbackUrl;
+
+                                  return (
+                                    <div
+                                      key={s.stepNumber}
+                                      className={`p-3 rounded-xl border flex flex-col justify-between space-y-2 transition-all ${
+                                        isCurrentActive
+                                          ? 'bg-amber-950/20 border-amber-500/50 ring-1 ring-amber-400/40'
+                                          : hasVid
+                                          ? 'bg-neutral-900/50 border-white/5 hover:border-emerald-500/30'
+                                          : 'bg-rose-950/10 border-rose-500/20 hover:border-rose-500/40'
+                                      }`}
+                                    >
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                            isCurrentActive 
+                                              ? 'bg-amber-500 text-black' 
+                                              : 'bg-white/10 text-white'
+                                          }`}>
+                                            PASO #{s.stepNumber}
+                                          </span>
+                                          <span className="text-[10px] font-mono text-neutral-500">
+                                            {s.duration || 15}s
+                                          </span>
+                                        </div>
+
+                                        <h6 className="text-xs font-bold text-white font-mono line-clamp-1">
+                                          {s.title}
+                                        </h6>
+                                        <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
+                                          {s.synopsis}
+                                        </p>
+                                      </div>
+
+                                      <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-1 text-[10px] font-mono">
+                                        {hasVid ? (
+                                          <div className="flex items-center gap-1.5 truncate">
+                                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold flex items-center gap-1">
+                                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                                              <span>Video OK</span>
+                                            </span>
+                                            {videoSrc && (
+                                              <button
+                                                onClick={() => setPreviewingVideoUrl({ url: videoSrc, title: s.title, stepNumber: s.stepNumber })}
+                                                className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 hover:underline"
+                                                title="Preview video"
+                                              >
+                                                <Play className="w-2.5 h-2.5 fill-cyan-400" />
+                                                <span>Ver</span>
+                                              </button>
+                                            )}
+                                            {s.videoUrl && (
+                                              <a
+                                                href={s.videoUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-neutral-400 hover:text-white"
+                                                title={s.videoUrl}
+                                              >
+                                                <ExternalLink className="w-2.5 h-2.5" />
+                                              </a>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold flex items-center gap-1" title="Sin video_url generada en BD. Usa fallback del pool al vuelo.">
+                                            <VideoOff className="w-2.5 h-2.5 text-rose-400" />
+                                            <span>Sin Video (pool)</span>
+                                          </span>
+                                        )}
+
+                                        <button
+                                          onClick={() => handleSwitchMovie(movie.id, s.stepNumber)}
+                                          disabled={isSwitchingMovie || isJumpingStep}
+                                          className="px-2 py-1 rounded bg-white/5 hover:bg-amber-500 hover:text-black text-neutral-300 text-[10px] font-mono font-bold flex items-center gap-1 transition-all ml-auto"
+                                          title="Broadcast this specific step live on air"
+                                        >
+                                          <PlayCircle className="w-3 h-3" />
+                                          <span>Emitir</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -3186,81 +3493,155 @@ export default function AdminDashboardPage() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
                   <div className="max-w-4xl w-full bg-neutral-950 border border-purple-500/40 rounded-3xl p-6 sm:p-8 space-y-6 shadow-[0_0_60px_rgba(168,85,247,0.25)] max-h-[90vh] flex flex-col">
                     {/* Header */}
-                    <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4 flex-shrink-0">
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                            <Layers className="w-5 h-5" />
-                          </span>
-                          <h3 className="text-base sm:text-lg font-black text-white font-mono truncate">
-                            {viewingMovieScenes.title}
-                          </h3>
-                          <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-[10px] font-bold">
-                            {viewingMovieScenes.genre || 'Sci-Fi'}
-                          </span>
-                          <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-neutral-300 font-mono text-[10px]">
-                            {viewingMovieScenes.steps?.length || viewingMovieScenes.totalSteps || 0} Scenes
-                          </span>
-                          {cinemaState?.movie?.id === viewingMovieScenes.id && (
-                            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono text-[10px] font-bold animate-pulse">
-                              🔴 ON AIR NOW
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-neutral-400 line-clamp-2 max-w-2xl font-mono pt-1">
-                          {viewingMovieScenes.tagline || viewingMovieScenes.initialPlot || 'No plot provided.'}
-                        </p>
-                      </div>
+                    {(() => {
+                      const modalRawSteps = viewingMovieScenes.steps || [];
+                      const modalValidCount = modalRawSteps.filter((s: any) => s.hasValidVideo || isValidStepVideoUrl(s.videoUrl) || isValidStepVideoUrl(s.rawVideoUrl)).length;
+                      const modalMissingCount = modalRawSteps.length - modalValidCount;
 
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {cinemaState?.movie?.id !== viewingMovieScenes.id && (
-                          <button
-                            onClick={() => {
-                              handleSwitchMovie(viewingMovieScenes.id, 1);
-                              setViewingMovieScenes(null);
-                            }}
-                            disabled={isSwitchingMovie}
-                            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] active:scale-95"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-black" />
-                            <span>Put on Air</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setViewingMovieScenes(null)}
-                          className="p-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-                          title="Close scenes modal"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
+                      return (
+                        <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4 flex-shrink-0">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                                <Layers className="w-5 h-5" />
+                              </span>
+                              <h3 className="text-base sm:text-lg font-black text-white font-mono truncate">
+                                {viewingMovieScenes.title}
+                              </h3>
+                              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-[10px] font-bold">
+                                {viewingMovieScenes.genre || 'Sci-Fi'}
+                              </span>
+                              <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-neutral-300 font-mono text-[10px]">
+                                {modalRawSteps.length || viewingMovieScenes.totalSteps || 0} Scenes
+                              </span>
+                              {modalRawSteps.length > 0 && (
+                                modalMissingCount === 0 ? (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                    {modalValidCount}/{modalRawSteps.length} Videos Válidos (100%)
+                                  </span>
+                                ) : modalValidCount > 0 ? (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold flex items-center gap-1">
+                                    <AlertCircle className="w-3 h-3 text-amber-400" />
+                                    {modalValidCount}/{modalRawSteps.length} Videos Válidos · {modalMissingCount} sin video
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-[10px] font-bold flex items-center gap-1">
+                                    <VideoOff className="w-3 h-3 text-rose-400" />
+                                    0/{modalRawSteps.length} Videos Válidos (usa pool)
+                                  </span>
+                                )
+                              )}
+                              {cinemaState?.movie?.id === viewingMovieScenes.id && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono text-[10px] font-bold animate-pulse">
+                                  🔴 ON AIR NOW
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-neutral-400 line-clamp-2 max-w-2xl font-mono pt-1">
+                              {viewingMovieScenes.tagline || viewingMovieScenes.initialPlot || 'No plot provided.'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {cinemaState?.movie?.id !== viewingMovieScenes.id && (
+                              <button
+                                onClick={() => {
+                                  handleSwitchMovie(viewingMovieScenes.id, 1);
+                                  setViewingMovieScenes(null);
+                                }}
+                                disabled={isSwitchingMovie}
+                                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] active:scale-95"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-black" />
+                                <span>Put on Air</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setViewingMovieScenes(null)}
+                              className="p-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+                              title="Close scenes modal"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Filter & Search Bar */}
-                    <div className="flex items-center justify-between gap-3 flex-shrink-0">
-                      <div className="relative flex-1">
-                        <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={sceneSearchQuery}
-                          onChange={e => setSceneSearchQuery(e.target.value)}
-                          placeholder="Search scenes by step #, title, or dialogue..."
-                          className="w-full pl-10 pr-4 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-purple-400 focus:outline-none placeholder:text-neutral-600"
-                        />
-                      </div>
-                      {isLoadingMovieScenes && (
-                        <div className="flex items-center gap-2 text-xs font-mono text-purple-400 animate-pulse flex-shrink-0">
-                          <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                          <span>Loading scenes from Supabase...</span>
+                    {(() => {
+                      const modalRawSteps = viewingMovieScenes.steps || [];
+                      const modalValidCount = modalRawSteps.filter((s: any) => s.hasValidVideo || isValidStepVideoUrl(s.videoUrl) || isValidStepVideoUrl(s.rawVideoUrl)).length;
+                      const modalMissingCount = modalRawSteps.length - modalValidCount;
+
+                      return (
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-shrink-0">
+                          <div className="relative flex-1">
+                            <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              value={sceneSearchQuery}
+                              onChange={e => setSceneSearchQuery(e.target.value)}
+                              placeholder="Search scenes by step #, title, or dialogue..."
+                              className="w-full pl-10 pr-4 py-2 rounded-xl bg-black/60 border border-white/10 text-white text-xs font-mono focus:border-purple-400 focus:outline-none placeholder:text-neutral-600"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              onClick={() => setSceneVideoFilter('all')}
+                              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-mono font-bold transition-all ${
+                                sceneVideoFilter === 'all'
+                                  ? 'bg-purple-500 text-black shadow-sm'
+                                  : 'bg-white/5 hover:bg-white/10 text-neutral-400'
+                              }`}
+                            >
+                              Todas ({modalRawSteps.length})
+                            </button>
+                            <button
+                              onClick={() => setSceneVideoFilter('valid')}
+                              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-mono font-bold transition-all flex items-center gap-1 ${
+                                sceneVideoFilter === 'valid'
+                                  ? 'bg-emerald-500 text-black shadow-sm'
+                                  : 'bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-400 border border-emerald-500/20'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Con Video ({modalValidCount})</span>
+                            </button>
+                            <button
+                              onClick={() => setSceneVideoFilter('missing')}
+                              className={`px-2.5 py-1.5 rounded-lg text-[10px] font-mono font-bold transition-all flex items-center gap-1 ${
+                                sceneVideoFilter === 'missing'
+                                  ? 'bg-rose-500 text-black shadow-sm'
+                                  : 'bg-rose-950/30 hover:bg-rose-950/50 text-rose-400 border border-rose-500/20'
+                              }`}
+                            >
+                              <VideoOff className="w-3 h-3" />
+                              <span>Sin Video ({modalMissingCount})</span>
+                            </button>
+                          </div>
+
+                          {isLoadingMovieScenes && (
+                            <div className="flex items-center gap-2 text-xs font-mono text-purple-400 animate-pulse flex-shrink-0">
+                              <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                              <span>Loading scenes from Supabase...</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
 
                     {/* Scenes Grid */}
                     <div className="overflow-y-auto custom-scrollbar flex-1 pr-1 space-y-3">
                       {(() => {
                         const rawSteps = viewingMovieScenes.steps || [];
                         const filteredSteps = rawSteps.filter((s: any) => {
+                          const hasVid = Boolean(s.hasValidVideo || isValidStepVideoUrl(s.videoUrl) || isValidStepVideoUrl(s.rawVideoUrl));
+                          if (sceneVideoFilter === 'valid' && !hasVid) return false;
+                          if (sceneVideoFilter === 'missing' && hasVid) return false;
+
                           if (!sceneSearchQuery.trim()) return true;
                           const q = sceneSearchQuery.toLowerCase();
                           const matchNum = `step ${s.stepNumber} #${s.stepNumber} ${s.stepNumber}`.includes(q);
@@ -3287,13 +3668,18 @@ export default function AdminDashboardPage() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {filteredSteps.map((step: any) => {
                               const isLiveOnAir = cinemaState?.movie?.id === viewingMovieScenes.id && cinemaState?.movie?.currentStep === step.stepNumber;
+                              const hasVid = Boolean(step.hasValidVideo || isValidStepVideoUrl(step.videoUrl) || isValidStepVideoUrl(step.rawVideoUrl));
+                              const videoSrc = step.videoUrl || step.playbackUrl || step.rawVideoUrl;
+
                               return (
                                 <div
                                   key={step.stepNumber}
                                   className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
                                     isLiveOnAir
                                       ? 'bg-amber-950/30 border-amber-500/60 shadow-[0_0_20px_rgba(245,158,11,0.2)] ring-1 ring-amber-400/50'
-                                      : 'bg-black/60 border-white/10 hover:border-white/20'
+                                      : hasVid
+                                      ? 'bg-black/60 border-white/10 hover:border-emerald-500/30'
+                                      : 'bg-rose-950/10 border-rose-500/20 hover:border-rose-500/40'
                                   }`}
                                 >
                                   <div className="space-y-2">
@@ -3308,6 +3694,17 @@ export default function AdminDashboardPage() {
                                           <span className="text-[10px] font-mono font-bold text-amber-400 flex items-center gap-1 animate-pulse">
                                             <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                                             STREAMING
+                                          </span>
+                                        )}
+                                        {hasVid ? (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                            <span>Video OK</span>
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1" title="Sin video_url en base de datos. Se usará un clip del pool al vuelo.">
+                                            <VideoOff className="w-3 h-3 text-rose-400" />
+                                            <span>Sin Video (pool)</span>
                                           </span>
                                         )}
                                       </div>
@@ -3338,17 +3735,35 @@ export default function AdminDashboardPage() {
                                   </div>
 
                                   <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
-                                    {step.videoUrl && (
-                                      <a
-                                        href={step.videoUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-[10px] font-mono text-neutral-400 hover:text-white flex items-center gap-1 transition-colors"
-                                      >
-                                        <ExternalLink className="w-3 h-3" />
-                                        <span>Video MP4</span>
-                                      </a>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                      {videoSrc && (
+                                        <button
+                                          onClick={() => setPreviewingVideoUrl({ url: videoSrc, title: step.title || `Paso #${step.stepNumber}`, stepNumber: step.stepNumber })}
+                                          className="px-2.5 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500 text-cyan-300 hover:text-black text-[10px] font-mono font-bold flex items-center gap-1 transition-all border border-cyan-500/30 active:scale-95"
+                                          title="Previsualizar video"
+                                        >
+                                          <Play className="w-3 h-3 fill-current" />
+                                          <span>Previsualizar</span>
+                                        </button>
+                                      )}
+                                      {step.videoUrl && (
+                                        <a
+                                          href={step.videoUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-[10px] font-mono text-neutral-400 hover:text-white flex items-center gap-1 transition-colors"
+                                          title="Abrir enlace directo al video MP4"
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                          <span>MP4</span>
+                                        </a>
+                                      )}
+                                      {!hasVid && (
+                                        <span className="text-[10px] font-mono text-rose-400/80 italic">
+                                          Fallback pool
+                                        </span>
+                                      )}
+                                    </div>
 
                                     <button
                                       onClick={() => {
@@ -3734,6 +4149,59 @@ export default function AdminDashboardPage() {
                     </p>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step Video Player Preview Modal */}
+        {previewingVideoUrl && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-150">
+            <div className="max-w-3xl w-full bg-neutral-950 border border-cyan-500/40 rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(0,240,255,0.25)] flex flex-col">
+              <div className="p-4 bg-neutral-900/80 border-b border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-2 truncate">
+                  <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono text-xs font-bold border border-cyan-500/30">
+                    PASO #{previewingVideoUrl.stepNumber}
+                  </span>
+                  <h4 className="text-sm font-bold text-white font-mono truncate">
+                    {previewingVideoUrl.title}
+                  </h4>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={previewingVideoUrl.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors"
+                    title="Abrir en pestaña nueva"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                  <button
+                    onClick={() => setPreviewingVideoUrl(null)}
+                    className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition-colors"
+                    title="Cerrar reproductor"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="relative bg-black flex items-center justify-center min-h-[320px] max-h-[65vh]">
+                <video
+                  src={previewingVideoUrl.url}
+                  controls
+                  autoPlay
+                  className="w-full h-full max-h-[65vh] object-contain"
+                />
+              </div>
+              <div className="p-3 bg-neutral-900/60 border-t border-white/5 flex items-center justify-between text-[11px] font-mono text-neutral-400">
+                <span className="truncate max-w-md">{previewingVideoUrl.url}</span>
+                <button
+                  onClick={() => setPreviewingVideoUrl(null)}
+                  className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-mono text-xs transition-colors"
+                >
+                  Cerrar
+                </button>
               </div>
             </div>
           </div>

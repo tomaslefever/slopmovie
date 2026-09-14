@@ -1,5 +1,7 @@
 import { loadAllValidVideoUrlsFromDb } from './supabase/db';
-import { MovieStep } from '@/types/cinema';
+import { MovieStep, isValidStepVideoUrl } from '@/types/cinema';
+
+export { isValidStepVideoUrl };
 
 /**
  * Pool en memoria de video_urls válidas de public.movie_steps.
@@ -71,8 +73,8 @@ export function resolveStepPlaybackUrl(
   step: Pick<MovieStep, 'videoUrl'> | null | undefined,
   fallbackUrl?: string
 ): string {
-  if (step?.videoUrl && typeof step.videoUrl === 'string' && step.videoUrl.trim() !== '' && !step.videoUrl.startsWith('/videos/')) {
-    return step.videoUrl;
+  if (isValidStepVideoUrl(step?.videoUrl)) {
+    return step!.videoUrl;
   }
 
   // Obtener URL al azar del pool de public.movie_steps

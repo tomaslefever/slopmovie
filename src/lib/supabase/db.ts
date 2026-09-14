@@ -1,4 +1,4 @@
-import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig, BlockbusterCandidate, TOTAL_STEPS, ContactMessage } from '@/types/cinema';
+import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig, BlockbusterCandidate, TOTAL_STEPS, ContactMessage, isValidStepVideoUrl } from '@/types/cinema';
 import { getSupabaseServerClient } from './server';
 
 export function isSupabaseConfigured(): boolean {
@@ -479,6 +479,8 @@ export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | n
         visualPrompt: s.visual_prompt,
         cameraMotionPrompt: s.camera_motion_prompt,
         videoUrl: s.video_url,
+        rawVideoUrl: s.video_url,
+        hasValidVideo: isValidStepVideoUrl(s.video_url),
         videoUrl2: (s as any).video_url2,
         thumbnailUrl: s.thumbnail_url,
         duration: s.duration,
@@ -539,6 +541,8 @@ function mapMovieRow(m: any, steps: any[]): Movie {
       visualPrompt: s.visual_prompt,
       cameraMotionPrompt: s.camera_motion_prompt,
       videoUrl: s.video_url,
+      rawVideoUrl: s.video_url,
+      hasValidVideo: isValidStepVideoUrl(s.video_url),
       videoUrl2: s.video_url2,
       thumbnailUrl: s.thumbnail_url,
       duration: s.duration,
@@ -712,6 +716,8 @@ export async function loadMovieByIdFromDb(movieId: string): Promise<Movie | null
         visualPrompt: s.visual_prompt,
         cameraMotionPrompt: s.camera_motion_prompt,
         videoUrl: s.video_url,
+        rawVideoUrl: s.video_url,
+        hasValidVideo: isValidStepVideoUrl(s.video_url),
         videoUrl2: (s as any).video_url2,
         thumbnailUrl: s.thumbnail_url,
         duration: s.duration,

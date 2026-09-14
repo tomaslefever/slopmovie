@@ -46,7 +46,8 @@ import {
   loadStepVideoUrlsPool, 
   getRandomMovieStepVideoUrl, 
   resolveStepPlaybackUrl, 
-  registerGeneratedVideoUrlInPool 
+  registerGeneratedVideoUrlInPool,
+  isValidStepVideoUrl
 } from './video-pool';
 
 
@@ -2795,7 +2796,14 @@ class CinemaOrchestrator {
     if (!targetStep) return false;
 
     // Ensure targetStep has a valid playback URL resolved al vuelo
+    if (targetStep.rawVideoUrl === undefined) {
+      targetStep.rawVideoUrl = targetStep.videoUrl;
+    }
+    if (targetStep.hasValidVideo === undefined) {
+      targetStep.hasValidVideo = isValidStepVideoUrl(targetStep.videoUrl);
+    }
     const playbackUrl = resolveStepPlaybackUrl(targetStep);
+    targetStep.playbackUrl = playbackUrl;
     targetStep.videoUrl = playbackUrl;
 
     this.movie.currentStep = stepNumber;
@@ -2893,11 +2901,19 @@ class CinemaOrchestrator {
     targetMovie.completedAt = undefined;
 
     // Resolve playback URLs al vuelo for all steps of targetMovie
-    targetMovie.steps = targetMovie.steps.map((s) => ({
-      ...s,
-      videoUrl: resolveStepPlaybackUrl(s),
-      thumbnailUrl: s.thumbnailUrl || undefined
-    }));
+    targetMovie.steps = targetMovie.steps.map((s) => {
+      const rawVideoUrl = s.rawVideoUrl !== undefined ? s.rawVideoUrl : (s.videoUrl || null);
+      const hasValidVideo = s.hasValidVideo !== undefined ? s.hasValidVideo : isValidStepVideoUrl(s.videoUrl);
+      const playbackUrl = resolveStepPlaybackUrl(s);
+      return {
+        ...s,
+        rawVideoUrl,
+        hasValidVideo,
+        playbackUrl,
+        videoUrl: playbackUrl,
+        thumbnailUrl: s.thumbnailUrl || undefined
+      };
+    });
 
     // Atomically persist status 'streaming' in DB, archiving all other movies
     if (isSupabaseConfigured()) {

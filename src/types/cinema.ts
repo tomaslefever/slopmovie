@@ -70,6 +70,9 @@ export interface MovieStep {
   visualPrompt: string; // Detailed prompt for Shot 1 (Apertura)
   cameraMotionPrompt: string; // Camera movement prompt for Shot 1
   videoUrl: string; // Shot 1 video clip URL (15s)
+  rawVideoUrl?: string | null; // Authentic video_url from DB (null if not generated)
+  hasValidVideo?: boolean; // True if this step has an authentic generated video URL
+  playbackUrl?: string; // Resolved video URL for playback (falls back to random pool URL)
   visualPrompt2?: string; // Detailed prompt for Shot 2 (Clímax / Desenlace)
   cameraMotionPrompt2?: string; // Camera movement prompt for Shot 2
   videoUrl2?: string; // Shot 2 video clip URL (15s)
@@ -89,6 +92,13 @@ export interface MovieStep {
   propReferenceImages?: string[]; // Prop image URLs passed as references to fal.ai
   environment: string;
   createdAt: string;
+}
+
+/**
+ * Validates whether a video URL is genuine and non-empty (not a mock placeholder).
+ */
+export function isValidStepVideoUrl(url?: string | null): boolean {
+  return Boolean(url && typeof url === 'string' && url.trim() !== '' && !url.startsWith('/videos/'));
 }
 
 export interface MovieBible {
