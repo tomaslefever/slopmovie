@@ -51,6 +51,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   movieTitle,
   activeStep,
   phase,
+  totalSteps = 8,
   activeAd,
   inSceneAd,
   isPaused = false,
@@ -132,11 +133,50 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   const segmentsRef = useRef<PlaybackSegment[]>(segments);
   segmentsRef.current = segments;
 
+  // 15s Clip Playback Timer
+  const [clipSeconds, setClipSeconds] = useState<number>(0);
+
+  const handleTimeUpdate = React.useCallback((e: React.SyntheticEvent<HTMLVideoElement>, slot: 'A' | 'B') => {
+    if (slot !== activeSlotRef.current) return;
+    const v = e.currentTarget;
+    if (phase === 'PLAYING') {
+      const rawSec = v.currentTime || 0;
+      setClipSeconds(Math.min(15, Math.floor(rawSec)));
+    }
+  }, [phase]);
+
+  // Teardown all videos on component unmount
+  useEffect(() => {
+    return () => {
+      if (videoRefA.current) {
+        videoRefA.current.pause();
+        videoRefA.current.muted = true;
+        videoRefA.current.removeAttribute('src');
+        videoRefA.current.load();
+      }
+      if (videoRefB.current) {
+        videoRefB.current.pause();
+        videoRefB.current.muted = true;
+        videoRefB.current.removeAttribute('src');
+        videoRefB.current.load();
+      }
+    };
+  }, []);
+
   const isOptionVoting = phase === 'VOTING' || phase === 'OPTION_VOTING';
 
   // Helper to safely play video handling browser autoplay and unmuting policies
   const safePlayVideo = React.useCallback(async (video: HTMLVideoElement | null, shouldMute: boolean) => {
     if (!video) return;
+
+    // STRICT SAFETY: Never play a video if it is NOT the active slot!
+    const activeVideo = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
+    if (video !== activeVideo) {
+      video.pause();
+      video.muted = true;
+      return;
+    }
+
     const hasInteracted = hasUserInteractedRef.current || (typeof navigator !== 'undefined' && Boolean((navigator as any).userActivation?.hasBeenActive));
     const effectiveMuted = shouldMute || (!hasInteracted && isAutoplayBlocked);
     video.muted = effectiveMuted;
@@ -171,6 +211,11 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
       setIsAutoplayBlocked(false);
       if (!isMutedRef.current && !isOptionVoting && phase === 'PLAYING') {
         const activeVideo = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
+        const standbyVideo = activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current;
+        if (standbyVideo) {
+          standbyVideo.muted = true;
+          standbyVideo.pause();
+        }
         if (activeVideo) {
           activeVideo.muted = false;
           activeVideo.volume = 1.0;
@@ -191,6 +236,11 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 
   // Step transition key: changes whenever step number or primary videoUrl changes
   const stepKey = `${movieTitle}_${activeStep.stepNumber}_${activeStep.videoUrl || ''}`;
+
+  // Reset clip seconds on step/segment transition
+  useEffect(() => {
+    setClipSeconds(0);
+  }, [stepKey, currentSegmentIndex]);
 
   // Initialize or seamlessly transition slots when scene / activeStep changes
   useEffect(() => {
@@ -215,6 +265,14 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     // Subsequent step change: alternate to the standby slot seamlessly without freezing the current one
     const currentSlot = activeSlotRef.current;
     const nextSlot: 'A' | 'B' = currentSlot === 'A' ? 'B' : 'A';
+
+    // Immediately stop and mute old slot so its audio NEVER bleeds into the next clip
+    const oldVideo = currentSlot === 'A' ? videoRefA.current : videoRefB.current;
+    if (oldVideo) {
+      oldVideo.pause();
+      oldVideo.muted = true;
+      oldVideo.currentTime = 0;
+    }
 
     if (nextSlot === 'A') {
       setSlotSrcA(src0);
@@ -322,7 +380,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     const standbyVideo = activeSlot === 'A' ? videoRefB.current : videoRefA.current;
 
     if (standbyVideo) {
+      standbyVideo.pause();
       standbyVideo.muted = true;
+      standbyVideo.currentTime = 0;
     }
 
     if (!activeVideo) return;
@@ -333,6 +393,10 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     if (phase === 'COMMERCIAL_BREAK') {
       activeVideo.pause();
       activeVideo.muted = true;
+      if (standbyVideo) {
+        standbyVideo.pause();
+        standbyVideo.muted = true;
+      }
     } else if (isOptionVoting) {
       activeVideo.muted = true;
       activeVideo.loop = true;
@@ -383,13 +447,15 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     const nextMuted = audioCues.toggleMute();
     setIsMuted(nextMuted);
     isMutedRef.current = nextMuted;
-    if (videoRefA.current) {
-      videoRefA.current.muted = isOptionVoting ? true : nextMuted;
-      videoRefA.current.volume = 1.0;
+    const activeVideo = activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
+    const standbyVideo = activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current;
+    if (activeVideo) {
+      activeVideo.muted = isOptionVoting ? true : nextMuted;
+      activeVideo.volume = 1.0;
     }
-    if (videoRefB.current) {
-      videoRefB.current.muted = isOptionVoting ? true : nextMuted;
-      videoRefB.current.volume = 1.0;
+    if (standbyVideo) {
+      standbyVideo.muted = true;
+      standbyVideo.pause();
     }
     audioCues.playClick();
   };
@@ -426,6 +492,31 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [fullscreenContainerRef]);
+  // 15s Clip Playback Timer Calculations (Clips only, each clip = 15s)
+  const currentStepNum = Math.max(1, activeStep?.stepNumber || 1);
+  const effectiveTotalSteps = Math.max(currentStepNum, totalSteps || 8);
+  const totalMovieSeconds = effectiveTotalSteps * 15;
+
+  const isDualShotStep = Boolean(activeStep?.duration > 15 && activeStep?.videoUrl2);
+  const isSecondShotActive = isDualShotStep && currentSegmentIndex > 0 && segments[currentSegmentIndex]?.type === 'shot2';
+
+  const completedBaseClipsSec = (currentStepNum - 1) * 15;
+  const stepExtraSec = isSecondShotActive ? 15 : 0;
+  const currentClipElapsedSec = Math.max(0, Math.min(15, clipSeconds));
+
+  let elapsedClipsSeconds = completedBaseClipsSec + stepExtraSec + currentClipElapsedSec;
+  if (phase === 'VOTING' || phase === 'OPTION_VOTING') {
+    // Scene clip playback finished, holding at completed scene runtime during voting
+    elapsedClipsSeconds = Math.min(totalMovieSeconds, currentStepNum * 15);
+  }
+  elapsedClipsSeconds = Math.max(0, Math.min(totalMovieSeconds, elapsedClipsSeconds));
+
+  const formatTime = (secs: number) => {
+    const c = Math.max(0, Math.floor(secs));
+    const m = Math.floor(c / 60);
+    const s = Math.floor(c % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
 
   return (
     <div 
@@ -442,37 +533,58 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         src={slotSrcA}
         poster={activeSlot === 'A' ? activeStep.thumbnailUrl : undefined}
         preload="auto"
-        autoPlay
+        autoPlay={activeSlot === 'A'}
         playsInline
         muted={activeSlot === 'A' ? (isOptionVoting || phase === 'COMMERCIAL_BREAK' ? true : (isMuted || isAutoplayBlocked)) : true}
         onError={() => handleVideoError('A')}
         onEnded={() => handleSlotEnded('A')}
+        onTimeUpdate={(e) => handleTimeUpdate(e, 'A')}
         onCanPlay={(e) => {
           const video = e.currentTarget;
-          if (activeSlotRef.current === 'A' && phase === 'PLAYING' && !isPaused && video.paused) {
+          if (activeSlotRef.current !== 'A') {
+            video.pause();
+            video.muted = true;
+            return;
+          }
+          if (phase === 'PLAYING' && !isPaused && video.paused) {
             safePlayVideo(video, isOptionVoting ? true : isMutedRef.current);
           }
         }}
         onLoadedData={(e) => {
           const video = e.currentTarget;
-          if (activeSlotRef.current === 'A' && phase === 'PLAYING' && !isPaused && video.paused) {
+          if (activeSlotRef.current !== 'A') {
+            video.pause();
+            video.muted = true;
+            return;
+          }
+          if (phase === 'PLAYING' && !isPaused && video.paused) {
             safePlayVideo(video, isOptionVoting ? true : isMutedRef.current);
           }
         }}
         onPause={(e) => {
           const video = e.currentTarget;
-          if (activeSlotRef.current === 'A' && phase === 'PLAYING' && !isPaused && !video.ended) {
+          if (activeSlotRef.current !== 'A') {
+            video.muted = true;
+            return;
+          }
+          if (phase === 'PLAYING' && !isPaused && !video.ended) {
             safePlayVideo(video, isOptionVoting ? true : isMutedRef.current);
           }
         }}
-        onPlaying={() => {
+        onPlaying={(e) => {
+          const video = e.currentTarget;
+          if (activeSlotRef.current !== 'A') {
+            video.pause();
+            video.muted = true;
+            return;
+          }
           const hasInteracted = hasUserInteractedRef.current || (typeof navigator !== 'undefined' && Boolean((navigator as any).userActivation?.hasBeenActive));
-          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && hasInteracted && videoRefA.current) {
-            videoRefA.current.muted = false;
-            videoRefA.current.volume = 1.0;
+          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && hasInteracted) {
+            video.muted = false;
+            video.volume = 1.0;
             setIsAutoplayBlocked(false);
           }
-          if (activeSlot === 'A') onPlaybackStarted?.();
+          onPlaybackStarted?.();
         }}
         className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-300 ${
           phase === 'COMMERCIAL_BREAK'
@@ -488,37 +600,58 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         src={slotSrcB}
         poster={activeSlot === 'B' ? activeStep.thumbnailUrl : undefined}
         preload="auto"
-        autoPlay
+        autoPlay={activeSlot === 'B'}
         playsInline
         muted={activeSlot === 'B' ? (isOptionVoting || phase === 'COMMERCIAL_BREAK' ? true : (isMuted || isAutoplayBlocked)) : true}
         onError={() => handleVideoError('B')}
         onEnded={() => handleSlotEnded('B')}
+        onTimeUpdate={(e) => handleTimeUpdate(e, 'B')}
         onCanPlay={(e) => {
           const video = e.currentTarget;
-          if (activeSlotRef.current === 'B' && phase === 'PLAYING' && !isPaused && video.paused) {
+          if (activeSlotRef.current !== 'B') {
+            video.pause();
+            video.muted = true;
+            return;
+          }
+          if (phase === 'PLAYING' && !isPaused && video.paused) {
             safePlayVideo(video, isOptionVoting ? true : isMutedRef.current);
           }
         }}
         onLoadedData={(e) => {
           const video = e.currentTarget;
-          if (activeSlotRef.current === 'B' && phase === 'PLAYING' && !isPaused && video.paused) {
+          if (activeSlotRef.current !== 'B') {
+            video.pause();
+            video.muted = true;
+            return;
+          }
+          if (phase === 'PLAYING' && !isPaused && video.paused) {
             safePlayVideo(video, isOptionVoting ? true : isMutedRef.current);
           }
         }}
         onPause={(e) => {
           const video = e.currentTarget;
-          if (activeSlotRef.current === 'B' && phase === 'PLAYING' && !isPaused && !video.ended) {
+          if (activeSlotRef.current !== 'B') {
+            video.muted = true;
+            return;
+          }
+          if (phase === 'PLAYING' && !isPaused && !video.ended) {
             safePlayVideo(video, isOptionVoting ? true : isMutedRef.current);
           }
         }}
-        onPlaying={() => {
+        onPlaying={(e) => {
+          const video = e.currentTarget;
+          if (activeSlotRef.current !== 'B') {
+            video.pause();
+            video.muted = true;
+            return;
+          }
           const hasInteracted = hasUserInteractedRef.current || (typeof navigator !== 'undefined' && Boolean((navigator as any).userActivation?.hasBeenActive));
-          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && hasInteracted && videoRefB.current) {
-            videoRefB.current.muted = false;
-            videoRefB.current.volume = 1.0;
+          if (!isOptionVoting && phase === 'PLAYING' && !isMutedRef.current && hasInteracted) {
+            video.muted = false;
+            video.volume = 1.0;
             setIsAutoplayBlocked(false);
           }
-          if (activeSlot === 'B') onPlaybackStarted?.();
+          onPlaybackStarted?.();
         }}
         className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-300 ${
           phase === 'COMMERCIAL_BREAK'
@@ -591,9 +724,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         </div>
       )}
 
-      {/* Top Cinema Controls (LIVE on the left, Volume & Fullscreen on the right) */}
-      <div className="absolute top-0 left-0 right-0 p-6 pt-3 flex items-center justify-between z-20 bg-gradient-to-b from-black/80 via-black/30 to-transparent">
-        <div className="flex items-center space-x-3">
+      {/* Top Cinema Controls (LIVE on the left, Timer, Volume & Fullscreen on the right) */}
+      <div className="absolute top-0 left-0 right-0 p-4 md:p-6 pt-3 flex items-center justify-between z-20 bg-gradient-to-b from-black/80 via-black/30 to-transparent pointer-events-none">
+        <div className="flex items-center space-x-2.5 sm:space-x-3 pointer-events-auto">
           {/* Live / Paused Indicator */}
           {isPaused ? (
             <div className="flex items-center space-x-2 bg-amber-950/80 border border-amber-500/40 px-3 py-1 rounded-full md:backdrop-blur-md shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse">
@@ -605,15 +738,32 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
           ) : (
             <div className="flex items-center space-x-2 bg-red-950/60 border border-red-500/30 px-3 py-1 rounded-full md:backdrop-blur-md">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-              <span className="text-[11px] font-bold text-red-400 uppercase tracking-widest flex items-center gap-1">
+              <span className="text-[11px] font-bold text-red-400 uppercase tracking-widest flex items-center gap-1 font-mono">
                 <Radio className="w-3 h-3" /> LIVE
               </span>
             </div>
           )}
+
+          {/* 15s Clips Playback Timer HUD */}
+          <div className="flex items-center space-x-2 bg-black/75 border border-cyan-500/30 px-3 py-1 rounded-full md:backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.15)] text-neutral-200">
+            <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <div className="flex items-center space-x-1.5 font-mono text-xs">
+              <span className="font-bold text-white tracking-wider">
+                {formatTime(elapsedClipsSeconds)}
+              </span>
+              <span className="text-neutral-500 font-normal">/</span>
+              <span className="text-neutral-400 font-normal">
+                {formatTime(totalMovieSeconds)}
+              </span>
+              <span className="text-[10px] text-cyan-400/90 tracking-widest pl-2 border-l border-white/15 hidden sm:inline uppercase">
+                Clip {currentStepNum}/{effectiveTotalSteps} ({formatTime(currentClipElapsedSec)}/00:15)
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Video Controls (Mute & Fullscreen ONLY) */}
-        <div className="flex items-center space-x-2 relative">
+        <div className="flex items-center space-x-2 relative pointer-events-auto">
           {/* Mute Button */}
           <button
             onClick={toggleMute}
@@ -655,8 +805,10 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
 };
 
 export const CinemaPlayer = React.memo(CinemaPlayerBase, (prev, next) =>
+  prev.movieTitle === next.movieTitle &&
   prev.activeStep === next.activeStep &&
   prev.phase === next.phase &&
+  prev.totalSteps === next.totalSteps &&
   prev.isPaused === next.isPaused &&
   prev.isGenerationPaused === next.isGenerationPaused &&
   prev.activeAd === next.activeAd &&

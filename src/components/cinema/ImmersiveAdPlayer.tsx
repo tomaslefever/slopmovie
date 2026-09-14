@@ -44,6 +44,10 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   const triggerCompleted = () => {
     if (!hasCompletedRef.current) {
       hasCompletedRef.current = true;
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.muted = true;
+      }
       console.log('[ImmersiveAdPlayer] Ad completed. Notifying completion.');
       onAdCompleted?.();
     }
@@ -52,6 +56,12 @@ export const ImmersiveAdPlayer: React.FC<ImmersiveAdPlayerProps> = ({
   useEffect(() => {
     return () => {
       if (graceTimeoutRef.current) clearTimeout(graceTimeoutRef.current);
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.muted = true;
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
+      }
     };
   }, []);
 
