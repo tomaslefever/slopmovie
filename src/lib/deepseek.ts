@@ -2242,9 +2242,12 @@ export async function generateStoryBibleWithDeepSeek(
   customPrompt?: StoryBiblePromptInput,
   existingTitles: string[] = []
 ): Promise<GeneratedStoryBible> {
+  const isMovieGenPaused = process.env.PAUSE_MOVIE_GENERATION === 'true' ||
+    (typeof globalThis !== 'undefined' && Boolean((globalThis as any).__isCinemaMovieGenerationPaused));
+
   const apiKey = getLlmApiKey();
 
-  if (apiKey) {
+  if (!isMovieGenPaused && apiKey) {
     try {
       const systemPrompt = `You are an elite Hollywood Director, Master Cinematographer and Screenwriter specializing in grand interactive cinema across diverse classical genres (Superheroes, Anime, 3D Animation, Classic Film Noir, Horror, Psychological Thrillers, Epic Fantasy, Police Procedurals, Historical War, High-Stakes Comedies, Westerns, and Legendary Adventures) with strict visual and audio continuity.
 Your mission is to formulate a MASTER STORY AND ART BIBLE for a 50-step interactive live cinema film.

@@ -383,6 +383,29 @@ class CinemaOrchestrator {
   }
 
   private async doInitializeMovie(customPrompt?: BlockbusterCandidate | string): Promise<Movie> {
+    // Sincronizar estado de pausas y preferencias globales desde Supabase antes de inicializar
+    if (isSupabaseConfigured()) {
+      try {
+        const initialLiveState = await loadLiveCinemaStateFromDb();
+        if (initialLiveState) {
+          if (initialLiveState.isGenerationPaused !== undefined) {
+            this.isGenerationPaused = initialLiveState.isGenerationPaused;
+            if (typeof globalThis !== 'undefined') {
+              (globalThis as any).__isCinemaGenerationPaused = initialLiveState.isGenerationPaused;
+            }
+          }
+          if (initialLiveState.isMovieGenerationPaused !== undefined) {
+            this.isMovieGenerationPaused = initialLiveState.isMovieGenerationPaused;
+            if (typeof globalThis !== 'undefined') {
+              (globalThis as any).__isCinemaMovieGenerationPaused = initialLiveState.isMovieGenerationPaused;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Cinema] Error al sincronizar estado live inicial:', err);
+      }
+    }
+
     // Try to restore existing streaming or paused movie from Supabase if available
     if (isSupabaseConfigured() && !customPrompt) {
       try {

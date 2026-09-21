@@ -19,6 +19,11 @@ export function isMachgenGenerationPaused(): boolean {
   return false;
 }
 
+// Circuit breaker de seguridad para prevenir tormentas de tareas fallidas
+let consecutiveMachgenErrors = 0;
+let lastMachgenErrorTime = 0;
+const MACHGEN_CIRCUIT_COOLDOWN_MS = 60000;
+
 /**
  * Consulta la cuenta de facturación y cuotas de MachGen:
  * GET /api/v0/billing/account
@@ -274,50 +279,54 @@ export async function generateVideoWithMachgen({
   const cameraContext = cameraMotion ? ` Camera motion: ${cameraMotion}.` : '';
   const aestheticContext = ' 35mm anamorphic cinematography, organic film grain, photorealistic cinema render, 24fps motion blur.';
 
-  // Determinar tipo de tarea MachGen: T2V vs R2V vs I2V (con First Frame y Last Frame / FF LF)
+  // Verificación de Circuit Breaker para evitar tormentas de tareas fallidas
+  if (consecutiveMachgenErrors >= 2 && Date.now() - lastMachgenErrorTime < MACHGEN_CIRCUIT_COOLDOWN_MS) {
+    console.warn(`[MachGen] 🛡️ Circuit breaker activo (${consecutiveMachgenErrors} errores recientes). Usando clip archivado/simulado para proteger la cuota.`);
+    const fallback = await pickRandomArchivedGeneratedVideo();
+    const mockIndex = Math.abs((stepNumber || 1) - 1) % CINEMATIC_MOCK_VIDEOS.length;
+    const mock = CINEMATIC_MOCK_VIDEOS[mockIndex];
+    return {
+      videoUrl: fallback?.videoUrl || mock.url,
+      thumbnailUrl: fallback?.thumbnailUrl || mock.poster,
+      isRealAiGenerated: false,
+      modelUsed: `${model} (Protección Circuit Breaker)`,
+      resolution: `${height}P`,
+      aspectRatio: '16:9',
+      previousVideoReference: previousVideoUrl,
+      propImagesReferences: propReferenceImages,
+      firstFrameReference: initialFirstFrame,
+      lastFrameReference: initialLastFrame
+    };
+  }
+
+  // Determinar tipo de tarea MachGen:
+  // IMPORTANTE: MiniMax-H3 / Turbo en MachGen NO soporta 'R2V' ("MiniMax-H3-MultiMax I2V does not accept R2V reference inputs").
+  // MachGen admite únicamente 'T2V' (Text-to-Video) o 'I2V' (Image-to-Video con src_image_urls y keyframe_indices).
+  // Por lo tanto, NUNCA se debe enviar task_type 'R2V', ni subject_to_image_ids, ni subject_to_video_ids.
+  const isImageModel = model.includes('image-to-video') || model.includes('first-last-frame') || model.includes('f2f') || model.includes('ff-lf');
   const isRefModel = model.includes('reference-to-video');
-  const isImageModel = model.includes('image-to-video');
-  const isFfLfModel = model.includes('first-last-frame') || model.includes('f2f') || model.includes('ff-lf');
 
   const resolvedFirstFrame = firstFrameUrl || startFrameUrl;
   const resolvedLastFrame = lastFrameUrl || endFrameUrl;
 
-  let taskType: 'T2V' | 'I2V' | 'R2V' = 'T2V';
+  let taskType: 'T2V' | 'I2V' = 'T2V';
   const srcImageUrls: string[] = [];
-  const srcVideoUrls: string[] = [];
-  const subjectToImageIds: Record<string, number[]> = {};
-  const subjectToVideoIds: Record<string, number[]> = {};
-  const promptReferences: string[] = [];
   let keyframeIndices: number[] = [];
 
-  // 1. Soporte explícito para First Frame (FF) y Last Frame (LF) o modelos I2V / FF+LF
   if (resolvedFirstFrame && resolvedLastFrame) {
     taskType = 'I2V';
     srcImageUrls.push(resolvedFirstFrame, resolvedLastFrame);
     keyframeIndices = [0, -1];
-  } else if (resolvedFirstFrame && !resolvedLastFrame) {
+  } else if (resolvedFirstFrame) {
     taskType = 'I2V';
     srcImageUrls.push(resolvedFirstFrame);
     keyframeIndices = [0];
-  } else if (!resolvedFirstFrame && resolvedLastFrame) {
+  } else if (resolvedLastFrame) {
     taskType = 'I2V';
     srcImageUrls.push(resolvedLastFrame);
     keyframeIndices = [-1];
-  } else if (isFfLfModel) {
-    // Modelo FF+LF seleccionado: si hay referencias en propReferenceImages, usarlas como frames
-    if (propReferenceImages && propReferenceImages.length >= 2) {
-      taskType = 'I2V';
-      srcImageUrls.push(propReferenceImages[0], propReferenceImages[1]);
-      keyframeIndices = [0, -1];
-    } else if (propReferenceImages && propReferenceImages.length === 1) {
-      taskType = 'I2V';
-      srcImageUrls.push(propReferenceImages[0]);
-      keyframeIndices = [0];
-    } else {
-      taskType = 'T2V';
-    }
-  } else if (isImageModel) {
-    // Modelo I2V convencional (First Frame)
+  } else if (isImageModel || isRefModel) {
+    // Si se pidió I2V o referencia de consistencia, utilizar la primera imagen de utilería válida como frame inicial
     if (propReferenceImages && propReferenceImages.length > 0 && /^https?:\/\//i.test(propReferenceImages[0])) {
       taskType = 'I2V';
       srcImageUrls.push(propReferenceImages[0]);
@@ -325,47 +334,15 @@ export async function generateVideoWithMachgen({
     } else {
       taskType = 'T2V';
     }
-  } else if (isRefModel) {
-    // Mapear referencias para R2V cuando estén disponibles y el modelo lo soporte
-    // 1. Video previo como referencia de continuidad (R2V en MachGen acepta URLs públicas)
-    if (previousVideoUrl && /^https?:\/\//i.test(previousVideoUrl) && !previousVideoUrl.startsWith('/api/')) {
-      srcVideoUrls.push(previousVideoUrl);
-      subjectToVideoIds['prev_clip'] = [0];
-      promptReferences.push('visual continuation matching @prev_clip');
-    }
-
-    // 2. Imágenes de utilería (props) como referencias de consistencia
-    if (propReferenceImages && propReferenceImages.length > 0) {
-      propReferenceImages.forEach((img) => {
-        if (img && /^https?:\/\//i.test(img) && srcImageUrls.length < 5) {
-          const index = srcImageUrls.length;
-          const handle = `prop_${index + 1}`;
-          srcImageUrls.push(img);
-          subjectToImageIds[handle] = [index];
-          promptReferences.push(`scene elements identical to @${handle}`);
-        }
-      });
-    }
-
-    // En MachGen, R2V exige al menos 1 imagen o 1 video en las fuentes.
-    if (srcVideoUrls.length > 0 || srcImageUrls.length > 0) {
-      taskType = 'R2V';
-    } else {
-      taskType = 'T2V';
-    }
   } else {
     taskType = 'T2V';
   }
 
-  // Si usamos R2V, MachGen exige que todos los @handles del prompt coincidan con los mapeados
-  let refPrefix = '';
-  if (taskType === 'R2V' && promptReferences.length > 0) {
-    refPrefix = `Using ${promptReferences.join(' and ')}, `;
-  }
+  // Limpiar el prompt de cualquier @tag para evitar que el validador de MachGen intente resolver referencias R2V
+  const cleanPrompt = prompt.replace(/@[\w-]+/g, '').replace(/\s{2,}/g, ' ').trim();
+  const completePrompt = `${cleanPrompt}.${dialogueContext}${voiceContext}${cameraContext}${aestheticContext}`.trim();
 
-  const completePrompt = `${refPrefix}${prompt}.${dialogueContext}${voiceContext}${cameraContext}${aestheticContext}`.trim();
-
-  // Duración segura: MiniMax H3 soporta 5s (y 10s en algunas variantes). Usamos 5 por defecto.
+  // Duración segura: MiniMax H3 soporta 5s por defecto
   const effectiveDuration = Math.min(Math.max(duration || 5, 5), 10);
 
   const payload: Record<string, any> = {
@@ -379,16 +356,8 @@ export async function generateVideoWithMachgen({
     }
   };
 
-  if (taskType === 'R2V') {
-    if (srcImageUrls.length > 0) {
-      payload.src_image_urls = srcImageUrls;
-      payload.subject_to_image_ids = subjectToImageIds;
-    }
-    if (srcVideoUrls.length > 0) {
-      payload.src_video_urls = srcVideoUrls;
-      payload.subject_to_video_ids = subjectToVideoIds;
-    }
-  } else if (taskType === 'I2V' && srcImageUrls.length > 0) {
+  // En I2V, únicamente pasar src_image_urls y keyframe_indices (sin subject mappings de R2V)
+  if (taskType === 'I2V' && srcImageUrls.length > 0) {
     payload.src_image_urls = srcImageUrls;
     if (keyframeIndices.length > 0) {
       payload.keyframe_indices = keyframeIndices;
@@ -441,6 +410,9 @@ export async function generateVideoWithMachgen({
     console.log(`[MachGen] Tarea aceptada con task_id: ${taskId}. Iniciando sondeo...`);
     const completed = await pollMachgenTask(taskId, apiKey);
 
+    // Éxito: reiniciar contador de errores del circuit breaker
+    consecutiveMachgenErrors = 0;
+
     return {
       videoUrl: completed.videoUrl,
       thumbnailUrl: completed.thumbnailUrl || '',
@@ -454,24 +426,22 @@ export async function generateVideoWithMachgen({
       lastFrameReference: resolvedLastFrame || (keyframeIndices.includes(-1) ? srcImageUrls[srcImageUrls.length - 1] : undefined)
     };
   } catch (error: any) {
-    console.error(`[MachGen] Error en generación para paso ${stepNumber}:`, error?.message || error);
+    consecutiveMachgenErrors++;
+    lastMachgenErrorTime = Date.now();
+    console.error(`[MachGen] Error en generación para paso ${stepNumber} (Fallo consecutivo #${consecutiveMachgenErrors}):`, error?.message || error);
 
-    // Si falló R2V o I2V por error en URL de video previa o frames, reintentamos una vez con T2V
-    if ((taskType === 'R2V' || taskType === 'I2V') && !payload.__retried) {
-      console.log(`[MachGen] 🔄 Reintentando como Text-to-Video (T2V) puro tras fallo en ${taskType}...`);
-      return generateVideoWithMachgen({
-        prompt,
-        cameraMotion,
-        stepNumber,
-        duration,
-        voiceDirection,
-        dialogueSnippet,
-        model: 'machgen/minimax-h3-turbo/text-to-video',
-        resolution
-      });
+    // Si ocurren 3 o más errores consecutivos, activar pausa de seguridad automática
+    if (consecutiveMachgenErrors >= 3) {
+      console.warn('[MachGen] ⚠️ 3 errores consecutivos en MachGen. Activando pausa automática de seguridad.');
+      if (typeof globalThis !== 'undefined') {
+        (globalThis as any).__isCinemaGenerationPaused = true;
+        if ((globalThis as any).__cinemaOrchestratorInstance) {
+          (globalThis as any).__cinemaOrchestratorInstance.pauseGeneration();
+        }
+      }
     }
 
-    // Fallback a clip simulado/archivado para garantizar que la experiencia interactiva nunca se corte
+    // Fallback inmediato a clip simulado/archivado sin reintentos recursivos para evitar tormentas de tareas
     const archived = await pickRandomArchivedGeneratedVideo();
     if (archived) {
       return {
