@@ -44,9 +44,14 @@ export async function GET(request: Request) {
     cinemaEngine.totalAudience = realActiveViewers;
   }
 
-  // 1. Read live cinema state directly from Supabase database (Source of Truth)
-  let liveState = await loadLiveCinemaStateFromDb();
-  let activeMovie = await loadActiveMovieFromDb(liveState?.movieId);
+  // 1. Read live cinema state: prioritize authoritative in-memory cinemaEngine state first
+  let activeMovie = cinemaEngine.movie;
+  let liveState = null as any;
+
+  if (!activeMovie || !activeMovie.steps || activeMovie.steps.length === 0) {
+    liveState = await loadLiveCinemaStateFromDb();
+    activeMovie = await loadActiveMovieFromDb(liveState?.movieId);
+  }
 
   // Adopt the director-selected video model persisted in the DB
   cinemaEngine.adoptVideoModel(liveState?.videoModel);
@@ -161,9 +166,9 @@ export async function GET(request: Request) {
     createdAt: new Date().toISOString()
   };
 
-  // Load vote for this step directly from Supabase
+  // Load vote for this step: check in-memory engine first, fallback to Supabase
   const hasUserVoted = activeMovie 
-    ? await loadUserVoteForStep(activeMovie.id, currentStepNum, userId)
+    ? (cinemaEngine.userVotes.get(userId) || (await loadUserVoteForStep(activeMovie.id, currentStepNum, userId)))
     : null;
 
   // Load aggregate blockbuster votes and user's specific blockbuster pick
@@ -171,7 +176,7 @@ export async function GET(request: Request) {
     ? liveState.movieId
     : (activeMovie?.id || liveState?.movieId || cinemaEngine.movie?.id);
 
-  if (targetBlockbusterMovieId) {
+  if (targetBlockbusterMovieId && (!cinemaEngine.blockbusterVoteCounts || cinemaEngine.blockbusterVoteCounts.A + cinemaEngine.blockbusterVoteCounts.B + cinemaEngine.blockbusterVoteCounts.C + cinemaEngine.blockbusterVoteCounts.D === 0)) {
     const dbCounts = await loadBlockbusterVoteCountsFromDb(targetBlockbusterMovieId);
     cinemaEngine.blockbusterVoteCounts = {
       A: Math.max(cinemaEngine.blockbusterVoteCounts?.A || 0, liveState?.blockbusterVoteCounts?.A || 0, dbCounts.A || 0),
@@ -181,9 +186,8 @@ export async function GET(request: Request) {
     };
   }
 
-  const blockbusterUserVoted = targetBlockbusterMovieId
-    ? (await loadUserBlockbusterVote(targetBlockbusterMovieId, userId)) || cinemaEngine.getBlockbusterUserVote(userId)
-    : cinemaEngine.getBlockbusterUserVote(userId);
+  const blockbusterUserVoted = (userId && cinemaEngine.getBlockbusterUserVote(userId))
+    || (targetBlockbusterMovieId ? (await loadUserBlockbusterVote(targetBlockbusterMovieId, userId)) : null);
 
   // Load viewer preferences from Supabase
   const viewerPreferences = await loadViewerPreferences(userId, activeMovie?.id);
@@ -222,10 +226,10 @@ export async function GET(request: Request) {
     }));
   }
 
-  // Load recent chat messages from Supabase (cached)
-  const chatMessages = activeMovie 
-    ? await loadRecentChatMessagesFromDb(activeMovie.id)
-    : [];
+  // Load recent chat messages: prioritize in-memory cinemaEngine messages first
+  const chatMessages = (cinemaEngine.chatMessages && cinemaEngine.chatMessages.length > 0)
+    ? cinemaEngine.chatMessages
+    : (activeMovie ? await loadRecentChatMessagesFromDb(activeMovie.id) : []);
 
   const phase = liveState?.phase || cinemaEngine.phase || 'PLAYING';
   const phaseDuration = liveState?.phaseDuration || cinemaEngine.phaseDuration || (phase === 'VOTING' ? 10 : phase === 'BLOCKBUSTER_VOTING' ? 60 : 15);
@@ -267,8 +271,8 @@ export async function GET(request: Request) {
       : (liveState?.totalAudience || cinemaEngine.totalAudience || 0),
     isLive: liveState?.isLive !== false,
     isPaused: liveState?.isPaused ?? false,
-    isGenerationPaused: liveState?.isGenerationPaused ?? false,
-    isMovieGenerationPaused: liveState?.isMovieGenerationPaused ?? cinemaEngine.isMovieGenerationPaused ?? false,
+    isGenerationPaused: liveState?.isGenerationPaused ?? cinemaEngine.isGenerationPaused ?? true,
+    isMovieGenerationPaused: liveState?.isMovieGenerationPaused ?? cinemaEngine.isMovieGenerationPaused ?? true,
     videoModel: cinemaEngine.videoModel,
     videoResolution: cinemaEngine.videoResolution,
     blockbusterCandidates: (phase === 'PLAYING' || activeMovie?.status === 'streaming') ? [] : (cinemaEngine.blockbusterCandidates || []),
@@ -286,7 +290,8 @@ export async function GET(request: Request) {
     apiStatus: {
       hasDeepseek: Boolean(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY),
       hasFal: Boolean(process.env.FAL_KEY),
-      isMockMode: !(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY) || !process.env.FAL_KEY
+      hasMachgen: Boolean(process.env.MACHGEN_API_KEY),
+      isMockMode: !(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY) || (!process.env.FAL_KEY && !process.env.MACHGEN_API_KEY)
     },
     userId,
     hasUserVoted,

@@ -90,6 +90,8 @@ export interface MovieStep {
   newProp?: Prop; // Associated signature prop created specifically with this new character
   referenceVideoUrl?: string; // Previous video URL passed as continuity reference
   propReferenceImages?: string[]; // Prop image URLs passed as references to fal.ai
+  firstFrameUrl?: string; // Optional First Frame (FF) for keyframe continuity
+  lastFrameUrl?: string; // Optional Last Frame (LF) / End Frame for keyframe continuity
   environment: string;
   createdAt: string;
 }
@@ -234,6 +236,7 @@ export interface CinemaState {
   apiStatus?: {
     hasDeepseek: boolean;
     hasFal: boolean;
+    hasMachgen?: boolean;
     isMockMode: boolean;
   };
 }

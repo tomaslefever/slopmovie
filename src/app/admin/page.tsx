@@ -47,10 +47,18 @@ import Link from 'next/link';
 import { audioCues } from '@/lib/audio-cues';
 
 const VIDEO_MODEL_CHOICES = [
-  { id: 'minimax/h3-max-turbo/text-to-video', label: 'MiniMax H3-Max Turbo — Text-to-Video (Cost-Effective)' },
-  { id: 'minimax/h3-max/text-to-video', label: 'MiniMax H3-Max — Text-to-Video (High Fidelity)' },
-  { id: 'minimax/h3-max/reference-to-video', label: 'MiniMax H3-Max — Reference-to-Video (Consistency Engine)' },
-  { id: 'minimax/h3-max/image-to-video', label: 'MiniMax H3-Max — Image-to-Video (Flux Keyframe)' }
+  // MachGen API (api.machgen.ai)
+  { id: 'machgen/minimax-h3-turbo/text-to-video', label: 'MachGen MiniMax H3-Turbo — Text-to-Video (Fast & Budget)' },
+  { id: 'machgen/minimax-h3-turbo/reference-to-video', label: 'MachGen MiniMax H3-Turbo — Reference-to-Video (Consistency)' },
+  { id: 'machgen/minimax-h3-turbo/image-to-video', label: 'MachGen MiniMax H3-Turbo — Image-to-Video (First Frame / FF)' },
+  { id: 'machgen/minimax-h3-turbo/first-last-frame', label: 'MachGen MiniMax H3-Turbo — First & Last Frame (FF + LF / F2F)' },
+  { id: 'machgen/minimax-h3/text-to-video', label: 'MachGen MiniMax H3 — Text-to-Video (768p)' },
+  { id: 'machgen/minimax-h3/reference-to-video', label: 'MachGen MiniMax H3 — Reference-to-Video (768p)' },
+  // fal.ai Models
+  { id: 'minimax/h3-max-turbo/text-to-video', label: 'Fal.ai MiniMax H3-Max Turbo — Text-to-Video (Cost-Effective)' },
+  { id: 'minimax/h3-max/text-to-video', label: 'Fal.ai MiniMax H3-Max — Text-to-Video (High Fidelity)' },
+  { id: 'minimax/h3-max/reference-to-video', label: 'Fal.ai MiniMax H3-Max — Reference-to-Video (Consistency Engine)' },
+  { id: 'minimax/h3-max/image-to-video', label: 'Fal.ai MiniMax H3-Max — Image-to-Video (Flux Keyframe)' }
 ];
 
 const VIDEO_RESOLUTION_CHOICES = [
@@ -85,9 +93,9 @@ export default function AdminDashboardPage() {
   const [isTogglingPause, setIsTogglingPause] = useState(false);
   const [selectedStepNumber, setSelectedStepNumber] = useState<number | ''>('');
   const [isJumpingStep, setIsJumpingStep] = useState(false);
-  const [videoModel, setVideoModel] = useState<string>('minimax/h3-max-turbo/text-to-video');
+  const [videoModel, setVideoModel] = useState<string>('machgen/minimax-h3-turbo/text-to-video');
   const [videoResolution, setVideoResolution] = useState<string>('');
-  const [draftVideoModel, setDraftVideoModel] = useState<string>('minimax/h3-max-turbo/text-to-video');
+  const [draftVideoModel, setDraftVideoModel] = useState<string>('machgen/minimax-h3-turbo/text-to-video');
   const [draftVideoResolution, setDraftVideoResolution] = useState<string>('');
   const [isModelDirty, setIsModelDirty] = useState(false);
   const [isSavingModelConfig, setIsSavingModelConfig] = useState(false);
@@ -2147,7 +2155,7 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
                 <p className="text-xs text-neutral-400 max-w-xl">
-                  Select the fal.ai video model and resolution, then click <strong className="text-white">Save Configuration</strong> to persist. Turbo is the cost-effective model; Reference-to-Video is highest tier.
+                  Select the generative video model (MachGen API or fal.ai) and resolution, then click <strong className="text-white">Save Configuration</strong> to persist. MachGen MiniMax H3-Turbo is ultra-fast and cost-effective.
                 </p>
               </div>
 
@@ -2167,13 +2175,25 @@ export default function AdminDashboardPage() {
                     ))}
                   </select>
                   <span className="text-[10px] font-mono text-neutral-500">
-                    {draftVideoModel === 'minimax/h3-max-turbo/text-to-video'
-                      ? 'Turbo: fast and cost-effective text-to-video. No reference images. 480P 16:9 default.'
-                      : draftVideoModel === 'minimax/h3-max/text-to-video'
-                        ? 'Standard: higher-cost text-to-video. No reference images. 768P default.'
-                        : draftVideoModel === 'minimax/h3-max/image-to-video'
-                          ? 'Image-to-Video: Flux generates an initial keyframe, then MiniMax animates the video.'
-                          : 'Reference-to-Video: Uses previous scene clip and prop assets as visual consistency references.'}
+                    {draftVideoModel === 'machgen/minimax-h3-turbo/text-to-video'
+                      ? 'MachGen Turbo: Ultra-fast, low cost text-to-video via api.machgen.ai. 768P 16:9 default.'
+                      : draftVideoModel === 'machgen/minimax-h3-turbo/reference-to-video'
+                        ? 'MachGen Turbo R2V: Fast MiniMax H3 Turbo with scene & prop references via api.machgen.ai.'
+                        : draftVideoModel === 'machgen/minimax-h3-turbo/image-to-video'
+                          ? 'MachGen Turbo I2V: MiniMax H3 Turbo animation from start frame (FF) via api.machgen.ai.'
+                          : draftVideoModel === 'machgen/minimax-h3-turbo/first-last-frame'
+                            ? 'MachGen Turbo FF+LF: Transition bounded between First Frame (FF) and Last Frame (LF / F2F) for seamless continuity.'
+                            : draftVideoModel === 'machgen/minimax-h3/text-to-video'
+                              ? 'MachGen H3: High-fidelity MiniMax H3 text-to-video 768p via api.machgen.ai.'
+                              : draftVideoModel === 'machgen/minimax-h3/reference-to-video'
+                                ? 'MachGen H3 R2V: High-fidelity MiniMax H3 reference-to-video via api.machgen.ai.'
+                                : draftVideoModel === 'minimax/h3-max-turbo/text-to-video'
+                                  ? 'Fal Turbo: fast text-to-video. No reference images. 480P 16:9 default.'
+                                  : draftVideoModel === 'minimax/h3-max/text-to-video'
+                                    ? 'Fal Standard: higher-cost text-to-video. No reference images. 768P default.'
+                                    : draftVideoModel === 'minimax/h3-max/image-to-video'
+                                      ? 'Fal Image-to-Video: Flux generates an initial keyframe, then MiniMax animates.'
+                                      : 'Fal Reference-to-Video: Uses previous scene clip and prop assets for consistency.'}
                   </span>
                 </div>
 

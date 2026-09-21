@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { MovieStep, PlaybackPhase, ImmersiveAd } from '@/types/cinema';
-import { Volume2, VolumeX, Maximize2, Minimize2, Radio, Clock } from 'lucide-react';
+import { Volume2, VolumeX, Maximize2, Minimize2, Radio, Clock, Subtitles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { audioCues } from '@/lib/audio-cues';
 import { ImmersiveAdPlayer } from './ImmersiveAdPlayer';
@@ -56,6 +56,10 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   inSceneAd,
   isPaused = false,
   isGenerationPaused = false,
+  subtitlesEnabled = true,
+  subtitleLanguage = 'es',
+  onToggleSubtitles,
+  onChangeSubtitleLanguage,
   onPlaybackStarted,
   onPlaybackEnded,
   onAdCompleted,
@@ -133,8 +137,9 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   const segmentsRef = useRef<PlaybackSegment[]>(segments);
   segmentsRef.current = segments;
 
-  // 15s Clip Playback Timer
+  // 15s Clip Playback Timer & Subtitle Tracking
   const [clipSeconds, setClipSeconds] = useState<number>(0);
+  const [preciseSeconds, setPreciseSeconds] = useState<number>(0);
 
   const handleTimeUpdate = React.useCallback((e: React.SyntheticEvent<HTMLVideoElement>, slot: 'A' | 'B') => {
     if (slot !== activeSlotRef.current) return;
@@ -142,8 +147,18 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
     if (phase === 'PLAYING') {
       const rawSec = v.currentTime || 0;
       setClipSeconds(Math.min(15, Math.floor(rawSec)));
+      setPreciseSeconds(rawSec);
     }
   }, [phase]);
+
+  // Active subtitle cue for currently playing clip
+  const activeSubtitleCue = React.useMemo(() => {
+    if (!subtitlesEnabled || phase !== 'PLAYING') return null;
+    const cues = activeStep.subtitles;
+    if (!Array.isArray(cues) || cues.length === 0) return null;
+    const currentSec = preciseSeconds > 0 ? preciseSeconds : clipSeconds;
+    return cues.find(cue => currentSec >= cue.start && currentSec <= cue.end) || null;
+  }, [subtitlesEnabled, phase, activeStep.subtitles, preciseSeconds, clipSeconds]);
 
   // Teardown all videos on component unmount
   useEffect(() => {
@@ -240,6 +255,7 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
   // Reset clip seconds on step/segment transition
   useEffect(() => {
     setClipSeconds(0);
+    setPreciseSeconds(0);
   }, [stepKey, currentSegmentIndex]);
 
   // Initialize or seamlessly transition slots when scene / activeStep changes
@@ -673,6 +689,33 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
         </div>
       )}
 
+      {/* Dynamic Subtitle Overlay during PLAYING phase */}
+      <AnimatePresence>
+        {activeSubtitleCue && (
+          <motion.div
+            key={`${activeSubtitleCue.start}_${activeSubtitleCue.speaker}_${activeSubtitleCue.text}`}
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            className="absolute bottom-16 md:bottom-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none w-full px-4 flex justify-center"
+          >
+            <div className="inline-flex flex-col items-center max-w-[90%] sm:max-w-[80%] md:max-w-[70%] px-4 py-2 rounded-xl bg-black/80 border border-white/15 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.85)]">
+              {activeSubtitleCue.speaker && (
+                <span className="text-[10px] md:text-[11px] font-mono font-bold tracking-widest text-cyan-400 uppercase bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/30 mb-1">
+                  [{activeSubtitleCue.speaker}]
+                </span>
+              )}
+              <p className="text-xs sm:text-sm md:text-base font-medium text-white text-center leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                {subtitleLanguage === 'es'
+                  ? (activeSubtitleCue.textEs || activeSubtitleCue.text)
+                  : (activeSubtitleCue.text || activeSubtitleCue.textEs)}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Interactive Unmute Banner (Shown ONLY when browser autoplay policy blocks sound before user clicks) */}
       <AnimatePresence>
         {isAutoplayBlocked && !isMuted && phase === 'PLAYING' && (
@@ -762,8 +805,30 @@ const CinemaPlayerBase: React.FC<CinemaPlayerProps> = ({
           </div>
         </div>
 
-        {/* Video Controls (Mute & Fullscreen ONLY) */}
+        {/* Video Controls (Subtitles, Mute & Fullscreen) */}
         <div className="flex items-center space-x-2 relative pointer-events-auto">
+          {/* Subtitles Toggle & Language Switch */}
+          <div className="flex items-center bg-black/70 border border-white/10 rounded-full p-0.5 md:backdrop-blur-md">
+            <button
+              onClick={() => onToggleSubtitles?.(!subtitlesEnabled)}
+              className={`p-2 rounded-full transition-all hover:scale-105 active:scale-95 ${
+                subtitlesEnabled ? 'text-cyan-400 bg-cyan-950/70' : 'text-neutral-500 hover:text-neutral-300'
+              }`}
+              title={subtitlesEnabled ? "Desactivar subtítulos" : "Activar subtítulos"}
+            >
+              <Subtitles className="w-4 h-4" />
+            </button>
+            {subtitlesEnabled && (
+              <button
+                onClick={() => onChangeSubtitleLanguage?.(subtitleLanguage === 'es' ? 'en' : 'es')}
+                className="px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-300 hover:text-white transition-colors"
+                title={`Cambiar idioma (${subtitleLanguage.toUpperCase()})`}
+              >
+                {subtitleLanguage.toUpperCase()}
+              </button>
+            )}
+          </div>
+
           {/* Mute Button */}
           <button
             onClick={toggleMute}
@@ -813,5 +878,7 @@ export const CinemaPlayer = React.memo(CinemaPlayerBase, (prev, next) =>
   prev.isGenerationPaused === next.isGenerationPaused &&
   prev.activeAd === next.activeAd &&
   prev.inSceneAd === next.inSceneAd &&
+  prev.subtitlesEnabled === next.subtitlesEnabled &&
+  prev.subtitleLanguage === next.subtitleLanguage &&
   prev.fullscreenContainerRef === next.fullscreenContainerRef
 );

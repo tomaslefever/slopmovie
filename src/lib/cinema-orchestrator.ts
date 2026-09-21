@@ -1,5 +1,5 @@
 import { Movie, MovieStep, CinemaState, ChatMessage, PlaybackPhase, ImmersiveAd, AdsConfig, BlockbusterCandidate, TOTAL_STEPS, DecisionOption } from '@/types/cinema';
-import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek, generateImmersiveAdPromptWithDeepSeek, ensureOptionPrompts, PROCEDURAL_DILEMMAS } from './deepseek';
+import { generateStoryBibleWithDeepSeek, generateNextStepWithDeepSeek, generateMovieFinalSummaryWithDeepSeek, generateBlockbusterCandidatesWithDeepSeek, generateImmersiveAdPromptWithDeepSeek, ensureOptionPrompts, generateSubtitlesFromDialogue, PROCEDURAL_DILEMMAS } from './deepseek';
 import type { CommentInfluence } from './deepseek';
 import { generateVideoWithFal, generateDualShotVideoWithFal, CINEMATIC_MOCK_VIDEOS, DEFAULT_VIDEO_MODEL, isKnownVideoResolution, resolveVideoModel, isRealGeneratedVideoUrl } from './fal-video';
 import type { VideoModelId, VideoResolution } from './fal-video';
@@ -129,8 +129,8 @@ class CinemaOrchestrator {
   private usedInfluenceCommentIds: Set<string> = new Set();
   public isRunning: boolean = false;
   public isPaused: boolean = false;
-  public isGenerationPaused: boolean = false;
-  public isMovieGenerationPaused: boolean = false;
+  public isGenerationPaused: boolean = true;
+  public isMovieGenerationPaused: boolean = true;
   public videoModel: VideoModelId = DEFAULT_VIDEO_MODEL;
   public videoResolution: VideoResolution | null = null;
   private timerInterval: NodeJS.Timeout | null = null;
@@ -508,6 +508,7 @@ class CinemaOrchestrator {
             const videoResult = await generateVideoWithFal({
               prompt: step.visualPrompt,
               cameraMotion: step.cameraMotionPrompt,
+              dialogueSnippet: step.dialogueSnippet,
               stepNumber: step.stepNumber,
               propReferenceImages: stepPropImages.length > 0 ? stepPropImages : undefined,
               voiceDirection: step.voiceDirection,
@@ -649,8 +650,8 @@ class CinemaOrchestrator {
         this.votesB = liveState.votesB || 0;
         this.totalAudience = liveState.totalAudience || 142;
         this.isPaused = liveState.isPaused ?? false;
-        this.isGenerationPaused = liveState.isGenerationPaused ?? false;
-        this.isMovieGenerationPaused = liveState.isMovieGenerationPaused ?? false;
+        this.isGenerationPaused = liveState.isGenerationPaused ?? true;
+        this.isMovieGenerationPaused = liveState.isMovieGenerationPaused ?? true;
         if (liveState.adsConfig) this.adsConfig = liveState.adsConfig;
         if (liveState.activeAd) this.activeAd = liveState.activeAd;
         const syncedModel = resolveVideoModel(liveState.videoModel);
@@ -685,15 +686,19 @@ class CinemaOrchestrator {
    */
   public async tickWorker(workerId: string) {
     // Multi-instance / DB sync: check if active movie in Supabase differs from in-memory movie
+    // Throttle check to once every 60 seconds (12 ticks * 5s) instead of querying every 5s
+    (this as any)._dbSyncCounter = ((this as any)._dbSyncCounter || 0) + 1;
     if (isSupabaseConfigured() && !this.isResetting && !this.isAdvancing) {
-      try {
-        const liveState = await loadLiveCinemaStateFromDb();
-        if (liveState?.movieId && (!this.movie || this.movie.id !== liveState.movieId)) {
-          console.log(`[CinemaWorker] Active movie in DB (${liveState.movieId}) differs from memory. Re-syncing...`);
-          await this.syncFromDatabase();
+      if (!this.movie || (this as any)._dbSyncCounter % 12 === 0) {
+        try {
+          const liveState = await loadLiveCinemaStateFromDb();
+          if (liveState?.movieId && (!this.movie || this.movie.id !== liveState.movieId)) {
+            console.log(`[CinemaWorker] Active movie in DB (${liveState.movieId}) differs from memory. Re-syncing...`);
+            await this.syncFromDatabase();
+          }
+        } catch {
+          // non-blocking
         }
-      } catch {
-        // non-blocking
       }
     }
 
@@ -740,9 +745,12 @@ class CinemaOrchestrator {
       // If phase is BLOCKBUSTER_VOTING, continue down to timer calculation and transition!
     }
 
-    // If stream is paused by director, refresh heartbeat in Supabase without advancing timers
+    // If stream is paused by director, refresh heartbeat in Supabase every 30s without advancing timers
     if (this.isPaused) {
-      await this.persistCurrentStateToSupabase(workerId);
+      (this as any)._pausedHeartbeatCounter = ((this as any)._pausedHeartbeatCounter || 0) + 1;
+      if ((this as any)._pausedHeartbeatCounter % 6 === 0) { // Every 30s instead of every 5s
+        await this.persistCurrentStateToSupabase(workerId);
+      }
       return;
     }
 
@@ -1244,7 +1252,9 @@ class CinemaOrchestrator {
           title: winningOption.title || `Scene ${nextStepNum}`,
           synopsis: winningOption.synopsis || `${winningOption.title}: ${winningOption.text}`,
           dialogueSnippet: winningOption.dialogueSnippet,
-          subtitles: [],
+          subtitles: (winningOption.subtitles && winningOption.subtitles.length > 0)
+            ? winningOption.subtitles
+            : generateSubtitlesFromDialogue(winningOption.dialogueSnippet, this.movie.bible.characters[0]?.name, this.movie.bible.characters[1]?.name),
           voiceDirection: winningOption.voiceDirection || currentStep.voiceDirection,
           visualPrompt: winningOption.visualPrompt || "",
           cameraMotionPrompt: winningOption.cameraMotionPrompt || "",
@@ -1329,6 +1339,7 @@ class CinemaOrchestrator {
         characterName: this.movie.bible.characters[0]?.name,
         visualTraits: this.movie.bible.characters[0]?.visualTraits,
         clothing: this.movie.bible.characters[0]?.clothing,
+        secondCharacterName: this.movie.bible.characters[1]?.name || "Tactical Comms",
         propName: this.movie.bible.props[0]?.name,
         propVisual: this.movie.bible.props[0]?.visualAppearance,
         envName: this.movie.bible.environments[0]?.name,
@@ -1336,9 +1347,11 @@ class CinemaOrchestrator {
       });
 
       const videoPromptToUse = guaranteedWinningOption.visualPrompt!;
-      const cameraPromptToUse = guaranteedWinningOption.cameraMotionPrompt || "Cinematic camera dolly tracking with shallow depth of field, 24fps";
-      const videoPrompt2ToUse = guaranteedWinningOption.visualPrompt2 || `${videoPromptToUse}, climax reaction and dramatic consequence`;
-      const cameraPrompt2ToUse = guaranteedWinningOption.cameraMotionPrompt2 || "Cinematic tracking shot, closer framing, high intensity, 24fps";
+      const cameraPromptToUse = guaranteedWinningOption.cameraMotionPrompt || "Fast-paced Steadicam tracking shot following subject, 24fps kinetic motion blur";
+      const videoPrompt2ToUse = guaranteedWinningOption.visualPrompt2 || `${videoPromptToUse}, fast-paced climax reaction and rapid consequence`;
+      const cameraPrompt2ToUse = guaranteedWinningOption.cameraMotionPrompt2 || "Fast-paced camera push tightening framing, high kinetic velocity, 24fps motion blur";
+      const dialogue1ToUse = guaranteedWinningOption.dialogueSnippet;
+      const dialogue2ToUse = guaranteedWinningOption.dialogueSnippet;
       const voiceDirectionToUse = guaranteedWinningOption.voiceDirection || currentStep.voiceDirection || this.movie.bible.characters[0]?.voicePrompt;
 
       // Check if a mid-roll commercial ad should be embedded in Block 2 of this scene (never in the first 4 opening scenes)
@@ -1380,8 +1393,10 @@ class CinemaOrchestrator {
             return generateDualShotVideoWithFal({
               prompt1: videoPromptToUse,
               cameraMotion1: cameraPromptToUse,
+              dialogue1: dialogue1ToUse,
               prompt2: videoPrompt2ToUse,
               cameraMotion2: cameraPrompt2ToUse,
+              dialogue2: dialogue2ToUse,
               stepNumber: nextStepNum,
               previousVideoUrl: storyReferenceUrl,
               propReferenceImages: activePropImages,
@@ -1495,12 +1510,22 @@ class CinemaOrchestrator {
         if (isReal1 && videoRes.shot1?.videoUrl) registerGeneratedVideoUrlInPool(videoRes.shot1.videoUrl);
         if (isReal2 && videoRes.shot2?.videoUrl) registerGeneratedVideoUrlInPool(videoRes.shot2.videoUrl);
 
+        const stepSubtitles = (guaranteedWinningOption.subtitles && guaranteedWinningOption.subtitles.length > 0)
+          ? guaranteedWinningOption.subtitles
+          : (nextStepRaw?.subtitles && nextStepRaw.subtitles.length > 0)
+          ? nextStepRaw.subtitles
+          : generateSubtitlesFromDialogue(
+              nextStepRaw?.dialogueSnippet || guaranteedWinningOption.dialogueSnippet,
+              this.movie.bible.characters[0]?.name,
+              this.movie.bible.characters[1]?.name
+            );
+
         nextStep = {
           stepNumber: nextStepNum,
           title: guaranteedWinningOption.title || nextStepRaw?.title || `Scene ${nextStepNum}`,
           synopsis: nextStepRaw?.synopsis || guaranteedWinningOption.synopsis || `${guaranteedWinningOption.title}: ${guaranteedWinningOption.text}`,
           dialogueSnippet: nextStepRaw?.dialogueSnippet || guaranteedWinningOption.dialogueSnippet,
-          subtitles: [],
+          subtitles: stepSubtitles,
           voiceDirection: nextStepRaw?.voiceDirection || voiceDirectionToUse,
           visualPrompt: videoPromptToUse,
           cameraMotionPrompt: cameraPromptToUse,
@@ -1563,13 +1588,20 @@ class CinemaOrchestrator {
         await this.broadcastStateSnapshot(workerId);
       } catch (err) {
         console.error("Error generating next step:", err);
-        // Fallback recovery: no se fuerza video_url en base de datos
+        const fallbackSubtitles = (guaranteedWinningOption.subtitles && guaranteedWinningOption.subtitles.length > 0)
+          ? guaranteedWinningOption.subtitles
+          : generateSubtitlesFromDialogue(
+              guaranteedWinningOption.dialogueSnippet,
+              this.movie.bible.characters[0]?.name,
+              this.movie.bible.characters[1]?.name
+            );
+
         const fallbackStep: MovieStep = {
           stepNumber: nextStepNum,
           title: guaranteedWinningOption.title || `Scene ${nextStepNum}`,
           synopsis: guaranteedWinningOption.synopsis || guaranteedWinningOption.title,
           dialogueSnippet: guaranteedWinningOption.dialogueSnippet,
-          subtitles: [],
+          subtitles: fallbackSubtitles,
           visualPrompt: videoPromptToUse,
           cameraMotionPrompt: cameraPromptToUse,
           visualPrompt2: videoPrompt2ToUse,
@@ -2548,7 +2580,8 @@ class CinemaOrchestrator {
       apiStatus: {
         hasDeepseek: Boolean(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY),
         hasFal: Boolean(process.env.FAL_KEY),
-        isMockMode: !(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY) || !process.env.FAL_KEY
+        hasMachgen: Boolean(process.env.MACHGEN_API_KEY),
+        isMockMode: !(process.env.DEEPSEEK_API_KEY || process.env.NVIDIA_API_KEY) || (!process.env.FAL_KEY && !process.env.MACHGEN_API_KEY)
       }
     };
   }
@@ -3233,7 +3266,15 @@ class CinemaOrchestrator {
     const state = this.getState();
     await this.persistCurrentStateToSupabase(workerId);
     await broadcastCinemaEvent('state_snapshot', {
-      movie: state.movie,
+      movie: {
+        id: state.movie.id,
+        title: state.movie.title,
+        genre: state.movie.genre,
+        tagline: state.movie.tagline,
+        status: state.movie.status,
+        currentStep: state.movie.currentStep,
+        totalSteps: state.movie.totalSteps
+      } as any,
       phase: state.phase,
       timeRemaining: state.timeRemaining,
       phaseDuration: state.phaseDuration,

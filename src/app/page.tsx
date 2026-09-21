@@ -276,9 +276,15 @@ export default function CinemaStreamingPage() {
           return {
             ...prev,
             ...snapshot,
-            apiStatus: snapshot.apiStatus ?? prev.apiStatus ?? defaultApiStatus,
-            movie: snapshot.movie ?? prev.movie,
-            activeStep: snapshot.activeStep ?? prev.activeStep,
+            movie: snapshot.movie
+              ? {
+                  ...prev.movie,
+                  ...snapshot.movie,
+                  steps: (snapshot.movie.steps && snapshot.movie.steps.length > 0)
+                    ? snapshot.movie.steps
+                    : (prev.movie?.steps || [])
+                }
+              : prev.movie,
             phase: snapshot.phase ?? prev.phase,
             // Only update phaseEndsAt and let local wall-clock timer drive countdown smoothly
             phaseEndsAt: snapshot.phaseEndsAt ?? prev.phaseEndsAt,

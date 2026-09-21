@@ -1,7 +1,34 @@
 import { Movie, MovieStep, ChatMessage, Prop, ImmersiveAd, PlaybackPhase, AdsConfig, BlockbusterCandidate, TOTAL_STEPS, ContactMessage, isValidStepVideoUrl } from '@/types/cinema';
 import { getSupabaseServerClient } from './server';
 
+// ── Circuit Breaker for HTTP 402 / Quota Exceeded ─────────────────────────────
+let supabaseQuotaExceededUntil = 0;
+
+export function isSupabaseQuotaExceeded(): boolean {
+  return Date.now() < supabaseQuotaExceededUntil;
+}
+
+export function markSupabaseQuotaExceeded(retryAfterMs = 60000) {
+  const isFirst = Date.now() >= supabaseQuotaExceededUntil;
+  supabaseQuotaExceededUntil = Math.max(supabaseQuotaExceededUntil, Date.now() + retryAfterMs);
+  if (isFirst) {
+    console.warn(`[Supabase Circuit Breaker] 🛑 HTTP 402 / Quota exceeded. Pausing external Supabase REST calls for ${retryAfterMs / 1000}s to protect egress.`);
+  }
+}
+
+export function checkAndHandleQuotaError(error: any): boolean {
+  if (!error) return false;
+  const status = error.status || error.statusCode || error.code;
+  const msg = String(error.message || '');
+  if (status === 402 || status === '402' || msg.includes('Payment Required') || msg.includes('quota') || msg.includes('spend cap')) {
+    markSupabaseQuotaExceeded(60000);
+    return true;
+  }
+  return false;
+}
+
 export function isSupabaseConfigured(): boolean {
+  if (isSupabaseQuotaExceeded()) return false;
   return getSupabaseServerClient() !== null;
 }
 
@@ -19,8 +46,15 @@ const memoryCache = {
   blockbusterVoteCounts: new Map<string, CacheEntry<Record<'A' | 'B' | 'C' | 'D', number>>>(),
   activeViewersCount: null as CacheEntry<number | null> | null,
   recentChat: new Map<string, CacheEntry<ChatMessage[]>>(),
-  recentVisits: new Map<string, number>() // viewerId -> timestamp ms
+  recentVisits: new Map<string, number>(), // viewerId -> timestamp ms
+  viewerPreferences: new Map<string, CacheEntry<{ subtitlesEnabled: boolean; subtitleLanguage: 'en' | 'es'; nickname: string | null }>>()
 };
+
+export function updateActiveMovieCache(movie: Movie) {
+  const expiresAt = Date.now() + 60000; // 60s TTL
+  memoryCache.activeMovie.set('active_streaming', { data: movie, expiresAt });
+  memoryCache.activeMovie.set(movie.id, { data: movie, expiresAt });
+}
 
 export function invalidateCinemaCache() {
   memoryCache.liveCinemaState = null;
@@ -31,6 +65,9 @@ export function invalidateCinemaCache() {
 
 let hasShownSchemaHelp = false;
 function logSupabaseError(action: string, error: any) {
+  if (checkAndHandleQuotaError(error)) {
+    return;
+  }
   if (error?.message?.includes('schema cache') || error?.message?.includes('does not exist')) {
     if (!hasShownSchemaHelp) {
       hasShownSchemaHelp = true;
@@ -65,9 +102,9 @@ export async function broadcastCinemaEvent(event: string, payload: any): Promise
  * Persist or update an entire movie record
  */
 export async function persistMovie(movie: Movie): Promise<void> {
-  invalidateCinemaCache();
+  updateActiveMovieCache(movie);
   const supabase = getSupabaseServerClient();
-  if (!supabase) return;
+  if (!supabase || isSupabaseQuotaExceeded()) return;
 
   try {
     // Invariant: strictly ONE movie can have status 'streaming' at any given time
@@ -417,8 +454,12 @@ export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | n
     return cached.data;
   }
 
+  if (isSupabaseQuotaExceeded()) {
+    return cached?.data || null;
+  }
+
   const supabase = getSupabaseServerClient();
-  if (!supabase) return null;
+  if (!supabase) return cached?.data || null;
 
   try {
     let movies: any[] | null = null;
@@ -507,7 +548,7 @@ export async function loadActiveMovieFromDb(movieId?: string): Promise<Movie | n
 
     memoryCache.activeMovie.set(cacheKey, {
       data: movieObj,
-      expiresAt: now + 5000 // 5s TTL
+      expiresAt: now + 60000 // 60s TTL
     });
 
     return movieObj;
@@ -1526,8 +1567,12 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
     return memoryCache.liveCinemaState.data;
   }
 
+  if (isSupabaseQuotaExceeded()) {
+    return memoryCache.liveCinemaState?.data || null;
+  }
+
   const supabase = getSupabaseServerClient();
-  if (!supabase) return null;
+  if (!supabase) return memoryCache.liveCinemaState?.data || null;
 
   // 1. Try public.cinema_state
   try {
@@ -1536,18 +1581,22 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
       query = query.eq('movie_id', movieId);
     }
     const { data, error } = await query.maybeSingle();
-    if (!error && data) {
+    if (error) {
+      checkAndHandleQuotaError(error);
+    } else if (data) {
       // If movieId wasn't explicitly requested, check if the cinema_state row references
       // a defunct/completed movie when a real streaming movie exists in public.movies
       let isStaleMovieRef = false;
       if (!movieId && data.movie_id) {
-        const { data: movieRow } = await supabase
+        const { data: movieRow, error: statusErr } = await supabase
           .from('movies')
           .select('status')
           .eq('id', data.movie_id)
           .maybeSingle();
 
-        if (movieRow?.status === 'completed' && data.phase !== 'BLOCKBUSTER_VOTING' && data.phase !== 'GENERATING') {
+        if (statusErr) {
+          checkAndHandleQuotaError(statusErr);
+        } else if (movieRow?.status === 'completed' && data.phase !== 'BLOCKBUSTER_VOTING' && data.phase !== 'GENERATING') {
           isStaleMovieRef = true;
         }
       }
@@ -1583,7 +1632,7 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
 
         memoryCache.liveCinemaState = {
           data: record,
-          expiresAt: now + 2500 // 2.5s TTL
+          expiresAt: now + 30000 // 30s TTL
         };
 
         return record;
@@ -1598,7 +1647,7 @@ export async function loadLiveCinemaStateFromDb(movieId?: string): Promise<LiveC
   if (fallbackRecord) {
     memoryCache.liveCinemaState = {
       data: fallbackRecord,
-      expiresAt: now + 2500
+      expiresAt: now + 30000 // 30s TTL
     };
   }
   return fallbackRecord;
@@ -1633,19 +1682,40 @@ async function loadBibleLiveState(
   return null;
 }
 
+interface LocalWorkerLockState {
+  workerId: string;
+  isLeader: boolean;
+  lastRenewedAt: number;
+}
+let localWorkerLockState: LocalWorkerLockState | null = null;
+
 /**
  * Acquire or renew the single worker leader lock in Supabase.
  * Uses atomic heartbeat comparison:
- * A worker holds the lock if its heartbeat is fresher than 6 seconds ago.
- * If stale or empty or matching this worker, lock is granted!
+ * A worker holds the lock if its heartbeat is fresher than 60 seconds ago.
+ * Decoupled from the 5s tick: local leader caches the lock for 25s between renewals.
  */
 export async function acquireOrRenewWorkerLock(workerId: string): Promise<boolean> {
+  const now = Date.now();
+
+  // 0. Cache check: If this worker is already the confirmed leader and renewed < 25s ago,
+  // do NOT query Supabase every 5s! Lock remains valid for 60s.
+  if (localWorkerLockState && localWorkerLockState.workerId === workerId && localWorkerLockState.isLeader) {
+    if (now - localWorkerLockState.lastRenewedAt < 25000) {
+      return true;
+    }
+  }
+
+  // If Supabase quota was exceeded, don't spam requests. Maintain in-memory leadership.
+  if (isSupabaseQuotaExceeded()) {
+    return localWorkerLockState?.isLeader ?? true;
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) return false;
 
-  const now = Date.now();
   const nowIso = new Date(now).toISOString();
-  const staleThreshold = 15000; // 15 seconds threshold (accommodates 5s heartbeat interval)
+  const staleThreshold = 60000; // 60 seconds threshold (renewed every 25s)
 
   // 1. Try public.cinema_state if available in Supabase
   try {
@@ -1655,84 +1725,81 @@ export async function acquireOrRenewWorkerLock(workerId: string): Promise<boolea
       .eq('id', 'active_session')
       .maybeSingle();
 
-    if (!error) {
+    if (error) {
+      checkAndHandleQuotaError(error);
+    } else {
       if (!state) {
         // Initialize active_session if missing
-        await supabase.from('cinema_state').insert({
+        const { error: insertErr } = await supabase.from('cinema_state').insert({
           id: 'active_session',
           worker_id: workerId,
           worker_heartbeat: nowIso,
           updated_at: nowIso
         });
-        return true;
-      }
-
-      const currentWorker = state.worker_id;
-      const lastHeartbeat = state.worker_heartbeat ? new Date(state.worker_heartbeat).getTime() : 0;
-      const isStale = (now - lastHeartbeat) > staleThreshold;
-
-      if (!currentWorker || currentWorker === workerId || isStale) {
-        const { error: updateError } = await supabase
-          .from('cinema_state')
-          .update({
-            worker_id: workerId,
-            worker_heartbeat: nowIso
-          })
-          .eq('id', 'active_session');
-
-        if (!updateError) return true;
+        if (!insertErr) {
+          localWorkerLockState = { workerId, isLeader: true, lastRenewedAt: now };
+          return true;
+        }
       } else {
-        // Another worker actively holds cinema_state lock
-        return false;
+        const currentWorker = state.worker_id;
+        const lastHeartbeat = state.worker_heartbeat ? new Date(state.worker_heartbeat).getTime() : 0;
+        const isStale = (now - lastHeartbeat) > staleThreshold;
+
+        if (!currentWorker || currentWorker === workerId || isStale) {
+          const { error: updateError } = await supabase
+            .from('cinema_state')
+            .update({
+              worker_id: workerId,
+              worker_heartbeat: nowIso
+            })
+            .eq('id', 'active_session');
+
+          if (!updateError) {
+            localWorkerLockState = { workerId, isLeader: true, lastRenewedAt: now };
+            return true;
+          } else {
+            checkAndHandleQuotaError(updateError);
+          }
+        } else {
+          // Another worker actively holds cinema_state lock
+          localWorkerLockState = { workerId, isLeader: false, lastRenewedAt: now };
+          return false;
+        }
       }
     }
   } catch {
     // Fall through to movies table
   }
 
-  // 2. Resilient fallback to public.movies (guaranteed table with existing realtime publication)
+  // 2. Resilient fallback to public.movies (only if quota is not exceeded)
+  if (isSupabaseQuotaExceeded()) {
+    return localWorkerLockState?.isLeader ?? true;
+  }
+
   try {
     const { data: movie, error: movieErr } = await supabase
       .from('movies')
-      .select('id, bible')
+      .select('id, status')
       .in('status', ['streaming', 'paused'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (movieErr || !movie) {
+    if (movieErr) {
+      checkAndHandleQuotaError(movieErr);
+      return localWorkerLockState?.isLeader ?? false;
+    }
+
+    if (!movie) {
       // If no movie created yet, grant lock so worker can initialize it
+      localWorkerLockState = { workerId, isLeader: true, lastRenewedAt: now };
       return true;
     }
 
-    const bible = (movie.bible as any) || {};
-    const liveState = bible.liveState || {};
-    const currentWorker = liveState.workerId;
-    const lastHeartbeat = liveState.workerHeartbeat ? new Date(liveState.workerHeartbeat).getTime() : 0;
-    const isStale = (now - lastHeartbeat) > staleThreshold;
-
-    if (!currentWorker || currentWorker === workerId || isStale) {
-      const updatedBible = {
-        ...bible,
-        liveState: {
-          ...liveState,
-          workerId: workerId,
-          workerHeartbeat: nowIso
-        }
-      };
-
-      const { error: updateErr } = await supabase
-        .from('movies')
-        .update({ bible: updatedBible })
-        .eq('id', movie.id);
-
-      return !updateErr;
-    }
-
-    // Another worker is actively holding the lock in movies.bible
-    return false;
+    localWorkerLockState = { workerId, isLeader: true, lastRenewedAt: now };
+    return true;
   } catch {
-    return false;
+    return localWorkerLockState?.isLeader ?? false;
   }
 }
 
@@ -1740,8 +1807,9 @@ export async function acquireOrRenewWorkerLock(workerId: string): Promise<boolea
  * Release worker lock on shutdown
  */
 export async function releaseWorkerLock(workerId: string): Promise<void> {
+  localWorkerLockState = null;
   const supabase = getSupabaseServerClient();
-  if (!supabase) return;
+  if (!supabase || isSupabaseQuotaExceeded()) return;
 
   try {
     await supabase
@@ -1976,25 +2044,42 @@ export async function loadViewerPreferences(
   userId: string,
   movieId?: string
 ): Promise<{ subtitlesEnabled: boolean; subtitleLanguage: 'en' | 'es'; nickname: string | null }> {
+  const now = Date.now();
+  const cached = memoryCache.viewerPreferences.get(userId);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  if (isSupabaseQuotaExceeded()) {
+    return cached?.data || { subtitlesEnabled: true, subtitleLanguage: 'en', nickname: null };
+  }
+
   const supabase = getSupabaseServerClient();
   if (!supabase) {
-    return { subtitlesEnabled: true, subtitleLanguage: 'en', nickname: null };
+    return cached?.data || { subtitlesEnabled: true, subtitleLanguage: 'en', nickname: null };
   }
 
   // 1. Try public.viewer_preferences
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('viewer_preferences')
       .select('subtitles_enabled, subtitle_language, nickname')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (data) {
-      return {
+    if (error) {
+      checkAndHandleQuotaError(error);
+    } else if (data) {
+      const pref = {
         subtitlesEnabled: data.subtitles_enabled !== false,
-        subtitleLanguage: data.subtitle_language === 'es' ? 'es' : 'en',
+        subtitleLanguage: (data.subtitle_language === 'es' ? 'es' : 'en') as 'en' | 'es',
         nickname: data.nickname || null
       };
+      memoryCache.viewerPreferences.set(userId, {
+        data: pref,
+        expiresAt: now + 300000 // 5 min TTL
+      });
+      return pref;
     }
   } catch {
     // Non-blocking

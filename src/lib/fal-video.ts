@@ -1,4 +1,5 @@
 import { fal } from "@fal-ai/client";
+import { generateVideoWithMachgen, generateDualShotVideoWithMachgen } from './machgen-video';
 
 // High-fidelity cinematic preview clips for mock/demo mode
 export const CINEMATIC_MOCK_VIDEOS = [
@@ -37,10 +38,11 @@ export const CINEMATIC_MOCK_VIDEOS = [
  */
 export function isRealGeneratedVideoUrl(url: string | null | undefined): boolean {
   if (!url || typeof url !== 'string') return false;
-  if (!/(fal\.media|fal\.ai|fal\.run|falserverless)/i.test(url)) return false;
+  if (/^\/api\/cinema\/machgen\/asset/i.test(url)) return true;
+  if (!/(fal\.media|fal\.ai|fal\.run|falserverless|machgen\.ai)/i.test(url)) return false;
   const bare = url.split('?')[0];
   if (/\.(mp4|webm|mov)$/i.test(bare)) return true;
-  if (/\/(files|media)\//i.test(url)) return true;
+  if (/\/(files|media|assets)\//i.test(url)) return true;
   return false;
 }
 
@@ -68,23 +70,43 @@ async function pickRandomArchivedGeneratedVideo(): Promise<{ videoUrl: string; t
   return null;
 }
 
-// Registro de modelos generativos de video disponibles en fal.ai
+// Registro de modelos generativos de video disponibles (fal.ai y MachGen)
+// fal.ai:
 // minimax/h3-max-turbo/text-to-video = "Text to Video Max Turbo" (el MÁS BARATO/rápido)
 // minimax/h3-max/text-to-video        = "Text to Video Max" (más costoso)
+// MachGen (api.machgen.ai):
+// machgen/minimax-h3-turbo/text-to-video = "MiniMax H3 Turbo Text-to-Video"
+// machgen/minimax-h3-turbo/reference-to-video = "MiniMax H3 Turbo Reference-to-Video"
+// machgen/minimax-h3-turbo/image-to-video = "MiniMax H3 Turbo Image-to-Video"
+// machgen/minimax-h3/text-to-video = "MiniMax H3 Text-to-Video"
+// machgen/minimax-h3/reference-to-video = "MiniMax H3 Reference-to-Video"
 export type VideoModelId =
   | 'minimax/h3-max/reference-to-video'
   | 'minimax/h3-max-turbo/text-to-video'
   | 'minimax/h3-max/text-to-video'
-  | 'minimax/h3-max/image-to-video';
+  | 'minimax/h3-max/image-to-video'
+  | 'machgen/minimax-h3-turbo/text-to-video'
+  | 'machgen/minimax-h3-turbo/reference-to-video'
+  | 'machgen/minimax-h3-turbo/image-to-video'
+  | 'machgen/minimax-h3-turbo/first-last-frame'
+  | 'machgen/minimax-h3/text-to-video'
+  | 'machgen/minimax-h3/reference-to-video';
 
-export const DEFAULT_VIDEO_MODEL: VideoModelId = 'minimax/h3-max-turbo/text-to-video';
+export const DEFAULT_VIDEO_MODEL: VideoModelId = 'machgen/minimax-h3-turbo/text-to-video';
 
-// Alias de ids antiguos persistidos en bibles de películas existentes
+// Alias de ids antiguos o cortos persistidos en bibles de películas existentes
 const LEGACY_VIDEO_MODEL_ALIASES: Record<string, VideoModelId> = {
-  'minimax/h3-max-turbo': 'minimax/h3-max-turbo/text-to-video'
+  'minimax/h3-max-turbo': 'minimax/h3-max-turbo/text-to-video',
+  'machgen/minimax-h3-turbo': 'machgen/minimax-h3-turbo/text-to-video',
+  'machgen/minimax-h3': 'machgen/minimax-h3/text-to-video',
+  'machgen': 'machgen/minimax-h3-turbo/text-to-video',
+  'machgen/minimax-h3-turbo/f2f': 'machgen/minimax-h3-turbo/first-last-frame',
+  'machgen/minimax-h3-turbo/ff-lf': 'machgen/minimax-h3-turbo/first-last-frame',
+  'machgen/f2f': 'machgen/minimax-h3-turbo/first-last-frame',
+  'machgen/ff-lf': 'machgen/minimax-h3-turbo/first-last-frame'
 };
 
-// Resoluciones soportadas por la familia MiniMax H3-Max en fal.ai (schema oficial: 480P, 768P, 1080P)
+// Resoluciones soportadas por MiniMax (480P, 768P, 1080P)
 export const VIDEO_RESOLUTIONS = ['480P', '768P', '1080P'] as const;
 export type VideoResolution = (typeof VIDEO_RESOLUTIONS)[number];
 
@@ -111,44 +133,111 @@ export interface VideoModelOption {
   supportsReferences: boolean;
   resolution: string;
   aspectRatio: string;
+  provider?: 'fal' | 'machgen';
 }
 
 export const VIDEO_MODEL_OPTIONS: VideoModelOption[] = [
+  // Fal.ai Models
   {
     id: 'minimax/h3-max-turbo/text-to-video',
-    label: 'MiniMax H3-Max Turbo — Text-to-Video',
-    description: 'Text-to-video rápido y ECONÓMICO. Sin referencias. 480P 16:9 por defecto.',
+    label: 'MiniMax H3-Max Turbo — Text-to-Video (Fal)',
+    description: 'Text-to-video rápido y ECONÓMICO en fal.ai. Sin referencias. 480P 16:9 por defecto.',
     kind: 'text-to-video',
     supportsReferences: false,
     resolution: '480P',
-    aspectRatio: '16:9'
+    aspectRatio: '16:9',
+    provider: 'fal'
   },
   {
     id: 'minimax/h3-max/text-to-video',
-    label: 'MiniMax H3-Max — Text-to-Video (costoso)',
-    description: 'Text-to-video estándar, más COSTOSO que Turbo. Sin referencias. 768P por defecto.',
+    label: 'MiniMax H3-Max — Text-to-Video (Fal - Costoso)',
+    description: 'Text-to-video estándar en fal.ai, más COSTOSO que Turbo. Sin referencias. 768P por defecto.',
     kind: 'text-to-video',
     supportsReferences: false,
     resolution: '768P',
-    aspectRatio: '16:9'
+    aspectRatio: '16:9',
+    provider: 'fal'
   },
   {
     id: 'minimax/h3-max/reference-to-video',
-    label: 'MiniMax H3-Max — Reference-to-Video (el más caro)',
-    description: 'Video con referencias (video previo, imágenes de props y audio). 768P adaptativo por defecto.',
+    label: 'MiniMax H3-Max — Reference-to-Video (Fal - Premium)',
+    description: 'Video con referencias en fal.ai (video previo, imágenes de props y audio). 768P adaptativo por defecto.',
     kind: 'reference-to-video',
     supportsReferences: true,
     resolution: '768P',
-    aspectRatio: 'adaptive'
+    aspectRatio: 'adaptive',
+    provider: 'fal'
   },
   {
     id: 'minimax/h3-max/image-to-video',
-    label: 'MiniMax H3-Max — Image-to-Video',
-    description: 'Anima un keyframe de continuidad generado con Flux. Sin referencias directas. 768P por defecto.',
+    label: 'MiniMax H3-Max — Image-to-Video (Fal)',
+    description: 'Anima un keyframe de continuidad generado con Flux en fal.ai. Sin referencias directas. 768P por defecto.',
     kind: 'image-to-video',
     supportsReferences: false,
     resolution: '768P',
-    aspectRatio: '16:9'
+    aspectRatio: '16:9',
+    provider: 'fal'
+  },
+  // MachGen Models (api.machgen.ai)
+  {
+    id: 'machgen/minimax-h3-turbo/text-to-video',
+    label: 'MachGen MiniMax H3-Turbo — Text-to-Video',
+    description: 'Generación acelerada y económica en MachGen API. 768P 16:9 por defecto.',
+    kind: 'text-to-video',
+    supportsReferences: false,
+    resolution: '768P',
+    aspectRatio: '16:9',
+    provider: 'machgen'
+  },
+  {
+    id: 'machgen/minimax-h3-turbo/reference-to-video',
+    label: 'MachGen MiniMax H3-Turbo — Reference-to-Video',
+    description: 'Video con referencias (clip previo y utilería) en MachGen API con mapeo @handles. 768P 16:9.',
+    kind: 'reference-to-video',
+    supportsReferences: true,
+    resolution: '768P',
+    aspectRatio: '16:9',
+    provider: 'machgen'
+  },
+  {
+    id: 'machgen/minimax-h3-turbo/image-to-video',
+    label: 'MachGen MiniMax H3-Turbo — Image-to-Video (First Frame / FF)',
+    description: 'Animación desde fotograma inicial (First Frame / FF) en MachGen API. 768P 16:9.',
+    kind: 'image-to-video',
+    supportsReferences: false,
+    resolution: '768P',
+    aspectRatio: '16:9',
+    provider: 'machgen'
+  },
+  {
+    id: 'machgen/minimax-h3-turbo/first-last-frame',
+    label: 'MachGen MiniMax H3-Turbo — First & Last Frame (FF + LF)',
+    description: 'Generación controlada entre fotograma inicial y fotograma final (FF + LF / F2F) en MachGen API. 768P 16:9.',
+    kind: 'image-to-video',
+    supportsReferences: true,
+    resolution: '768P',
+    aspectRatio: '16:9',
+    provider: 'machgen'
+  },
+  {
+    id: 'machgen/minimax-h3/text-to-video',
+    label: 'MachGen MiniMax H3 — Text-to-Video (768p)',
+    description: 'Text-to-video de alta fidelidad 768p en MachGen API.',
+    kind: 'text-to-video',
+    supportsReferences: false,
+    resolution: '768P',
+    aspectRatio: '16:9',
+    provider: 'machgen'
+  },
+  {
+    id: 'machgen/minimax-h3/reference-to-video',
+    label: 'MachGen MiniMax H3 — Reference-to-Video',
+    description: 'Reference-to-video de alta fidelidad con soporte de referencias en MachGen API.',
+    kind: 'reference-to-video',
+    supportsReferences: true,
+    resolution: '768P',
+    aspectRatio: '16:9',
+    provider: 'machgen'
   }
 ];
 
@@ -164,8 +253,13 @@ export interface VideoGenerationParams {
   previousVideoUrl?: string;
   propReferenceImages?: string[];
   voiceDirection?: string;
+  dialogueSnippet?: string;
   model?: VideoModelId;
   resolution?: VideoResolution;
+  firstFrameUrl?: string;
+  lastFrameUrl?: string;
+  startFrameUrl?: string;
+  endFrameUrl?: string;
 }
 
 export interface VideoGenerationResult {
@@ -222,10 +316,36 @@ export async function generateVideoWithFal({
   previousVideoUrl,
   propReferenceImages = [],
   voiceDirection = "",
+  dialogueSnippet = "",
   model = DEFAULT_VIDEO_MODEL,
-  resolution
+  resolution,
+  firstFrameUrl,
+  lastFrameUrl,
+  startFrameUrl,
+  endFrameUrl
 }: VideoGenerationParams): Promise<VideoGenerationResult> {
   const videoModel: VideoModelId = resolveVideoModel(model) || DEFAULT_VIDEO_MODEL;
+
+  // Enrutamiento directo al proveedor MachGen API (api.machgen.ai)
+  if (videoModel.startsWith('machgen/')) {
+    return generateVideoWithMachgen({
+      prompt,
+      cameraMotion,
+      stepNumber,
+      duration,
+      previousVideoUrl,
+      propReferenceImages,
+      voiceDirection,
+      dialogueSnippet,
+      model: videoModel,
+      resolution,
+      firstFrameUrl,
+      lastFrameUrl,
+      startFrameUrl,
+      endFrameUrl
+    });
+  }
+
   const modelOption = VIDEO_MODEL_OPTIONS.find(m => m.id === videoModel)!;
   const isTextToVideo = modelOption.kind === 'text-to-video';
   const isImageToVideo = modelOption.kind === 'image-to-video';
@@ -268,7 +388,7 @@ export async function generateVideoWithFal({
 
   const falKey = process.env.FAL_KEY;
 
-  // Build enhanced prompt embedding continuity anchors and audio voice directions
+  // Build enhanced prompt embedding continuity anchors, audio voice directions, and continuous dialogue
   let continuityContext = "";
   if (previousVideoUrl) {
     continuityContext += ` [CONTINUITY: Visual continuation seamlessly extending from previous scene clip (${previousVideoUrl})].`;
@@ -280,11 +400,19 @@ export async function generateVideoWithFal({
     continuityContext += ` [VOICE & AUDIO DESIGN: ${voiceDirection}].`;
   }
 
+  let dialogueContext = "";
+  if (dialogueSnippet && dialogueSnippet.trim().length > 0) {
+    dialogueContext = ` [PACING & DIALOGUE INTERACTION: Fast-paced cinematic rhythm, rapid speech delivery. Characters actively converse and exchange spoken dialogue throughout the entire shot with synchronized lip movements from opening to climax: "${dialogueSnippet.trim()}". Brisk back-and-forth verbal interaction, natural delivery, zero awkward pauses].`;
+  } else {
+    dialogueContext = ` [PACING & DIALOGUE INTERACTION: Fast-paced cinematic rhythm, snappy dialogue and reactive character speech throughout the shot, dynamic acoustic presence].`;
+  }
+
   // Cinematique Layered Synthesis for fal.ai / MiniMax:
   // Layer 1: [Visual Scene & Characters]
-  // Layer 2: [Cinematography & Camera Motion Cadence]
-  // Layer 3: [Color Science & Film Stock Texture]
-  const fullPrompt = `${prompt}.${continuityContext} Camera cinematography: ${cameraMotion}. Panavision anamorphic optics, organic 35mm film grain, 24fps cinematic motion blur.`;
+  // Layer 2: [Dialogue & Character Interaction Cadence]
+  // Layer 3: [Cinematography & Camera Motion Cadence]
+  // Layer 4: [Color Science & Film Stock Texture]
+  const fullPrompt = `${prompt}.${continuityContext}${dialogueContext} Camera cinematography: ${cameraMotion}. Panavision anamorphic optics, organic 35mm film grain, 24fps kinetic motion blur.`;
 
   if (falKey) {
     try {
@@ -402,8 +530,14 @@ export interface DualShotVideoParams {
   previousVideoUrl?: string;
   propReferenceImages?: string[];
   voiceDirection?: string;
+  dialogue1?: string;
+  dialogue2?: string;
   model?: VideoModelId;
   resolution?: VideoResolution;
+  firstFrameUrl1?: string;
+  lastFrameUrl1?: string;
+  firstFrameUrl2?: string;
+  lastFrameUrl2?: string;
 }
 
 export interface DualShotVideoResult {
@@ -419,9 +553,9 @@ export interface DualShotVideoResult {
 }
 
 /**
- * Generates TWO continuous 15-second cinematic shots in parallel using Fal.ai.
- * Shot 1: Opening / Action
- * Shot 2: Continuation / Climax / Resolution
+ * Generates TWO continuous 15-second cinematic shots in parallel using Fal.ai or MachGen.
+ * Shot 1: Opening / Action (with rapid opening/mid dialogue)
+ * Shot 2: Continuation / Climax / Resolution (with decisive reaction dialogue)
  * Concurrent execution ensures total wait time is virtually identical to a single shot (~20-30s).
  */
 export async function generateDualShotVideoWithFal({
@@ -433,11 +567,39 @@ export async function generateDualShotVideoWithFal({
   previousVideoUrl,
   propReferenceImages = [],
   voiceDirection = "",
+  dialogue1 = "",
+  dialogue2 = "",
   model,
-  resolution
+  resolution,
+  firstFrameUrl1,
+  lastFrameUrl1,
+  firstFrameUrl2,
+  lastFrameUrl2
 }: DualShotVideoParams): Promise<DualShotVideoResult> {
-  const p2 = prompt2 || `Direct continuous second-half follow-through of the previous 15s action: ${prompt1}. Seamless narrative climax and reaction, identical characters, wardrobe, props and lighting, unbroken cinematic continuity.`;
-  const cm2 = cameraMotion2 || "Smooth cinematic camera tracking continuing the motion trajectory, shallow depth of field, 24fps motion blur";
+  const resolvedModel = (model ? resolveVideoModel(model) : null) || DEFAULT_VIDEO_MODEL;
+  if (resolvedModel.startsWith('machgen/')) {
+    return generateDualShotVideoWithMachgen({
+      prompt1,
+      cameraMotion1,
+      prompt2,
+      cameraMotion2,
+      stepNumber,
+      previousVideoUrl,
+      propReferenceImages,
+      voiceDirection,
+      dialogue1,
+      dialogue2,
+      model: resolvedModel,
+      resolution,
+      firstFrameUrl1,
+      lastFrameUrl1,
+      firstFrameUrl2,
+      lastFrameUrl2
+    });
+  }
+
+  const p2 = prompt2 || `Direct continuous second-half follow-through of the previous 15s action: ${prompt1}. Fast-paced narrative climax, dynamic character reactions, and dramatic consequence, identical characters, wardrobe and lighting, unbroken cinematic continuity.`;
+  const cm2 = cameraMotion2 || "Fast-paced cinematic camera tracking continuing the motion trajectory, shallow depth of field, 24fps kinetic motion blur";
 
   // Dispatch both shots in parallel to Fal.ai cluster
   const [shot1Res, shot2Res] = await Promise.all([
@@ -448,8 +610,11 @@ export async function generateDualShotVideoWithFal({
       previousVideoUrl,
       propReferenceImages,
       voiceDirection,
+      dialogueSnippet: dialogue1,
       model,
-      resolution
+      resolution,
+      firstFrameUrl: firstFrameUrl1,
+      lastFrameUrl: lastFrameUrl1
     }),
     generateVideoWithFal({
       prompt: p2,
@@ -458,8 +623,11 @@ export async function generateDualShotVideoWithFal({
       previousVideoUrl,
       propReferenceImages,
       voiceDirection,
+      dialogueSnippet: dialogue2 || dialogue1,
       model,
-      resolution
+      resolution,
+      firstFrameUrl: firstFrameUrl2 || lastFrameUrl1,
+      lastFrameUrl: lastFrameUrl2
     })
   ]);
 

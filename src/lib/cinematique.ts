@@ -274,8 +274,9 @@ export const CINEMATIQUE_AESTHETIC_PRESETS = [
  * Enforces Cinematique's 6-layer visual prompt formula & 4-layer camera motion formula.
  */
 export const CINEMATIQUE_SYSTEM_PROMPT_DIRECTIVES = `CINEMATIQUE RULES:
-1. visualPrompt (6-Layers): [Shot Scale/Framing: MCU/Cowboy/ECU/Low-Angle/OTS] + [Subject & Wardrobe micro-details] + [Setting Architecture & Depth] + [Lighting & Kelvin Temp: Chiaroscuro/Rembrandt/3200K/6500K] + [Lens & Stock: 35mm Panavision anamorphic / Cooke S4 / Kodak Vision3 500T] + [Atmosphere: steam, dust motes, 24fps].
-2. cameraMotionPrompt (4-Layers): [Rig: Steadicam glide / Dolly push-in / Lateral track / Technocrane] + [Pacing/Trajectory] + [Focal length & Focus pull] + [180-deg shutter, 24fps motion blur].`;
+1. visualPrompt (6-Layers): [Shot Scale/Framing: MCU/Cowboy/ECU/Low-Angle/OTS] + [Subject & Wardrobe micro-details] + [Setting Architecture & Depth] + [Lighting & Kelvin Temp: Chiaroscuro/Rembrandt/3200K/6500K] + [Lens & Stock: 35mm Panavision anamorphic / Cooke S4 / Kodak Vision3 500T] + [Atmosphere & Action: steam, dust motes, 24fps]. Focus on realistic visual storytelling, human drama, interpersonal tension, and grounded cinematic technique. DO NOT force stories around talismans or magical artifacts—objects are a rare circumstantial device.
+2. cameraMotionPrompt (4-Layers): [Rig: Fast-paced Steadicam glide / Dynamic lateral tracking / Agile Technocrane sweep / Handheld momentum] + [High-velocity trajectory & Pacing] + [Focal length & Rapid focus pull] + [180-deg shutter, 24fps kinetic motion blur]. Default to fast-paced scene momentum and agile camera velocity; slow or lingering movements are strictly reserved for deliberate literary suspense.
+3. dialogueSnippet & Verbal Interaction: Every scene clip MUST feature continuous, active spoken dialogue and character interaction throughout its duration. Avoid isolated monologues at the start or end. Incorporate rapid-fire back-and-forth verbal exchanges between characters (or protagonist and radio comms/ally/rival) spanning the beginning, middle, and climax of the shot with visible lip-sync.`;
 
 /**
  * Returns a random curated aesthetic preset from Cinematique.

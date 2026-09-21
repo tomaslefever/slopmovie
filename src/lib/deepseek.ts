@@ -1842,6 +1842,7 @@ export function ensureOptionPrompts(
     characterName?: string;
     visualTraits?: string;
     clothing?: string;
+    secondCharacterName?: string;
     propName?: string;
     propVisual?: string;
     envName?: string;
@@ -1849,58 +1850,106 @@ export function ensureOptionPrompts(
   }
 ): DecisionOption {
   const charName = ctx.characterName || "Protagonist";
-  const visualTraits = ctx.visualTraits || "sharp determined expression, intense gaze";
+  const companion = ctx.secondCharacterName || "Tactical Comms";
+  const visualTraits = ctx.visualTraits || "sharp determined expression, intense focus";
   const clothing = ctx.clothing || "cinematic attire";
-  const propName = ctx.propName || "signature artifact";
-  const propVisual = ctx.propVisual || "gleaming material, high tactile detail";
   const envName = ctx.envName || "atmospheric cinematic setting";
   const style = ctx.cinematicStyle || "35mm anamorphic, high contrast, 24fps film still";
+
+  // Real circumstantial prop only if explicitly non-generic; otherwise avoid forcing talismans/artifacts
+  const isRealProp = Boolean(
+    ctx.propName &&
+    !ctx.propName.toLowerCase().includes('artifact') &&
+    !ctx.propName.toLowerCase().includes('talisman') &&
+    !ctx.propName.toLowerCase().includes('relic') &&
+    !ctx.propName.toLowerCase().includes('sacred')
+  );
+  const propClause = isRealProp ? `, utilizing ${ctx.propName}` : '';
 
   const title = opt.title || (id === 'A' ? "Aggressive Tactical Strike" : "Evasive Maneuver");
   const text = opt.text || (id === 'A' ? "Launch an immediate offensive." : "Take a calculated evasive route.");
   const dramaticHook = opt.dramaticHook || "High stakes decision point.";
   const expectedConsequence = opt.expectedConsequence || "Shapes the immediate course of the scene.";
 
+  // Realistic visual staging with fast-paced kinetic energy & active character interaction
   const visualPrompt = (opt.visualPrompt && typeof opt.visualPrompt === 'string' && opt.visualPrompt.trim().length > 20)
     ? opt.visualPrompt.trim()
     : id === 'A'
-    ? `Cinematic medium action / hero shot of ${charName} (${visualTraits}, ${clothing}) executing ${title.toLowerCase()} in ${envName}. Wielding ${propName} (${propVisual}), high dynamic energy, motivated chiaroscuro rim lighting, Panavision anamorphic lens flare, shallow depth of field, airborne particles, ${style}`
-    : `Cinematic wide-angle suspense / tactical shot of ${charName} (${visualTraits}, ${clothing}) executing ${title.toLowerCase()} in ${envName}. Utilizing ${propName} (${propVisual}) from shadows, moody low-key lighting with cool practicals, atmospheric volumetric mist, Cooke S4 lens warmth, 3-layer depth of field, ${style}`;
+    ? `Fast-paced cinematic action shot of ${charName} (${visualTraits}, ${clothing}) executing ${title.toLowerCase()}${propClause} in ${envName}. Characters actively speaking and coordinating with rapid verbal interaction throughout the shot, expressive lip sync, high kinetic velocity, motivated chiaroscuro rim lighting, Panavision anamorphic lens flare, shallow depth of field, airborne particles, ${style}`
+    : `Fast-paced cinematic tactical shot of ${charName} (${visualTraits}, ${clothing}) executing ${title.toLowerCase()}${propClause} in ${envName}. Urgent character dialogue and interpersonal tension, rapid back-and-forth verbal interaction, moody low-key lighting with cool practicals, atmospheric volumetric mist, Cooke S4 lens warmth, 3-layer depth of field, ${style}`;
 
+  // High-tempo camera motions by default (fast tracking / rapid Steadicam)
   const cameraMotionPrompt = (opt.cameraMotionPrompt && typeof opt.cameraMotionPrompt === 'string' && opt.cameraMotionPrompt.trim().length > 15)
     ? opt.cameraMotionPrompt.trim()
     : id === 'A'
-    ? "High-energy forward Steadicam push-in tracking subject with kinetic momentum, subtle camera shake, 180-degree shutter, 24fps motion blur"
-    : "Deliberate lateral dolly tracking shot parallel to subject, smooth parallax against background architecture, 24fps motion blur";
+    ? "Fast-paced Steadicam tracking shot following subject with high kinetic velocity and dynamic momentum, rapid reframing, 180-degree shutter, 24fps kinetic motion blur"
+    : "High-speed lateral dolly tracking shot parallel to subject, rapid foreground parallax, agile camera velocity, 24fps kinetic motion blur";
 
   const visualPrompt2 = (opt.visualPrompt2 && typeof opt.visualPrompt2 === 'string' && opt.visualPrompt2.trim().length > 20)
     ? opt.visualPrompt2.trim()
-    : `Seamless continuous second-half continuation of Shot 1 in ${envName}: ${charName} (${visualTraits}, ${clothing}) immediately follows through on ${title.toLowerCase()} with ${propName} (${propVisual}). Direct dramatic consequence and climax, matching spatial perspective, unbroken continuous lighting, dynamic character reaction, 24fps motion blur, ${style}`;
+    : `Seamless continuous second-half continuation in ${envName}: ${charName} (${visualTraits}, ${clothing}) and companions swiftly react to the immediate climax of ${title.toLowerCase()}. Fast-paced narrative consequence, characters rapidly speaking and confirming the next maneuver, matching spatial continuity, unbroken lighting, dynamic character reactions, 24fps kinetic motion blur, ${style}`;
 
   const cameraMotionPrompt2 = (opt.cameraMotionPrompt2 && typeof opt.cameraMotionPrompt2 === 'string' && opt.cameraMotionPrompt2.trim().length > 15)
     ? opt.cameraMotionPrompt2.trim()
     : id === 'A'
-    ? "Continuous dynamic tracking wrap-around arc following the motion momentum into an intense close-up, sharp anamorphic focus pull, 24fps motion blur"
-    : "Slow deliberate push-in closing the distance, matching previous camera vector, razor-sharp rack focus onto the character's eyes, 24fps cinematic motion blur";
+    ? "High-tempo tracking wrap-around arc following the intense movement into a sharp close-up, rapid rack focus, 24fps kinetic motion blur"
+    : "Fast-paced tracking push closing the distance, high camera velocity, razor-sharp focus onto character's eyes, 24fps kinetic motion blur";
 
   const synopsis = opt.synopsis || `${charName} executes "${title}": ${text}`;
-  const dialogueSnippet = opt.dialogueSnippet || `${charName}: '${title} is our only way through.'`;
+
+  // Continuous multi-turn dialogue interaction across the 15s duration
+  const dialogueSnippet = opt.dialogueSnippet || (id === 'A'
+    ? `${charName}: 'Executing ${title.toLowerCase()} — watch my flank!' / ${companion}: 'Covering you now, push through!' / ${charName}: 'Path clear, advance now!'`
+    : `${charName}: 'Pivoting to ${title.toLowerCase()}, stay low.' / ${companion}: 'Telemetry locked, move on my mark!' / ${charName}: 'Moving now!'`);
+
+  // Distributed 3-beat subtitles covering opening (0.5-4.5s), mid-interaction (5.0-9.5s), and climax (10.0-14.5s)
   const subtitles = Array.isArray(opt.subtitles) && opt.subtitles.length > 0
     ? opt.subtitles
-    : [
+    : id === 'A'
+    ? [
         {
-          start: 1.0,
-          end: 7.0,
+          start: 0.5,
+          end: 4.5,
           speaker: charName,
-          text: `Executing ${title}. Hold your positions!`,
-          textEs: `Ejecutando ${title}. ¡Mantengan sus posiciones!`
+          text: `Executing ${title} — watch my flank!`,
+          textEs: `¡Ejecutando ${title} — vigilen mi flanco!`
         },
         {
-          start: 7.5,
-          end: 14.0,
+          start: 5.0,
+          end: 9.5,
+          speaker: companion,
+          text: "Covering you now, push through!",
+          textEs: "¡Te cubro ahora, avancen!"
+        },
+        {
+          start: 10.0,
+          end: 14.5,
           speaker: charName,
-          text: "The path is clear — push forward now!",
-          textEs: "El camino está despejado — ¡avancen ahora!"
+          text: "Path clear, advance now!",
+          textEs: "¡Camino despejado, avancen ahora!"
+        }
+      ]
+    : [
+        {
+          start: 0.5,
+          end: 4.5,
+          speaker: charName,
+          text: `Pivoting to ${title}, stay low.`,
+          textEs: `Cambiando a ${title}, manténganse agachados.`
+        },
+        {
+          start: 5.0,
+          end: 9.5,
+          speaker: companion,
+          text: "Telemetry locked, move on my mark!",
+          textEs: "¡Telemetría fijada, muévanse a mi señal!"
+        },
+        {
+          start: 10.0,
+          end: 14.5,
+          speaker: charName,
+          text: "Moving now!",
+          textEs: "¡Moviéndome ahora!"
         }
       ];
 
@@ -1920,6 +1969,50 @@ export function ensureOptionPrompts(
     subtitles,
     voiceDirection: opt.voiceDirection
   };
+}
+
+function parseSpeakerLine(raw: string, defaultSpeaker: string, start: number, end: number): SubtitleCue {
+  const match = raw.match(/^([A-Za-z0-9_\s\.]+)\s*:\s*["'«“]?(.*?)["'»”]?$/);
+  if (match) {
+    const speaker = match[1].trim();
+    const text = match[2].trim().replace(/^["']|["']$/g, '');
+    return { start, end, speaker: speaker || defaultSpeaker, text: text || raw };
+  }
+  return { start, end, speaker: defaultSpeaker, text: raw.replace(/^["']|["']$/g, '') };
+}
+
+export function generateSubtitlesFromDialogue(
+  dialogue: string | undefined,
+  leadName: string = "Protagonist",
+  secondName: string = "Tactical Comms"
+): SubtitleCue[] {
+  if (!dialogue || typeof dialogue !== 'string' || dialogue.trim().length === 0) {
+    return [
+      { start: 0.5, end: 4.5, speaker: leadName, text: "Advancing through the perimeter. Stay alert.", textEs: "Avanzando por el perímetro. Manténganse alerta." },
+      { start: 5.0, end: 9.5, speaker: secondName, text: "Signals confirmed. Clear to proceed on your mark.", textEs: "Señales confirmadas. Despejado para proceder a tu señal." },
+      { start: 10.0, end: 14.5, speaker: leadName, text: "Executing now!", textEs: "¡Ejecutando ahora!" }
+    ];
+  }
+
+  const rawParts = dialogue.split(/\s*(?:\/|\n)\s*/).map(p => p.trim()).filter(p => p.length > 0);
+  const parts = rawParts.length > 0 ? rawParts : [dialogue.trim()];
+
+  if (parts.length >= 3) {
+    return [
+      parseSpeakerLine(parts[0], leadName, 0.5, 4.5),
+      parseSpeakerLine(parts[1], secondName, 5.0, 9.5),
+      parseSpeakerLine(parts[2], leadName, 10.0, 14.5)
+    ];
+  }
+  if (parts.length === 2) {
+    return [
+      parseSpeakerLine(parts[0], leadName, 0.5, 7.0),
+      parseSpeakerLine(parts[1], secondName, 7.5, 14.5)
+    ];
+  }
+  return [
+    parseSpeakerLine(parts[0], leadName, 1.0, 14.0)
+  ];
 }
 
 export function buildProceduralStoryBible(candidate: {
@@ -2026,20 +2119,21 @@ export function buildProceduralStoryBible(candidate: {
     {
       stepNumber: 2,
       title: "Act I: The Protagonist & The Mission",
-      synopsis: `Minute 1 First-Shot (Part 2/4): Establishing the protagonist ${charName} and their signature ${propName}. The mission stakes and personal purpose are revealed.`,
-      dialogueSnippet: `${charName}: 'I am ${charName}. With this ${propName}, my mission admits no failure.'`,
+      synopsis: `Minute 1 First-Shot (Part 2/4): Establishing the protagonist ${charName} navigating ${envName} with urgent tactical precision as mission telemetry activates.`,
+      dialogueSnippet: `${charName}: 'Coordinates locked. Approaching the primary vector.' / Tactical Comms: 'Sensors show perimeter patrol advancing — keep moving!' / ${charName}: 'Accelerating pace now.'`,
       subtitles: [
-        { start: 1.0, end: 7.0, speaker: charName, text: `I am ${charName}. Bound to this ${propName}, the mission is my only truth.`, textEs: `Soy ${charName}. Ligado a esta ${propName}, la misión es mi única verdad.` },
-        { start: 8.0, end: 14.0, speaker: charName, text: "The path is set. We advance into the unknown.", textEs: "El camino está trazado. Avanzamos hacia lo desconocido." }
+        { start: 0.5, end: 4.5, speaker: charName, text: "Coordinates locked. Approaching the primary vector.", textEs: "Coordenadas fijadas. Acercándome al vector principal." },
+        { start: 5.0, end: 9.5, speaker: "Tactical Comms", text: "Sensors show perimeter patrol advancing — keep moving!", textEs: "Sensores marcan patrulla perimetral avanzando — ¡sigue moviéndote!" },
+        { start: 10.0, end: 14.5, speaker: charName, text: "Accelerating pace now.", textEs: "Acelerando el paso ahora." }
       ],
       voiceDirection: firstChar.voicePrompt,
-      visualPrompt: `Cowboy Shot of ${charName} (${firstChar.visualTraits}) in coiled tactical posture navigating ${envName}. Mid-thigh framing with ${propName} secured, cross-lighting with 3000K amber key and 6500K cool rim. Cooke S4 prime lens warmth, wet rain reflections, 480p 16:9 film still`,
-      cameraMotionPrompt: "Smooth lateral dolly tracking shot on rails parallel to subject, three-layer parallax with blurred foreground terrain and distant receding horizon, 24fps motion blur",
+      visualPrompt: `Fast-paced tracking cowboy shot of ${charName} (${firstChar.visualTraits}) moving swiftly through ${envName}. Characters actively speaking with continuous verbal interaction, motivated cross-lighting with 3000K amber key and 6500K cool rim, Cooke S4 prime lens warmth, wet rain reflections, 24fps kinetic motion blur`,
+      cameraMotionPrompt: "Fast-paced Steadicam tracking shot following subject with high kinetic velocity and dynamic momentum, rapid reframing, 24fps kinetic motion blur",
       videoUrl: defaultVideo,
       duration: 15,
       votingWindowSeconds: 0,
       activeCharacters: [firstChar.id],
-      activeProps: [firstProp.id],
+      activeProps: [],
       propReferenceImages: [],
       environment: firstEnv.id,
       createdAt: new Date().toISOString(),
@@ -2049,19 +2143,20 @@ export function buildProceduralStoryBible(candidate: {
       stepNumber: 3,
       title: "Act I: The Looming Threat & Gathering Shadows",
       synopsis: `Minute 1 First-Shot (Part 3/4): The baseline status quo fractures. Hostile signatures breach the outer perimeter as an encroaching threat surrounds ${charName}.`,
-      dialogueSnippet: `${charName}: 'Perimeter breach detected! The threat is closing in faster than anticipated.'`,
+      dialogueSnippet: `${charName}: 'Perimeter breach detected! Hostiles closing in fast!' / Tactical Comms: 'Thermal signatures across all sectors! Take cover!' / ${charName}: 'Engaging evasive protocol!'`,
       subtitles: [
-        { start: 1.0, end: 7.0, speaker: charName, text: "Perimeter breach detected! Hostile forces are closing in rapidly.", textEs: "¡Brecha en el perímetro detectada! Fuerzas hostiles se aproximan rápidamente." },
-        { start: 8.0, end: 14.0, speaker: charName, text: "Steel yourselves. The confrontation is upon us.", textEs: "Prepárense. La confrontación está sobre nosotros." }
+        { start: 0.5, end: 4.5, speaker: charName, text: "Perimeter breach detected! Hostiles closing in fast!", textEs: "¡Brecha en el perímetro detectada! ¡Hostiles acercándose rápido!" },
+        { start: 5.0, end: 9.5, speaker: "Tactical Comms", text: "Thermal signatures across all sectors! Take cover!", textEs: "¡Firmas térmicas en todos los sectores! ¡A cubierto!" },
+        { start: 10.0, end: 14.5, speaker: charName, text: "Engaging evasive protocol!", textEs: "¡Iniciando protocolo evasivo!" }
       ],
       voiceDirection: firstChar.voicePrompt,
-      visualPrompt: `Over-the-Shoulder and Macro Insert Shot on ${propName} (${firstProp.visualAppearance}) as ${charName} readies it in ${envName}. Foreground shoulder silhouette softly out of focus, hard light slicing across the artifact, 85mm prime at T2.0, creamy background separation, 480p 16:9 film still`,
-      cameraMotionPrompt: "Deliberate 2-second rack focus from foreground prop in razor sharpness to background threat approaching, creamy circular bokeh, subtle focus breathing",
+      visualPrompt: `Fast-paced dynamic over-the-shoulder tracking shot as ${charName} reacts to the breach in ${envName}. Urgent character dialogue, intense facial expressions, hard light slicing across shadows, 85mm prime at T2.0, 24fps kinetic motion blur`,
+      cameraMotionPrompt: "High-speed lateral tracking with rapid parallax shift and dynamic camera whip, 24fps kinetic motion blur",
       videoUrl: defaultVideo,
       duration: 15,
       votingWindowSeconds: 0,
       activeCharacters: [firstChar.id],
-      activeProps: [firstProp.id],
+      activeProps: [],
       propReferenceImages: [],
       environment: firstEnv.id,
       createdAt: new Date().toISOString(),
@@ -2071,19 +2166,20 @@ export function buildProceduralStoryBible(candidate: {
       stepNumber: 4,
       title: "Act I: The First Conflict — Audience Decision",
       synopsis: `Minute 1 First-Shot (Part 4/4): THE FIRST MAJOR CONFLICT! Ambushed in a deadly crossfire, ${charName} urgently calls upon the audience to decide how to break through.`,
-      dialogueSnippet: `${charName}: 'We are pinned down in the crossfire! Frontal assault or tactical diversion? Spectators, you decide — choose our path!'`,
+      dialogueSnippet: `${charName}: 'We are pinned down in the crossfire!' / Tactical Comms: 'Direct strike or tactical diversion?' / ${charName}: 'Spectators, choose our path right now!'`,
       subtitles: [
-        { start: 1.0, end: 7.0, speaker: charName, text: "We are surrounded in the crossfire! Direct strike or tactical diversion?", textEs: "¡Estamos rodeados en el fuego cruzado! ¿Ataque directo o maniobra evasiva?" },
-        { start: 8.0, end: 14.0, speaker: charName, text: "Spectators, the choice is yours — decide our fate right now!", textEs: "¡Espectadores, la decisión es de ustedes — elijan nuestro destino ahora mismo!" }
+        { start: 0.5, end: 4.5, speaker: charName, text: "We are pinned down in the crossfire!", textEs: "¡Estamos inmovilizados en el fuego cruzado!" },
+        { start: 5.0, end: 9.5, speaker: "Tactical Comms", text: "Direct strike or tactical diversion?", textEs: "¿Ataque directo o maniobra evasiva?" },
+        { start: 10.0, end: 14.5, speaker: charName, text: "Spectators, choose our path right now!", textEs: "¡Espectadores, elijan nuestro camino ahora mismo!" }
       ],
       voiceDirection: firstChar.voicePrompt,
-      visualPrompt: `Choker Shot and Dutch Angle Close-Up of ${charName} (${firstChar.visualTraits}) at peak dramatic threshold in ${envName}. Forehead to chin tight framing, chiaroscuro lighting, eye catchlights, Panavision anamorphic optical character, immense stakes, 480p 16:9 film still`,
-      cameraMotionPrompt: "Imperceptibly slow dolly push-in closing from medium to intense choker shot over 15 seconds, narrowing depth of field, 180-degree shutter 24fps motion blur",
+      visualPrompt: `Fast-paced intense tracking shot of ${charName} (${firstChar.visualTraits}) at peak dramatic threshold in ${envName}. Urgent verbal exchange, chiaroscuro lighting, eye catchlights, Panavision anamorphic optical character, immense kinetic stakes, 24fps motion blur`,
+      cameraMotionPrompt: "Fast-paced camera push rushing into medium close-up of protagonist's determined gaze, 24fps kinetic motion blur",
       videoUrl: defaultVideo,
       duration: 15,
       votingWindowSeconds: 10,
       activeCharacters: [firstChar.id],
-      activeProps: [firstProp.id],
+      activeProps: [],
       propReferenceImages: [],
       environment: firstEnv.id,
       createdAt: new Date().toISOString(),
@@ -2156,20 +2252,19 @@ Your mission is to formulate a MASTER STORY AND ART BIBLE for a 50-step interact
 ${CINEMATIQUE_SYSTEM_PROMPT_DIRECTIVES}
 
 MANDATORY RULES:
-1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, character description, voice prompt, prop, dialogue, visualPrompt, cameraMotionPrompt, and option must be written in high-caliber cinematic English.
-2. VOICE CONTINUITY: Every character must have an immutable "voicePrompt" (timbre, frequency, pacing, breathing, accent, audio processing) so audio engines synthesize the exact same voice across all 50 clips.
-3. PROPS & CHARACTERS: Every initial character must have their signature linked prop (ownerCharacterId) for consistent visual prompting.
-4. ONLY NECESSARY PROPS: In "firstStep.activeProps", specify ONLY the prop ID(s) that are physically visible or actively held/used in this opening 15-second scene. DO NOT pass all props. If no prop is visible in the shot, "activeProps" must be empty [].
-5. NARRATIVE ARC: The 50-step film follows a strict act structure that every step must respect — steps 1-10 SETUP (present the world, the characters and the central problem), steps 11-39 DEVELOPMENT (escalating conflict, twists and new characters), steps 40-49 DENOUEMENT (converging resolution), and step 50 THE END (definitive closing scene, no new conflicts). "masterArcThread" and "initialPlot" must be designed so the story can be resolved by step 50.
-6. CINEMATIQUE CAMERA & LIGHTING FIDELITY:
-   - "cinematicStyle": Must specify the camera package, lenses (e.g. Panavision C-Series anamorphic, Cooke S4/S7, Zeiss Master Prime), lighting setup (e.g. Caravaggio chiaroscuro, Rembrandt key, motivated practical light, Kelvin color temperature), and film stock (e.g. Kodak Vision3 500T, Kodak Double-X).
-   - "visualPrompt": Every scene prompt MUST follow the 6-layer Cinematique formula: [Shot Scale/Framing (MCU, Cowboy, ECU, Choker, Low-Angle)] + [Subject & Wardrobe] + [Environment with Foreground/Mid/Background Depth] + [Lighting Rig & Kelvin Temperature] + [Camera Lens, Sensor/Stock & Flare Characteristics] + [Atmosphere & 24fps film still].
-   - "cameraMotionPrompt": Every camera motion prompt MUST follow the 4-layer Cinematique motion formula: [Rig & Movement (Steadicam glide, slow dolly push-in, lateral track with 3-layer parallax, Technocrane arc, Dolly zoom vertigo)] + [Pacing & Trajectory] + [Focal Length & Focus Pull/Rack Focus] + [Optical physics & 24fps motion blur].
-7. FIRST-SHOT 4-CLIP PROGRESSION & CLIP 4 AUDIENCE INCITEMENT:
-   - Clip 1 (0-15s) [World & Tone]: Establish the cinematic universe, architectural environment, visual lighting, atmospheric mood, and initial status quo.
-   - Clip 2 (15-30s) [Protagonist & Mission]: Establish the protagonist, their identity, signature prop, mission objective, and personal stakes.
-   - Clip 3 (30-45s) [Looming Threat]: The baseline status quo fractures; a looming threat, perimeter breach, or hostile anomaly approaches.
-   - Clip 4 (45-60s) [The First Conflict & Audience Call to Decide]: THE FIRST MAJOR CONFLICT explodes with full force! Spoken dialogue MUST actively and urgently incite the spectator/audience to decide how to resolve this crisis (e.g., "We're surrounded and taking heavy fire! Do we breach frontally or deploy the shadow protocol? Spectators, you decide — cast your vote now!"). The 2 voting options (A and B) represent the two high-stakes solutions to this first conflict.
+1. ALL OUTPUT MUST BE IN ENGLISH. Every field, title, synopsis, character description, voice prompt, dialogue, visualPrompt, cameraMotionPrompt, and option must be written in high-caliber cinematic English.
+2. VOICE CONTINUITY & RAPID CADENCE: Every character must have an immutable "voicePrompt" (timbre, frequency, rapid delivery, accent). Characters must speak with swift, naturalistic cadence and snappy verbal delivery.
+3. GROUNDED PLOT & RARE TALISMANS: DO NOT center stories around magical talismans, enchanted relics, or McGuffins. A prop or talisman must be an infrequent, realistic circumstantial device (e.g. an everyday radio, pass, or tactical tool) rather than the plot's axis. Focus on human conflict, interpersonal tension, moral stakes, dialogue, and grounded cinematic technique.
+4. PROPS & ENVIRONMENT: Only specify props if genuinely essential to the scene; otherwise keep props minimal and focus on human drama and physical action.
+5. NARRATIVE ARC: The 50-step film follows a strict act structure: steps 1-10 SETUP, steps 11-39 DEVELOPMENT, steps 40-49 DENOUEMENT, and step 50 THE END.
+6. FAST-PACED CINEMATIQUE CAMERA & LIGHTING FIDELITY:
+   - "visualPrompt": 6-layer Cinematique formula with grounded realistic staging, interpersonal tension, and active character conversation (visible lip-sync throughout).
+   - "cameraMotionPrompt": High-tempo kinetic velocity (fast Steadicam tracking, dynamic lateral dolly, rapid reframing) by default. Slow camera pushes are strictly reserved for deliberate literary suspense moments.
+7. FIRST-SHOT 4-CLIP PROGRESSION WITH ACTIVE MULTI-TURN DIALOGUE:
+   - Clip 1 (0-15s) [World & Tone]: Establish universe and initial status quo with brisk opening dialogue.
+   - Clip 2 (15-30s) [Protagonist & Mission]: Establish protagonist, mission objective, and rapid tactical verbal exchange.
+   - Clip 3 (30-45s) [Looming Threat]: Threat approaches; urgent dialogue back-and-forth between characters.
+   - Clip 4 (45-60s) [The First Conflict & Audience Dilemma]: THE FIRST MAJOR CONFLICT explodes! Rapid dialogue between characters inciting the audience to choose between Option A and Option B.
 
 Respond ONLY with a valid JSON object matching this schema:
 {
@@ -2189,16 +2284,16 @@ Respond ONLY with a valid JSON object matching this schema:
       "clothing": "Signature wardrobe",
       "personality": "Psychological traits",
       "voiceStyle": "Voice label",
-      "voicePrompt": "Acoustic voice prompt (timbre, pitch, tempo, accent)"
+      "voicePrompt": "Acoustic voice prompt (timbre, pitch, fast tempo, accent)"
     }
   ],
   "props": [
     {
       "id": "prop_1",
-      "name": "Key Prop Name",
-      "description": "Narrative purpose",
+      "name": "Grounded Tool or Object Name",
+      "description": "Circumstantial narrative purpose (not a magic talisman)",
       "visualAppearance": "Specific physical visual traits",
-      "narrativeSignificance": "Significance",
+      "narrativeSignificance": "Realistic significance",
       "ownerCharacterId": "char_1"
     }
   ],
@@ -2217,44 +2312,44 @@ Respond ONLY with a valid JSON object matching this schema:
       "stepNumber": 1,
       "title": "Scene 1: Establishing the World",
       "synopsis": "World and atmospheric tone",
-      "dialogueSnippet": "Opening monologue in English",
-      "visualPrompt": "Cinematique 6-layer prompt for Scene 1",
-      "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
+      "dialogueSnippet": "Character A: '...' / Character B (or Comms): '...' (fast-paced multi-turn dialogue)",
+      "visualPrompt": "Fast-paced Cinematique 6-layer prompt for Scene 1 with characters actively talking",
+      "cameraMotionPrompt": "Fast-paced Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
-      "activeProps": ["prop_1"],
+      "activeProps": [],
       "environment": "env_1"
     },
     {
       "stepNumber": 2,
       "title": "Scene 2: Protagonist & Mission",
       "synopsis": "Protagonist identity and stakes",
-      "dialogueSnippet": "Mission dialogue in English",
-      "visualPrompt": "Cinematique 6-layer prompt for Scene 2",
-      "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
+      "dialogueSnippet": "Character A: '...' / Character B (or Comms): '...' (snappy dialogue exchange)",
+      "visualPrompt": "Fast-paced Cinematique 6-layer prompt for Scene 2 with characters actively talking",
+      "cameraMotionPrompt": "Fast-paced Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
-      "activeProps": ["prop_1"],
+      "activeProps": [],
       "environment": "env_1"
     },
     {
       "stepNumber": 3,
       "title": "Scene 3: The Looming Threat",
       "synopsis": "Threat approaches and status quo fractures",
-      "dialogueSnippet": "Threat warning dialogue",
-      "visualPrompt": "Cinematique 6-layer prompt for Scene 3",
-      "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
+      "dialogueSnippet": "Character A: '...' / Character B (or Comms): '...' (urgent warning dialogue)",
+      "visualPrompt": "Fast-paced Cinematique 6-layer prompt for Scene 3 with characters actively talking",
+      "cameraMotionPrompt": "Fast-paced Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
-      "activeProps": ["prop_1"],
+      "activeProps": [],
       "environment": "env_1"
     },
     {
       "stepNumber": 4,
       "title": "Scene 4: First Conflict & Audience Dilemma",
       "synopsis": "First conflict explodes inciting audience vote",
-      "dialogueSnippet": "Audience decision call to action",
-      "visualPrompt": "Cinematique 6-layer prompt for Scene 4",
-      "cameraMotionPrompt": "Cinematique 4-layer motion prompt",
+      "dialogueSnippet": "Character A: '...' / Character B: '...' (urgent audience decision call to action)",
+      "visualPrompt": "Fast-paced Cinematique 6-layer prompt for Scene 4 with characters actively talking",
+      "cameraMotionPrompt": "Fast-paced Cinematique 4-layer motion prompt",
       "activeCharacters": ["char_1"],
-      "activeProps": ["prop_1"],
+      "activeProps": [],
       "environment": "env_1",
       "options": [
         {"id": "A", "title": "Option A Title", "text": "First bold choice resolving the conflict", "dramaticHook": "Dramatic hook", "expectedConsequence": "Consequence"},
@@ -2262,7 +2357,7 @@ Respond ONLY with a valid JSON object matching this schema:
       ]
     }
   ]
-}`;
+};`;
 
       let targetTitle: string | undefined;
       let targetGenre: string | undefined;
@@ -2447,67 +2542,86 @@ Write all fields in ENGLISH. Entropy: ${Date.now()}`;
           {
             stepNumber: 1,
             title: "Scene 1: Establishing the World",
-            synopsis: `Establishing look at ${envName}. ${envLighting}. Setting the visual atmosphere.`,
-            visualPrompt: `Cinematic wide establishing shot of ${envName}, ${envLighting}, ${cineStyle}, volumetric haze, atmospheric depth, 24fps film still`,
-            cameraMotionPrompt: "Slow cinematic dolly forward with wide anamorphic lens and atmospheric perspective, 24fps",
+            synopsis: `Fast-paced opening in ${envName}. ${envLighting}. Setting the visual atmosphere and narrative stakes.`,
+            dialogueSnippet: `${charName}: 'Sector grid confirmed. Telemetry active.' / Tactical Comms: 'Sensors show clean airspace for now. Move fast.' / ${charName}: 'Advancing through the perimeter.'`,
+            visualPrompt: `Fast-paced cinematic wide establishing tracking shot of ${charName} in ${envName}. Characters actively speaking and moving with urgent coordination, ${envLighting}, ${cineStyle}, volumetric haze, atmospheric depth, 24fps kinetic motion blur`,
+            cameraMotionPrompt: "Fast-paced Steadicam tracking shot gliding rapidly across the environment, wide anamorphic lens, 24fps kinetic motion blur",
             videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
             duration: 15,
             votingWindowSeconds: 0,
             activeCharacters: ["char_1"],
-            activeProps: ["prop_1"],
+            activeProps: [],
             environment: "env_1",
             createdAt: new Date().toISOString(),
             options: [optionA, optionB],
-            subtitles: []
+            subtitles: [
+              { start: 0.5, end: 4.5, speaker: charName, text: "Sector grid confirmed. Telemetry active.", textEs: "Cuadrícula de sector confirmada. Telemetría activa." },
+              { start: 5.0, end: 9.5, speaker: "Tactical Comms", text: "Sensors show clean airspace for now. Move fast.", textEs: "Sensores marcan espacio aéreo limpio por ahora. Muévete rápido." },
+              { start: 10.0, end: 14.5, speaker: charName, text: "Advancing through the perimeter.", textEs: "Avanzando a través del perímetro." }
+            ]
           },
           {
             stepNumber: 2,
             title: "Scene 2: Protagonist & Mission",
-            synopsis: `${charName} (${charRole}) arrives in ${envName}, preparing the ${propName}.`,
-            visualPrompt: `Medium close-up of ${charName}, ${charVisual}, wielding the ${propName} (${propVisual}) in ${envName}, motivated rim lighting, ${cineStyle}, 24fps`,
-            cameraMotionPrompt: "Steadicam circular track focusing on protagonist and prop, rack focus to background, 24fps",
+            synopsis: `${charName} (${charRole}) pushes swiftly through ${envName}, coordinating tactical objectives.`,
+            dialogueSnippet: `${charName}: 'Target location reached. Approaching the primary objective.' / Tactical Comms: 'Signals spiking nearby — watch your corners.' / ${charName}: 'Visual acquired. Proceeding on mark.'`,
+            visualPrompt: `Fast-paced medium tracking shot of ${charName}, ${charVisual}, navigating ${envName}. Characters actively speaking with continuous verbal interaction, motivated rim lighting, ${cineStyle}, 24fps kinetic motion blur`,
+            cameraMotionPrompt: "Agile tracking Steadicam moving rapidly with protagonist, dynamic rack focus, 24fps kinetic motion blur",
             videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
             duration: 15,
             votingWindowSeconds: 0,
             activeCharacters: ["char_1"],
-            activeProps: ["prop_1"],
+            activeProps: [],
             environment: "env_1",
             createdAt: new Date().toISOString(),
             options: [optionA, optionB],
-            subtitles: []
+            subtitles: [
+              { start: 0.5, end: 4.5, speaker: charName, text: "Target location reached. Approaching primary objective.", textEs: "Ubicación objetivo alcanzada. Acercándome al objetivo principal." },
+              { start: 5.0, end: 9.5, speaker: "Tactical Comms", text: "Signals spiking nearby — watch your corners.", textEs: "Señales subiendo cerca — vigila las esquinas." },
+              { start: 10.0, end: 14.5, speaker: charName, text: "Visual acquired. Proceeding on mark.", textEs: "Visual confirmado. Procediendo a mi señal." }
+            ]
           },
           {
             stepNumber: 3,
             title: "Scene 3: Looming Threat",
-            synopsis: `The baseline status quo fractures in ${envName} as perimeter alarms trigger.`,
-            visualPrompt: `Dynamic cinematic tracking shot of ${charName} reacting as sirens flare across ${envName}, high contrast chiaroscuro, ${cineStyle}, 24fps`,
-            cameraMotionPrompt: "Fast lateral tracking with rapid parallax shift and optical zoom blur, 24fps",
+            synopsis: `The status quo fractures rapidly in ${envName} as perimeter hostiles breach the zone.`,
+            dialogueSnippet: `${charName}: 'Breach detected! Hostiles are closing in on our coordinates!' / Tactical Comms: 'Thermal signatures incoming from all vectors! Brace for impact!' / ${charName}: 'Defensive lines up, prepare for contact!'`,
+            visualPrompt: `Fast-paced high-velocity tracking shot of ${charName} reacting as alarms flare across ${envName}. Rapid verbal exchange between characters, intense facial delivery, high contrast chiaroscuro, ${cineStyle}, 24fps kinetic motion blur`,
+            cameraMotionPrompt: "High-speed lateral tracking with rapid parallax shift and dynamic camera whip, 24fps kinetic motion blur",
             videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
             duration: 15,
             votingWindowSeconds: 0,
             activeCharacters: ["char_1"],
-            activeProps: ["prop_1"],
+            activeProps: [],
             environment: "env_1",
             createdAt: new Date().toISOString(),
             options: [optionA, optionB],
-            subtitles: []
+            subtitles: [
+              { start: 0.5, end: 4.5, speaker: charName, text: "Breach detected! Hostiles closing in on our coordinates!", textEs: "¡Brecha detectada! ¡Hostiles acercándose a nuestras coordenadas!" },
+              { start: 5.0, end: 9.5, speaker: "Tactical Comms", text: "Thermal signatures from all vectors! Brace for impact!", textEs: "¡Firmas térmicas desde todos los vectores! ¡Prepárense para el impacto!" },
+              { start: 10.0, end: 14.5, speaker: charName, text: "Defensive lines up, prepare for contact!", textEs: "¡Líneas defensivas listas, prepárense para el contacto!" }
+            ]
           },
           {
             stepNumber: 4,
             title: "Scene 4: The First Conflict & Audience Dilemma",
             synopsis: conflictHook,
-            dialogueSnippet: `We are under heavy pressure! Option A: ${optionA.title} or Option B: ${optionB.title}. Audience, decide now!`,
-            visualPrompt: `Intense cinematic over-the-shoulder shot of ${charName} facing the critical crossroads in ${envName}, sparks and dynamic lighting, ${cineStyle}, 24fps`,
-            cameraMotionPrompt: "Dolly push-in directly into extreme close-up of protagonist's determined eyes, 24fps",
+            dialogueSnippet: `${charName}: 'We are pinned down under heavy fire!' / Tactical Comms: 'Two paths: Option A: ${optionA.title}, or Option B: ${optionB.title}!' / ${charName}: 'Audience, cast your vote now — choose our path!'`,
+            visualPrompt: `Fast-paced intense over-the-shoulder shot of ${charName} facing the critical crossroads in ${envName}. Continuous verbal banter and rapid urgency, sparks and dynamic kinetic lighting, ${cineStyle}, 24fps kinetic motion blur`,
+            cameraMotionPrompt: "Fast-paced camera push rushing into medium close-up of protagonist's determined gaze, 24fps kinetic motion blur",
             videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
             duration: 15,
             votingWindowSeconds: 10,
             activeCharacters: ["char_1"],
-            activeProps: ["prop_1"],
+            activeProps: [],
             environment: "env_1",
             createdAt: new Date().toISOString(),
             options: [optionA, optionB],
-            subtitles: []
+            subtitles: [
+              { start: 0.5, end: 4.5, speaker: charName, text: "We are pinned down under heavy fire!", textEs: "¡Estamos inmovilizados bajo fuego intenso!" },
+              { start: 5.0, end: 9.5, speaker: "Tactical Comms", text: `Two paths: Option A: ${optionA.title}, or Option B: ${optionB.title}!`, textEs: `¡Dos rutas: Opción A: ${optionA.title}, u Opción B: ${optionB.title}!` },
+              { start: 10.0, end: 14.5, speaker: charName, text: "Audience, cast your vote now — choose our path!", textEs: "¡Audiencia, voten ahora — elijan nuestro camino!" }
+            ]
           }
         ];
 
@@ -3095,10 +3209,16 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
               stepNumber: { type: "integer" },
               title: { type: "string", description: "Short descriptive scene or chapter title for this specific 30s clip (e.g. 'The Perimeter Breach')" },
               synopsis: { type: "string" },
-              dialogueSnippet: { type: "string" },
+              dialogueSnippet: { 
+                type: "string", 
+                description: "Fast-paced spoken dialogue exchange across the 15s shot (at least 2-3 interactive turns between characters or protagonist and comms/companion, formatted as: Speaker 1: '...' / Speaker 2: '...'). Distributed continuously across the clip without long silences." 
+              },
               voiceDirection: { type: "string" },
               visualPrompt: { type: "string" },
-              cameraMotionPrompt: { type: "string" },
+              cameraMotionPrompt: { 
+                type: "string", 
+                description: "Fast-paced, kinetic camera trajectory (e.g. rapid Steadicam tracking, dynamic whip pan, high-velocity push) with motion blur and brisk momentum by default. Only slow movements if strictly needed as a deliberate literary/suspense device." 
+              },
               visualPrompt2: { type: "string" },
               cameraMotionPrompt2: { type: "string" },
               activeCharacters: { type: "array", items: { type: "string" } },
@@ -3162,6 +3282,11 @@ The scene content itself must stay neutral and foreshadow BOTH options equally.`
 ${usedOptionsLedger}
 For Step ${nextStepNum}, invent TWO brand-new options with fresh stakes and consequences.`;
 
+      const pacingAndDialogueDirectives = `PACING & GROUNDED STORYTELLING DIRECTIVES:
+1. Fast-Paced Dynamic Cadence: Default to high-velocity camera movement, rapid momentum, and brisk character actions. No sluggish, passive lingering unless specifically required as an intentional literary suspense hold.
+2. Interactive Multi-Turn Dialogue: Provide rapid, back-and-forth verbal dialogue across the 15-second shot (Speaker A / Speaker B), avoiding monologues clustered only at the start or end.
+3. Grounded Narrative & Realistic Visuals: Center the drama on human conflict, tactical decisions, interpersonal stakes, and realistic visual cinematography. DO NOT center the plot around magical talismans, relics, or McGuffins unless absolutely necessary.`;
+
       // Compact user message
       const userContext = `Film: "${movie.title}" (${movie.genre})
 Style: ${movie.bible?.cinematicStyle || '35mm Panavision anamorphic, cinematic'}
@@ -3172,6 +3297,7 @@ Audience chose OPTION ${chosenOptionId}: "${chosenOption.title}" — ${chosenOpt
 Characters: ${movie.bible.characters.map(c => `${c.id}:${c.name}`).join('; ') || 'none'}
 Props: ${movie.bible.props.map(p => `${p.id}:${p.name}`).join('; ') || 'none'}
 ${antiRepeatDirective}
+${pacingAndDialogueDirectives}
 ${influenceDirective}`;
 
       const parsed = await callLlmJson<any>({
@@ -3224,12 +3350,15 @@ ${influenceDirective}`;
           .map(p => p.imageUrl)
           .filter(Boolean) as string[];
 
+        const leadCharName = movie.bible.characters[0]?.name || "Protagonist";
+        const secondCharName = movie.bible.characters[1]?.name || newCharacter?.name || "Tactical Comms";
+
         return {
           stepNumber: nextStepNum,
           title: parsed.title ? (parsed.title.startsWith('Scene ') || parsed.title.startsWith('Step ') ? parsed.title : `Scene ${nextStepNum}: ${parsed.title}`) : `Scene ${nextStepNum}`,
           synopsis: parsed.synopsis,
           dialogueSnippet: parsed.dialogueSnippet,
-          subtitles: [],
+          subtitles: generateSubtitlesFromDialogue(parsed.dialogueSnippet, leadCharName, secondCharName),
           voiceDirection: parsed.voiceDirection || movie.bible.characters[0]?.voicePrompt,
           visualPrompt: parsed.visualPrompt,
           cameraMotionPrompt: parsed.cameraMotionPrompt,
@@ -3240,29 +3369,31 @@ ${influenceDirective}`;
           votingWindowSeconds: 10,
           options: [
             ensureOptionPrompts(parsed.options?.[0] || {}, 'A', {
-              characterName: movie.bible.characters[0]?.name,
+              characterName: leadCharName,
               visualTraits: movie.bible.characters[0]?.visualTraits,
               clothing: movie.bible.characters[0]?.clothing,
+              secondCharacterName: secondCharName,
               propName: movie.bible.props[0]?.name,
               propVisual: movie.bible.props[0]?.visualAppearance,
               envName: parsed.environment || movie.bible.environments[0]?.name,
               cinematicStyle: movie.bible.cinematicStyle
             }),
             ensureOptionPrompts(parsed.options?.[1] || {}, 'B', {
-              characterName: movie.bible.characters[0]?.name,
+              characterName: leadCharName,
               visualTraits: movie.bible.characters[0]?.visualTraits,
               clothing: movie.bible.characters[0]?.clothing,
+              secondCharacterName: secondCharName,
               propName: movie.bible.props[0]?.name,
               propVisual: movie.bible.props[0]?.visualAppearance,
               envName: parsed.environment || movie.bible.environments[0]?.name,
               cinematicStyle: movie.bible.cinematicStyle
             })
           ],
-          activeCharacters: parsed.activeCharacters || ["char_kael"],
-          activeProps: parsed.activeProps || ["prop_neural_drive"],
+          activeCharacters: parsed.activeCharacters || [movie.bible.characters[0]?.id || "char_kael"],
+          activeProps: parsed.activeProps || [],
           newCharacter,
           newProp,
-          environment: parsed.environment || "env_sublevel",
+          environment: parsed.environment || movie.bible.environments[0]?.id || "env_sublevel",
           createdAt: new Date().toISOString()
         };
       }
@@ -3366,46 +3497,20 @@ ${influenceDirective}`;
     votes: 0
   };
 
-  let synopsis = `Following the choice to "${chosenOption.title}" in Step ${previousStep.stepNumber}, ${char.name} reaches a critical juncture in ${dilemma.title.toLowerCase()}. As the ${prop.name} pulses with vital energy, a decisive fork in the mission emerges.`;
-  let visualPrompt = `Cinematic medium two-shot / tracking frame: ${char.name} (${char.visualTraits}) navigates the tense environment with ${prop.name} (${prop.visualAppearance}) active. Low-key chiaroscuro lighting, 3200K amber incandescent practicals contrasting against deep midnight shadows, Panavision C-Series anamorphic lens, oval bokeh, atmospheric volumetric haze, Kodak Vision3 500T 35mm grain, 16:9 cinematic master still.`;
-  let cameraMotionPrompt = "Technocrane low-angle tracking push-in with subtle kinetic inertia, smoothly arcing 45 degrees around subject, 24fps motion cadence";
-  let subtitles: SubtitleCue[] = [
-    {
-      start: 1.0,
-      end: 7.0,
-      speaker: char.name,
-      text: `We committed to "${chosenOption.title}" — now the perimeter is shifting fast.`,
-      textEs: `Nos comprometimos con "${chosenOption.title}" — ahora el perímetro está cambiando rápido.`
-    },
-    {
-      start: 7.5,
-      end: 14.0,
-      speaker: char.name,
-      text: `Next move: ${optionA.title} or ${optionB.title}?`,
-      textEs: `Siguiente movimiento: ¿${optionA.title} o ${optionB.title}?`
-    }
-  ];
+  const fallbackCompanion = newCharacter?.name || movie.bible.characters[1]?.name || "Tactical Comms";
+
+  let synopsis = `Following the choice to "${chosenOption.title}" in Step ${previousStep.stepNumber}, ${char.name} accelerates through ${dilemma.title.toLowerCase()}. As tactical conditions evolve rapidly, a decisive fork in the mission emerges.`;
+  let visualPrompt = `Fast-paced cinematic medium tracking frame: ${char.name} (${char.visualTraits}) navigates the tense environment swiftly. Dynamic verbal interaction between characters, rapid facial delivery, low-key chiaroscuro lighting, 3200K amber incandescent practicals contrasting against deep midnight shadows, Panavision C-Series anamorphic lens, oval bokeh, atmospheric volumetric haze, Kodak Vision3 500T 35mm grain, 24fps kinetic motion blur.`;
+  let cameraMotionPrompt = "Fast-paced agile Steadicam tracking push-in with rapid kinetic momentum, dynamic parallax, 24fps kinetic motion blur";
+  let fallbackDialogue = `${char.name}: 'We committed to "${chosenOption.title}" — moving on mark!' / ${fallbackCompanion}: 'Telemetry confirms breach ahead, watch your angles!' / ${char.name}: 'Next move: ${optionA.title} or ${optionB.title}?'`;
+  let subtitles: SubtitleCue[] = generateSubtitlesFromDialogue(fallbackDialogue, char.name, fallbackCompanion);
 
   if (newCharacter && newProp) {
-    synopsis = `In this critical junction, ${char.name} meets in the steam-choked shadows with ${newCharacter.name}, who boots up his ${newProp.name} to decipher the orbital spire telemetry.`;
-    visualPrompt = `Medium two-shot / low-angle cowboy framing: ${char.name} (${char.visualTraits}) meets ${newCharacter.name} (${newCharacter.visualTraits}) in a rain-slicked industrial conduit. Motivated chiaroscuro with 3200K amber incandescent practicals cutting through atmospheric haze. ${newCharacter.name} boots up ${newProp.name} (${newProp.visualAppearance}), casting vibrant volumetric caustics across their faces. Cooke Anamorphic 40mm, shallow depth of field with oval bokeh, subtle flare, Kodak Vision3 500T grain, photorealistic 16:9 master.`;
-    cameraMotionPrompt = "Lateral dolly track at eye level slowly arcing around the two characters, subtle push-in tightening framing as the device activates, 24fps cinematic cadence";
-    subtitles = [
-      {
-        start: 1.0,
-        end: 7.0,
-        speaker: newCharacter.name,
-        text: `If the syndicates catch me with this ${newProp.name}, my life is forfeit before dawn.`,
-        textEs: `Si los sindicatos me atrapan con este ${newProp.name}, mi vida no vale nada antes del amanecer.`
-      },
-      {
-        start: 8.0,
-        end: 14.0,
-        speaker: char.name,
-        text: "Sync the telemetry. We have less than ten seconds.",
-        textEs: "Sincroniza la telemetría. Nos quedan menos de diez segundos."
-      }
-    ];
+    synopsis = `In this critical junction, ${char.name} coordinates swift tactical maneuvers with ${newCharacter.name}, decoding the orbital spire telemetry under heavy pressure.`;
+    visualPrompt = `Fast-paced medium two-shot tracking framing: ${char.name} (${char.visualTraits}) joins ${newCharacter.name} (${newCharacter.visualTraits}) in a rain-slicked industrial conduit. Intense verbal dialogue and rapid-fire exchange, motivated chiaroscuro with 3200K amber practicals cutting through atmospheric haze, Cooke Anamorphic 40mm, 24fps kinetic motion blur.`;
+    cameraMotionPrompt = "High-speed lateral tracking shot rushing parallel to the two characters, agile camera reframing, 24fps kinetic motion blur";
+    fallbackDialogue = `${newCharacter.name}: 'Syndicates are tracking my frequency — move fast!' / ${char.name}: 'Sync the telemetry, we have seconds!' / ${newCharacter.name}: 'Signal locked, breakthrough confirmed!'`;
+    subtitles = generateSubtitlesFromDialogue(fallbackDialogue, newCharacter.name, char.name);
     optionA = {
       id: "A",
       title: `Trust ${newCharacter.name}`,
@@ -3511,9 +3616,7 @@ ${influenceDirective}`;
     stepNumber: nextStepNum,
     title: currentTitle,
     synopsis,
-    dialogueSnippet: newCharacter 
-      ? `${newCharacter.name}: 'If the syndicates catch me with this ${newProp?.name}, my life is forfeit before dawn.'`
-      : `${char.name}: 'We committed to "${chosenOption.title}" — now the perimeter is shifting fast.'`,
+    dialogueSnippet: fallbackDialogue,
     subtitles,
     voiceDirection: newCharacter ? newCharacter.voicePrompt : char.voicePrompt,
     visualPrompt,
@@ -3528,6 +3631,7 @@ ${influenceDirective}`;
         characterName: char.name,
         visualTraits: char.visualTraits,
         clothing: (char as any).clothing,
+        secondCharacterName: fallbackCompanion,
         propName: prop.name,
         propVisual: prop.visualAppearance,
         envName: movie.bible.environments[0]?.name,
@@ -3537,6 +3641,7 @@ ${influenceDirective}`;
         characterName: char.name,
         visualTraits: char.visualTraits,
         clothing: (char as any).clothing,
+        secondCharacterName: fallbackCompanion,
         propName: prop.name,
         propVisual: prop.visualAppearance,
         envName: movie.bible.environments[0]?.name,
